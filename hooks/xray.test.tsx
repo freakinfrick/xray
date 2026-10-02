@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 import { fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry } from './cards'
+import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep } from './track'
 
@@ -209,16 +210,16 @@ const spinnerProps = { word: 'Sauteing', message: null, suffix: '…', mode: 'th
 const submit = { text: 'fix the tests', wait: false, origin: { kind: 'composer' } } as const
 
 // The engine beneath the plugin, for the events a session start and a prompt pass through.
-function engine(on: On, env: Record<string, string>, complete = () => ({ isAnswered: false, reason: 'aborted' }) as never) {
+function engine(on: On, env: Record<string, string>, complete = () => ({ value: { isAnswered: false, reason: 'aborted' } }) as never) {
   mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('command.register', () => ({}) as never)
+  on('command.register', () => ({ value: {} }) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('prompt.compose', () => ({ sections: [] }))
   on('model.complete', complete)
-  on('session.usage', () => ({ startedAt: 0, context: { window: 200_000, percent: 10 }, rateLimits: [] }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 10 }, rateLimits: [] } }) as never)
   on('ui.render', { component: 'Spinner' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
 
@@ -276,10 +277,41 @@ test('a narration call that returns nothing does not mute narration for a minute
   let calls = 0
   engine(on, {}, () => {
     calls += 1
-    return { isAnswered: false, reason: 'aborted' } as never
+    return { value: { isAnswered: false, reason: 'aborted' } } as never
   })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   await $.prompt.submit(submit)
   await $.prompt.submit(submit)
   expect(calls).toBe(2)
+})
+
+test('the panel lists requests on one time scale, recent steps, and session budgets', async () => {
+  const t = newTurn('x', 0)
+  t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 3000, output: 80, input: 100, cacheRead: 800, cacheWrite: 100 })
+  t.requests.push({ startedAt: 4000, firstAt: 4500, endedAt: 5000, output: 20, input: 0, cacheRead: 0, cacheWrite: 0 })
+  startStep(t, 'a', 'Read', { file_path: 'a.ts' }, 0)
+  finishStep(t, 'a', 'Read', { file_path: 'a.ts' }, false, '', undefined, 400)
+  startStep(t, 'b', 'Bash', { command: 'npm test' }, 500)
+  const usage = { context: { tokens: 82_000, window: 200_000, percent: 41 }, cost: { usd: 1.84 }, rateLimits: [{ kind: 'five_hour', percentUsed: 92 }] }
+  const [req, steps, session] = panel(t, usage, 2500)
+  expect(req?.title).toBe('requests · 2')
+  expect(text(req?.rows[0])).toBe('#1  ' + '░'.repeat(7) + '█'.repeat(13) + ' ' + '  3.0s  80 out · 40 tok/s · cache 80%')
+  expect(text(req?.rows[1])).toContain('20 out · 40 tok/s')
+  expect(steps?.title).toBe('steps · 1 done · 1 failed')
+  expect(text(steps?.rows[0]).startsWith('✗ reading a.ts')).toBe(true)
+  expect(text(steps?.rows[1]).startsWith('◆ running the tests')).toBe(true)
+  expect(text(session?.rows[0])).toBe('context   █████░░░░░░░ 41% · 82k of 200k')
+  expect(session?.rows[1]?.[1]?.color).toBe('red')
+  expect(text(session?.rows[2])).toBe('spent     $1.84 this session')
+  expect(panel(null, null, 0)[0]?.title).toBe('xray')
+})
+
+test('the panel draws in its pane', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
+  expect(await ui.find({ type: 'Text', text: /requests · 0/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /context/ })).toBeDefined()
+  await ui.unmount()
 })

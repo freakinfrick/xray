@@ -2,11 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry, type Card, type Line, type Mode } from './cards'
+import { panel } from './panel'
 import { sayStep } from './parse'
 import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
+const PANE = 'xray'
 const NARRATE_GAP_MS = 60_000
 const NARRATION_TTL_MS = 30_000
 const BODY_ROWS = 3 // card text rows; with the two borders and the telemetry line, 6 rows under the spinner
@@ -76,18 +78,28 @@ export const register: Register = (on, options) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
-    await $.command.register({ name: COMMAND, description: 'Show or hide the xray-spinner cards', argumentHint: '[on|off]', immediate: true })
+    await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards', argumentHint: '[on|off]', immediate: true })
 
     return next(e)
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
-    s.isHidden = arg === 'off' ? true : arg === 'on' ? false : !s.isHidden
-    await $.store.set('isHidden', s.isHidden)
-    $.ui.invalidate('ui.render')
+    if (arg === 'on' || arg === 'off') {
+      s.isHidden = arg === 'off'
+      await $.store.set('isHidden', s.isHidden)
+      $.ui.invalidate('ui.render')
 
-    return { text: s.isHidden ? 'xray-spinner off. /xray to bring it back.' : 'xray-spinner on.' }
+      return { text: s.isHidden ? 'xray-spinner off. /xray on brings it back.' : 'xray-spinner on.' }
+    }
+    if ((await $.ui.panes()).some(p => p.id === PANE)) {
+      await $.ui.close({ id: PANE })
+
+      return { text: 'xray panel closed.' }
+    }
+    const opened = await $.ui.open({ id: PANE, title: 'xray', closeOnEscape: true, rows: 24 })
+
+    return { text: opened.isPlaced ? 'xray panel open. /xray or Esc closes it.' : 'xray panel waiting for a wider terminal.' }
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -257,6 +269,31 @@ export const register: Register = (on, options) => {
         <Box paddingX={1} width={cols}>
           <Text wrap="truncate-end">{segs(telemetry(s.turn, s.ctx, now), 'tm')}</Text>
         </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e)
+    const usage = await $.session.usage().catch(() => null)
+    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now())
+
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        {sections.map((sec, i) => (
+          <Box key={`p${i}`} flexDirection="column" marginTop={i ? 1 : 0}>
+            <Text bold>{sec.title}</Text>
+            {sec.rows.map((l, r) => (
+              <Text key={`p${i}r${r}`} wrap="truncate-end">
+                {l.map((g, k) => (
+                  <Text key={`g${k}`} color={g.color} dimColor={g.dim} bold={g.bold}>
+                    {g.t}
+                  </Text>
+                ))}
+              </Text>
+            ))}
+          </Box>
+        ))}
       </Box>
     )
   })
