@@ -6,7 +6,9 @@ export type Todo = { id: string; text: string; active: string; status: 'pending'
 export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean }
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
 export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
-export type Template = 'default' | 'research' | 'tests' | 'refactor'
+export type Template = 'default' | 'research' | 'agents' | 'tests' | 'refactor'
+// A subagent the main session started. Its own steps arrive on tool.call with its agentId.
+export type Agent = { toolUseId: string; agentId?: string; label: string; isBackground: boolean; startedAt: number; endedAt?: number; ok?: boolean; steps: number; doing?: string }
 // One model request: when it was sent, when its first piece arrived, what the API counted.
 export type Request = { startedAt: number; firstAt: number; endedAt: number; output: number; input: number; cacheRead: number; cacheWrite: number }
 
@@ -22,6 +24,7 @@ export type Turn = {
   sources: string[]
   failures: number
   requests: Request[]
+  agents: Agent[]
   template: Template
 }
 
@@ -37,12 +40,46 @@ export const newTurn = (prompt: string, now: number): Turn => ({
   sources: [],
   failures: 0,
   requests: [],
+  agents: [],
   template: 'default',
 })
 
-// To-dos outlive a turn: the list the model keeps is the plate.
+// To-dos and agents still running outlive a turn: they are the plate.
 export function carryTodos(prev: Turn | null, next: Turn) {
-  if (prev) next.todos = prev.todos.filter(t => t.status !== 'completed')
+  if (!prev) return
+  next.todos = prev.todos.filter(t => t.status !== 'completed')
+  next.agents = prev.agents.filter(a => a.endedAt === undefined)
+}
+
+export function spawnAgent(t: Turn, a: Omit<Agent, 'steps'>) {
+  t.agents.push({ ...a, steps: 0 })
+  pickTemplate(t)
+}
+
+// An agentId the spawn result did not name belongs to the one running agent still without an id.
+function agentOf(t: Turn, agentId: string): Agent | undefined {
+  const known = t.agents.find(a => a.agentId === agentId)
+  if (known) return known
+  const unnamed = t.agents.filter(a => !a.agentId && a.endedAt === undefined)
+  if (unnamed.length !== 1) return undefined
+  const a = unnamed[0] as Agent
+  a.agentId = agentId
+  return a
+}
+
+export function agentStep(t: Turn, agentId: string, say: string) {
+  const a = agentOf(t, agentId)
+  if (!a) return
+  a.steps += 1
+  a.doing = say
+}
+
+export function finishAgent(t: Turn, key: { agentId?: string; toolUseId?: string }, ok: boolean, now: number) {
+  const a = key.agentId ? agentOf(t, key.agentId) : t.agents.find(x => x.toolUseId === key.toolUseId)
+  if (!a || a.endedAt !== undefined) return
+  a.endedAt = now
+  a.ok = ok
+  a.doing = undefined
 }
 
 type Block = { type: string; id?: string; name?: string; input?: Record<string, unknown> }
@@ -94,6 +131,8 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
     const path = String(input.file_path ?? input.notebook_path ?? '')
     if (path) t.edited.set(path, { at: now, checked: false })
   }
+  // A foreground agent's tool call returns when the agent is done; a background one returns at launch.
+  if ((tool === 'Agent' || tool === 'Task') && !t.agents.find(a => a.toolUseId === id)?.isBackground) finishAgent(t, { toolUseId: id }, ok, now)
   if (tool === 'TaskCreate' && ok) {
     const task = (result as { task?: { id?: string; subject?: string } } | undefined)?.task
     if (task?.id) t.todos.push({ id: String(task.id), text: String(input.subject ?? task.subject ?? ''), active: String(input.activeForm ?? input.subject ?? ''), status: 'pending' })
@@ -111,12 +150,15 @@ function markChecked(t: Turn, checkStartedAt: number) {
   for (const e of t.edited.values()) if (e.at <= checkStartedAt) e.checked = true
 }
 
-// Escalates only, so the task card keeps its place within a turn: default < research < tests | refactor.
+// Escalates only, so the task card keeps its place within a turn: default < research < agents < tests | refactor.
 export function pickTemplate(t: Turn) {
   if (t.template === 'tests' || t.template === 'refactor') return
   if (t.runs.length) t.template = 'tests'
   else if (t.edited.size >= 5) t.template = 'refactor'
-  else if (t.edited.size === 0 && t.sources.length >= 4) t.template = 'research'
+  else if (t.agents.length) t.template = 'agents'
+  else if (t.template === 'default' && t.edited.size === 0 && t.sources.length >= 4) t.template = 'research'
 }
+
+export const runningAgents = (t: Turn) => t.agents.filter(a => a.endedAt === undefined)
 
 export const openTodos = (t: Turn) => t.todos.filter(x => x.status !== 'completed')

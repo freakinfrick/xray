@@ -3,9 +3,9 @@ import { test, expect, mock } from 'claude-code/testing'
 
 import { fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry } from './cards'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep } from './track'
+import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep } from './track'
 
-const text = (l: { t: string }[]) => l.map(s => s.t).join('')
+const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
 test('test commands and check commands are told apart', async () => {
   expect(isTestCommand('npm test')).toBe(true)
@@ -97,6 +97,42 @@ test('the telemetry line shows only measured figures', async () => {
   t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 3000, output: 80, input: 100, cacheRead: 800, cacheWrite: 100 })
   expect(text(telemetry(t, 41.4, 72_000))).toBe('ctx 41% · 40 tok/s · cache 80% · turn 1m 12s')
   expect(telemetry(t, 74, 0)[0]?.color).toBe('yellow')
+})
+
+test('spawned agents make the agents card: who runs, what the oldest is doing, the goal', async () => {
+  const t = newTurn('audit the auth flow', 0)
+  startStep(t, 'x', 'Agent', { description: 'map token use' }, 0)
+  spawnAgent(t, { toolUseId: 'x', agentId: 'ag1', label: 'map token use', isBackground: true, startedAt: 0 })
+  finishStep(t, 'x', 'Agent', { description: 'map token use' }, true, 'launched', undefined, 5)
+  spawnAgent(t, { toolUseId: 'y', label: 'read the tests', isBackground: false, startedAt: 10 })
+  expect(t.template).toBe('agents')
+  agentStep(t, 'ag1', 'reading token.ts')
+  agentStep(t, 'ag2', 'searching for expiry')
+  expect(t.agents[1]?.agentId).toBe('ag2')
+  let card = taskCard(t, 20)
+  expect(card.title).toBe('agents · 2')
+  expect(card.tone).toBe('live')
+  expect(text(card.lines[0])).toBe('◆◆ 2 running')
+  expect(text(card.lines[1])).toBe('▸ map token use: reading token.ts')
+  expect(text(card.lines[2])).toBe('goal ▸ audit the auth flow')
+  expect(text(leftCard(t, 10).lines[0])).toBe('2 agents running')
+  finishAgent(t, { agentId: 'ag1' }, true, 30)
+  finishAgent(t, { agentId: 'ag2' }, false, 31)
+  card = taskCard(t, 40)
+  expect(text(card.lines[0])).toBe('●✗ 1 done · 1 failed')
+  expect(card.tone).toBe('fail')
+  expect(lastTurn(t, 40).headline).toBe('agents · 2: 1 done · 1 failed')
+})
+
+test('a background agent still running carries into the next turn; a foreground one ends with its call', async () => {
+  const t = newTurn('x', 0)
+  spawnAgent(t, { toolUseId: 'bg', agentId: 'a', label: 'bg', isBackground: true, startedAt: 0 })
+  startStep(t, 'fg', 'Agent', { description: 'fg' }, 0)
+  spawnAgent(t, { toolUseId: 'fg', agentId: 'b', label: 'fg', isBackground: false, startedAt: 0 })
+  finishStep(t, 'fg', 'Agent', { description: 'fg' }, true, 'done', undefined, 9)
+  const next = newTurn('y', 10)
+  carryTodos(t, next)
+  expect(next.agents.map(a => a.label)).toEqual(['bg'])
 })
 
 test('five edited files make it a refactor; the card counts edited and checked', async () => {

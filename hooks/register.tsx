@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry, type Card, type Line, type Mode } from './cards'
-import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep, type Turn } from './track'
+import { sayStep } from './parse'
+import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
@@ -120,8 +121,23 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  on('agent.spawn', async ($, e, next) => {
+    const r = await next(e)
+    const t = s.turn
+    if (t && !isOff(s) && !e.parentAgentId && r.deny === undefined) {
+      spawnAgent(t, { toolUseId: e.tool_use_id, agentId: r.agentId, label: e.name || e.description || e.subagentType, isBackground: e.background, startedAt: await $.clock.now() })
+      $.ui.invalidate('ui.render')
+    }
+
+    return r
+  })
+
   on('tool.call', async ($, e, next) => {
     const t = s.turn
+    if (t && !isOff(s) && e.agentId) {
+      agentStep(t, e.agentId, sayStep(e.tool, e as unknown as Record<string, unknown>))
+      $.ui.invalidate('ui.render')
+    }
     if (!t || isOff(s) || e.agentId) return next(e)
     const input = e as unknown as Record<string, unknown>
     const id = e.tool_use_id ?? `local-${t.done.length + t.running.size}`
@@ -160,6 +176,12 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    // A subagent's turn ending is that agent coming back; a background one may land after the main turn.
+    const owner = s.turn ?? s.prev
+    if (owner && !isOff(s) && e.agentId) {
+      finishAgent(owner, { agentId: e.agentId }, true, await $.clock.now())
+      $.ui.invalidate('ui.render')
+    }
     if (s.turn && !isOff(s) && !e.agentId) {
       const t = s.turn
       const now = await $.clock.now()

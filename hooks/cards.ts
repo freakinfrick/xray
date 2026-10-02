@@ -2,12 +2,12 @@
 // the terminal's own palette (herdr forest / forest-light); undefined = the terminal's default ink.
 
 import type { LastTurn } from '../types'
-import { openTodos, type Run, type Turn } from './track'
+import { openTodos, runningAgents, type Run, type Turn } from './track'
 
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean }
 export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think'
-export type Card = { title: string; tone: Tone; note?: string; lines: [Line, Line] }
+export type Card = { title: string; tone: Tone; note?: string; lines: Line[] }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
 export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta' }
@@ -48,14 +48,15 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
 export function leftCard(t: Turn, ctxPercent: number | null): Card {
   const open = openTodos(t)
   const q = t.queued.size
-  const head = [q ? `${q} queued` : '', open.length ? plural(open.length, 'to-do') : ''].filter(Boolean).join(' · ') || 'nothing queued'
+  const bg = runningAgents(t).length
+  const head = [q ? `${q} queued` : '', open.length ? plural(open.length, 'to-do') : '', bg ? plural(bg, 'agent') + ' running' : ''].filter(Boolean).join(' · ') || 'nothing queued'
   const next = [...t.queued.values()][0] ?? open.find(x => x.status === 'in_progress')?.active ?? open[0]?.text
   const warn = ctxPercent !== null && ctxPercent >= 70
   return {
     title: 'left',
     tone: warn ? 'warn' : 'quiet',
     note: warn ? `⚠ context ${Math.round(ctxPercent)}%` : undefined,
-    lines: [[{ t: head, dim: !q && !open.length }], next ? [{ t: 'next ▸ ', dim: true }, { t: next }] : [{ t: open.length ? '' : 'no to-do list yet', dim: true }]],
+    lines: [[{ t: head, dim: !q && !open.length && !bg }], next ? [{ t: 'next ▸ ', dim: true }, { t: next }] : [{ t: open.length ? '' : 'no to-do list yet', dim: true }]],
   }
 }
 
@@ -67,6 +68,8 @@ export function taskCard(t: Turn, now: number): Card {
       return filesCard(t)
     case 'research':
       return researchCard(t)
+    case 'agents':
+      return agentsCard(t)
     default:
       return progressCard(t)
   }
@@ -118,6 +121,22 @@ function researchCard(t: Turn): Card {
   return { title: 'sources', tone: 'quiet', lines: [[{ t: `${plural(t.sources.length, 'source')} looked at` }], [{ t: last ? `latest: ${last}` : '', dim: true }]] }
 }
 
+// Who is out working, what the oldest running one is doing, and the goal they all serve.
+function agentsCard(t: Turn): Card {
+  const live = runningAgents(t)
+  const failed = t.agents.filter(a => a.ok === false).length
+  const done = t.agents.length - live.length - failed
+  const marks: Line = t.agents.slice(0, 12).map(a => (a.endedAt === undefined ? { t: '◆', color: 'cyan' } : a.ok === false ? { t: '✗', color: 'red' } : { t: '●', color: 'green' }))
+  const counts = [live.length ? `${live.length} running` : '', done ? `${done} done` : '', failed ? `${failed} failed` : ''].filter(Boolean).join(' · ')
+  const first = live[0]
+  const tone: Tone = live.length ? 'live' : failed ? 'fail' : 'ok'
+  return {
+    title: `agents · ${t.agents.length}`,
+    tone,
+    lines: [[...marks, { t: ' ' + counts }], first ? [{ t: '▸ ', dim: true }, { t: first.label }, { t: `: ${first.doing ?? 'starting'}`, dim: true }] : [{ t: live.length ? '' : 'all back', dim: true }], [{ t: 'goal ▸ ', dim: true }, { t: clip(t.prompt, 200), dim: true }]],
+  }
+}
+
 function progressCard(t: Turn): Card {
   if (t.todos.length) {
     const done = t.todos.filter(x => x.status === 'completed').length
@@ -135,7 +154,7 @@ function dots(t: Turn): Line {
 // The one line above the prompt between turns: how it ended, what is still owed.
 export function lastTurn(t: Turn, now: number): LastTurn {
   const card = taskCard(t, now)
-  const headline = card.lines[0].map(s => s.t).join('').replace(/[█·■●◉○]+/g, '').trim() || `${plural(t.done.length, 'step')}`
+  const headline = (card.lines[0] ?? []).map(s => s.t).join('').replace(/[█■●◉○◆✗]+|·{2,}/g, '').trim() || `${plural(t.done.length, 'step')}`
   const tone: LastTurn['tone'] = card.tone === 'fail' || card.tone === 'warn' ? 'fail' : card.tone === 'ok' ? 'ok' : 'plain'
   return { headline: `${card.title}: ${headline}`, tone, owed: openTodos(t).map(x => x.text).slice(0, 4) }
 }
