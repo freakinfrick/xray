@@ -94,7 +94,7 @@ export function sayStep(tool: string, input: Record<string, unknown>): string {
       if (isTestCommand(cmd)) return 'running the tests'
       if (isCheckCommand(cmd)) return 'checking types'
       if (/^\s*git\s+commit/.test(cmd)) return 'committing'
-      return input.description ? clip(String(input.description), 40).replace(/^\w/, c => c.toLowerCase()) : `running ${clip(cmd.split(/\s+/)[0] ?? 'a command', 20)}`
+      return input.description ? clip(String(input.description), 40).replace(/^\w/, c => c.toLowerCase()) : `running ${clip(cmd.trim().split(/\s+/).slice(0, 2).join(' ') || 'a command', 28)}`
     default:
       return tool.startsWith('mcp__') ? `using ${tool.split('__').pop()}` : `using ${tool}`
   }

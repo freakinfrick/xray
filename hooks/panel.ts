@@ -7,8 +7,8 @@ import type { Request, Step, Turn } from './track'
 export type Usage = { context: { tokens?: number; window: number; percent?: number }; cost?: { usd: number }; rateLimits: { kind: string; percentUsed: number; resetsAt?: string }[] }
 export type Section = { title: string; rows: Line[] }
 
-const MAX_REQUESTS = 8
-const MAX_STEPS = 8
+const MAX_REQUESTS = 6
+const MAX_STEPS = 6
 const BAR = 20
 const GAUGE = 12
 
@@ -51,6 +51,8 @@ function stepRow(s: Step, now: number): Line {
 
 export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: readonly Entry[] = []): Section[] {
   const out: Section[] = []
+  if (t?.signal)
+    out.push({ title: 'task card', rows: [[{ t: `${t.signal} · ` }, t.recipe ? { t: 'layout written for this task', color: 'cyan' } : { t: t.isRecipeAsked ? 'kept layout (the written one did not pass)' : 'kept layout', dim: true }], [{ t: '/xray rate good|bad <note> files it in the taste ledger', dim: true }]] })
   if (t) {
     const reqs = t.requests.slice(-MAX_REQUESTS)
     const longest = Math.max(1, ...reqs.map(r => r.endedAt - r.startedAt))
@@ -68,8 +70,6 @@ export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: 
     if (usage.cost) rows.push([{ t: 'spent'.padEnd(10), dim: true }, { t: `$${usage.cost.usd.toFixed(2)}` }, { t: ' this session', dim: true }])
     if (rows.length) out.push({ title: 'session', rows })
   }
-  if (t?.signal)
-    out.push({ title: 'task card', rows: [[{ t: `${t.signal} · ` }, t.recipe ? { t: 'layout written for this task', color: 'cyan' } : { t: t.isRecipeAsked ? 'kept layout (the written one did not pass)' : 'kept layout', dim: true }], [{ t: '/xray rate good|bad <note> files it in the taste ledger', dim: true }]] })
   if (ledger.length)
     out.push({
       title: `taste ledger · ${ledger.length}`,

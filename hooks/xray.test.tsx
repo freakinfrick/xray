@@ -41,6 +41,7 @@ test('steps are named in plain words', async () => {
   expect(sayStep('Bash', { command: 'tsc --noEmit' })).toBe('checking types')
   expect(sayStep('Bash', { command: 'ls', description: 'List the files' })).toBe('list the files')
   expect(sayStep('WebSearch', { query: 'x' })).toBe('searching the web')
+  expect(sayStep('Bash', { command: 'node test.js' })).toBe('running node test.js')
 })
 
 test('a fix-the-tests turn picks the tests card and shows what still fails', async () => {

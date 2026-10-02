@@ -151,7 +151,7 @@ export const register: Register = (on, options) => {
 
       return { text: 'panel closed.' }
     }
-    const opened = await $.ui.open({ id: PANE, title: 'xray', closeOnEscape: true, rows: 24 })
+    const opened = await $.ui.open({ id: PANE, title: 'xray', closeOnEscape: true, rows: 32 })
 
     return { text: opened.isPlaced ? 'panel open. /xray or Esc closes it.' : 'panel waits for a wider terminal.' }
   })
