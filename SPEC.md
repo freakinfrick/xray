@@ -104,7 +104,7 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 
 ## Status
 
-- **v1 built 2026-10-02** on branch `feat/xray` (1a scope): cards, 4 templates, between-turns
+- **v1 built 2026-10-02** (branch `feat/xray`, fast-forwarded into the live trunk) (1a scope): cards, 4 templates, between-turns
   line, Haiku narration, to-do nudge, `/xray on|off`, conductor off-switch. Live via
   `CLAUDE_CODE_PLUGIN_DIRS`. Checked: validate, tsc, 12 tests, live Haiku session fixing a
   failing test (tests card went running → 2/3 fail → all pass; idle line correct).
