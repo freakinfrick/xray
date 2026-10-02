@@ -6,7 +6,7 @@ import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { sayStep } from './parse'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep, type Turn } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, newTurn, queueFromResponse, readJob, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
@@ -65,15 +65,16 @@ function tick($: EngineInterface, s: Live) {
 
 const JOB_READ_MAX = 4 * 1024 * 1024
 
-// A background job's output file, re-read only when it grew; the tail is all a card shows.
+// A background job's output file, re-read only when it grew and its gap passed; the tail is all a card shows.
 async function followJob($: EngineInterface, t: Turn) {
   const job = t.job
   if (!job) return
   try {
     const st = await $.fs.stat(job.path)
-    if (st.size === job.size || st.size > JOB_READ_MAX) return
+    const now = await $.clock.now()
+    if (st.size > JOB_READ_MAX || !isJobDue(job, st.size, now)) return
     const text = await $.fs.read(job.path)
-    readJob(t, typeof text === 'string' ? text.slice(-4000) : '', st.size, await $.clock.now())
+    readJob(t, typeof text === 'string' ? text.slice(-4000) : '', st.size, now)
   } catch {
     // gone or unreadable: the card keeps what it last read
   }

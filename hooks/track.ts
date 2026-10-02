@@ -24,7 +24,9 @@ export type Agent = { toolUseId: string; agentId?: string; label: string; isBack
 // A shell command the main session ran, kept across turns: reruns are what bench and build compare.
 export type Cmd = { cmd: string; startedAt: number; endedAt?: number; ok?: boolean; text?: string; measure?: { v: number; unit: string } }
 // A command sent to the background, followed through its output file.
-export type Job = { path: string; startedAt: number; lastline?: string; size?: number }
+export type Job = { path: string; startedAt: number; lastline?: string; size?: number; readAt?: number }
+const JOB_GAP_BYTES = 64 * 1024 // one more second between reads per 64 KiB of output
+const JOB_GAP_MAX_MS = 10_000
 const BENCH_CMD = /\b(bench|hyperfine|perf|wrk|ab\s+-n|criterion|time)\b/
 const BENCH_ASK = /\b(bench\w*|faster|speed\w*|latency|perf\w*|throughput|slow\w*)\b/i
 const MAX_CMDS = 40
@@ -92,9 +94,17 @@ export function sample(t: Turn, text: string, now: number) {
   if (p && (!last || last.k !== p.k || last.n !== p.n)) t.samples.push({ at: now, ...p })
 }
 
+// A whole-file read costs what the file weighs, so a grown file waits longer before the next one.
+export function isJobDue(job: Job, size: number, now: number): boolean {
+  if (size === job.size) return false
+  const gap = Math.min(JOB_GAP_MAX_MS, 1000 * Math.max(1, Math.floor(size / JOB_GAP_BYTES)))
+  return job.readAt === undefined || now - job.readAt >= gap
+}
+
 export function readJob(t: Turn, text: string, size: number, now: number) {
   if (!t.job) return
   t.job.size = size
+  t.job.readAt = now
   t.job.lastline = lastLine(text).slice(0, 120) || t.job.lastline
   sample(t, text, now)
 }

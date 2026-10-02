@@ -6,7 +6,7 @@ import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerP
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, newTurn, queueFromResponse, readJob, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
@@ -410,6 +410,22 @@ test('a background job followed through its output file makes a batch card with 
   expect(text(card.lines[0])).toBe('███········· 28% · ETA 17m 55s')
   expect(text(card.lines[1])).toBe('48/min · started 6m 00s')
   expect(text(card.lines[2])).toBe('last: 340/1200 wrote shard_0340.parquet')
+})
+
+test('a job output file is re-read only when it grew, and a big one waits longer between reads', async () => {
+  const job = { path: '/tmp/t/x1.output', startedAt: 0 }
+  expect(isJobDue(job, 10, 0)).toBe(true)
+  const t = newTurn('convert the shards', 0)
+  t.job = job
+  readJob(t, 'a\n', 10, 0)
+  expect(isJobDue(job, 10, 5000)).toBe(false) // same size: no read
+  expect(isJobDue(job, 20, 999)).toBe(false) // small file: one read a second
+  expect(isJobDue(job, 20, 1000)).toBe(true)
+  readJob(t, 'a\n', 1024 * 1024, 1000)
+  expect(isJobDue(job, 1024 * 1024 + 1, 9999)).toBe(false) // 1 MiB: 10 s apart
+  expect(isJobDue(job, 1024 * 1024 + 1, 11_000)).toBe(true)
+  readJob(t, 'a\n', 4 * 1024 * 1024, 11_000)
+  expect(isJobDue(job, 4 * 1024 * 1024 + 1, 21_000)).toBe(true) // capped at 10 s
 })
 
 test('a rerun command past a minute makes a build card measured against the last run', async () => {
