@@ -142,6 +142,7 @@ function engine(on: On, env: Record<string, string>) {
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({}) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
+  on('prompt.compose', () => ({ sections: [] }))
   on('model.complete', () => ({ isAnswered: false, reason: 'aborted' }) as never)
   on('session.usage', () => ({ startedAt: 0, context: { window: 200_000, percent: 10 }, rateLimits: [] }) as never)
   on('ui.render', { component: 'Spinner' }, ($, e) => {
@@ -167,5 +168,31 @@ test('a conductor pane (CLAUDE_HUMAN_MODS=off) never draws the cards', async ($,
   await $.prompt.submit(submit)
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
   expect(await ui.find({ type: 'Text', text: /now/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+const compose = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] } as const
+
+test('the to-do nudge joins the system prompt, except in conductor panes', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const r = await $.prompt.compose(compose)
+  expect(r.sections.some(x => x.id === 'xray-todos' && x.scope === 'session')).toBe(true)
+})
+
+test('no to-do nudge with CLAUDE_HUMAN_MODS=off', async ($, on) => {
+  engine(on, { CLAUDE_HUMAN_MODS: 'off' })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const r = await $.prompt.compose(compose)
+  expect(r.sections.some(x => x.id === 'xray-todos')).toBe(false)
+})
+
+test('a task notification mid-turn does not wipe the turn', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  await $.prompt.submit({ text: 'background task finished', wait: false, origin: { kind: 'task-notification' } } as never)
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
+  expect(await ui.find({ type: 'Text', text: /fix the tests/ })).toBeDefined()
   await ui.unmount()
 })

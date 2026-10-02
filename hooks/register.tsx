@@ -95,7 +95,8 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (isOff(s)) return next(e)
+    // Only a person's own prompt starts a turn; task notifications and scheduled triggers join the running one.
+    if (isOff(s) || (e.origin.kind !== 'composer' && s.turn)) return next(e)
     s.prev = s.turn ?? s.prev
     s.turn = newTurn(e.text, await $.clock.now())
     carryTodos(s.prev, s.turn)
@@ -141,7 +142,8 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     if (s.turn && !isOff(s) && !e.agentId) {
       const t = s.turn
-      await update($, last, () => lastTurn(t, Date.now()))
+      const now = await $.clock.now()
+      await update($, last, () => lastTurn(t, now))
       s.prev = t
       s.turn = null
     }
