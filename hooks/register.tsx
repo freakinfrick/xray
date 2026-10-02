@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, lastTurn, leftCard, nowCard, taskCard, type Card, type Line, type Mode } from './cards'
-import { carryTodos, finishStep, newTurn, queueFromResponse, startStep, type Turn } from './track'
+import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
@@ -55,7 +55,8 @@ async function narrate($: EngineInterface, s: Live) {
   if (!s.isNarrating || isOff(s) || !t) return
   const now = await $.clock.now()
   if (now - s.narratedAt < NARRATE_GAP_MS) return
-  s.narratedAt = now
+  const before = s.narratedAt
+  s.narratedAt = now // claims the slot now so a second trigger can't race this call
   const steps = t.done.slice(-8).map(x => `- ${x.say}${x.ok === false ? ' (failed)' : ''}`)
   const live = [...t.running.values()].map(x => x.say)
   const prompt = `Task from the user: ${t.prompt.replace(/\s+/g, ' ').slice(0, 400)}\nSteps so far:\n${steps.join('\n') || '- none yet'}\nRunning now: ${live.join(', ') || 'thinking'}`
@@ -63,7 +64,7 @@ async function narrate($: EngineInterface, s: Live) {
   if (r?.isAnswered && s.turn === t) {
     s.narration = r.text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120)
     $.ui.invalidate('ui.render')
-  }
+  } else if (s.narratedAt === now) s.narratedAt = before // no sentence came back: the next trigger may try again
 }
 
 export const register: Register = (on, options) => {
@@ -143,6 +144,7 @@ export const register: Register = (on, options) => {
     if (s.turn && !isOff(s) && !e.agentId) {
       const t = s.turn
       const now = await $.clock.now()
+      endTurn(t)
       await update($, last, () => lastTurn(t, now))
       s.prev = t
       s.turn = null

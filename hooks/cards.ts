@@ -2,7 +2,7 @@
 // the terminal's own palette (herdr forest / forest-light); undefined = the terminal's default ink.
 
 import type { LastTurn } from '../types'
-import { openTodos, type Turn } from './track'
+import { openTodos, type Run, type Turn } from './track'
 
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean }
 export type Line = Seg[]
@@ -73,6 +73,8 @@ export function taskCard(t: Turn, now: number): Card {
 }
 
 const BAR = 12
+const isFailed = (r: Run) => (r.total ? r.fail > 0 : r.ok === false)
+const sayRun = (r: Run) => (r.isStopped ? 'stopped' : !r.total ? (r.ok ? 'passed' : 'failed') : r.fail ? `${r.fail} failing` : `all ${r.total} passed`)
 function testsCard(t: Turn, now: number): Card {
   const n = t.runs.length
   const r = t.runs[n - 1]
@@ -80,11 +82,15 @@ function testsCard(t: Turn, now: number): Card {
   const prev = t.runs.slice(0, -1).reverse().find(x => !x.running)
   if (r.running) {
     const el = secs(now - r.startedAt)
-    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '·'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${el}s` : '…'}` }], [{ t: prev ? (prev.fail ? `last run: ${prev.fail} failing` : `last run: all ${prev.total} passed`) : 'first run', dim: true }]] }
+    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '·'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${el}s` : '…'}` }], [{ t: prev ? `last run: ${sayRun(prev)}` : 'first run', dim: true }]] }
   }
-  const good = r.total ? Math.round((r.pass / r.total) * BAR) : 0
+  if (r.isStopped) return { title: `tests · run ${n}`, tone: 'warn', lines: [[{ t: '·'.repeat(BAR) + ' ', dim: true }, { t: 'run stopped' }], [{ t: 'the turn ended before it finished', dim: true }]] }
+  const good = r.total ? Math.round((r.pass / r.total) * BAR) : r.ok ? BAR : 0
   const bar: Line = [{ t: '█'.repeat(good), color: 'green' }, { t: '█'.repeat(BAR - good), color: 'red' }, { t: ' ' }]
-  if (!r.fail) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...bar, { t: `all ${r.total} pass ✓`, color: 'green' }], [{ t: n > 1 ? `fixed after ${plural(n - 1, 'failing run')}` : 'passed first time', dim: true }]] }
+  const failedBefore = t.runs.slice(0, -1).filter(isFailed).length
+  const fixed: Line = [{ t: failedBefore ? `fixed after ${plural(failedBefore, 'failing run')}` : n > 1 ? 'passed every run' : 'passed first time', dim: true }]
+  if (!r.total) return { title: `tests · run ${n}`, tone: r.ok ? 'ok' : 'fail', lines: [[...bar, r.ok ? { t: 'passed ✓', color: 'green' } : { t: 'failed' }], r.ok ? fixed : [{ t: 'no test count in the output', dim: true }]] }
+  if (!isFailed(r)) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...bar, { t: `all ${r.total} pass ✓`, color: 'green' }], fixed] }
   const name = r.failing[0]
   return {
     title: `tests · run ${n}`,

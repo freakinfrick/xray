@@ -4,7 +4,8 @@ import { isCheckCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type
 
 export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed' }
 export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean }
-export type Run = TestRun & { running: boolean; startedAt: number }
+// total 0 = the output had no summary to count; ok then says only whether the command passed.
+export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
 export type Template = 'default' | 'research' | 'tests' | 'refactor'
 
 export type Turn = {
@@ -81,7 +82,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
   if (tool === 'Bash' && isTestCommand(cmd)) {
     const run = t.runs.findLast(r => r.running)
     const counts = parseTestOutput(text)
-    if (run) Object.assign(run, counts ?? { pass: ok ? 1 : 0, fail: ok ? 0 : 1, total: 1, failing: [] }, { running: false })
+    if (run) Object.assign(run, counts ?? { pass: 0, fail: 0, total: 0, failing: [] }, { running: false, ok })
     if (ok || (counts && counts.fail === 0)) markChecked(t, step.startedAt)
   }
   if (tool === 'Bash' && isCheckCommand(cmd) && ok) markChecked(t, step.startedAt)
@@ -94,6 +95,11 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
     if (task?.id) t.todos.push({ id: String(task.id), text: String(input.subject ?? task.subject ?? ''), active: String(input.activeForm ?? input.subject ?? ''), status: 'pending' })
   }
   pickTemplate(t)
+}
+
+// A run still going when the turn ends was cut off, not finished.
+export function endTurn(t: Turn) {
+  for (const r of t.runs) if (r.running) Object.assign(r, { running: false, isStopped: true })
 }
 
 // A check that started after an edit landed vouches for that edit.

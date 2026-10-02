@@ -3,7 +3,7 @@ import { test, expect, mock } from 'claude-code/testing'
 
 import { lastTurn, leftCard, nowCard, taskCard } from './cards'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { carryTodos, finishStep, newTurn, queueFromResponse, startStep } from './track'
+import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep } from './track'
 
 const text = (l: { t: string }[]) => l.map(s => s.t).join('')
 
@@ -59,6 +59,27 @@ test('a fix-the-tests turn picks the tests card and shows what still fails', asy
   expect(taskCard(t, 8000).tone).toBe('ok')
   expect(t.edited.get('cost.ts')?.checked).toBe(true)
   expect(lastTurn(t, 9000)).toEqual({ headline: 'tests · run 2: all 42 pass ✓', tone: 'ok', owed: [] })
+})
+
+test('a test run with no summary says passed or failed, never a made-up count', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'npm test' }, 0)
+  finishStep(t, 'a', 'Bash', { command: 'npm test' }, false, 'boom', undefined, 10)
+  expect(text(taskCard(t, 10).lines[0])).toContain('failed')
+  expect(text(taskCard(t, 10).lines[0])).not.toContain('/')
+  expect(text(taskCard(t, 10).lines[1])).toBe('no test count in the output')
+  startStep(t, 'b', 'Bash', { command: 'npm test' }, 20)
+  finishStep(t, 'b', 'Bash', { command: 'npm test' }, true, 'ok', undefined, 30)
+  expect(taskCard(t, 30).tone).toBe('ok')
+  expect(text(taskCard(t, 30).lines[1])).toBe('fixed after 1 failing run')
+  expect(lastTurn(t, 40).headline).toBe('tests · run 2: passed ✓')
+})
+
+test('a run cut off by the end of the turn reads as stopped, not running', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'pytest' }, 0)
+  endTurn(t)
+  expect(lastTurn(t, 10)).toEqual({ headline: 'tests · run 1: run stopped', tone: 'fail', owed: [] })
 })
 
 test('five edited files make it a refactor; the card counts edited and checked', async () => {
@@ -135,7 +156,7 @@ const spinnerProps = { word: 'Sauteing', message: null, suffix: '…', mode: 'th
 const submit = { text: 'fix the tests', wait: false, origin: { kind: 'composer' } } as const
 
 // The engine beneath the plugin, for the events a session start and a prompt pass through.
-function engine(on: On, env: Record<string, string>) {
+function engine(on: On, env: Record<string, string>, complete = () => ({ isAnswered: false, reason: 'aborted' }) as never) {
   mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
   mock.store(on)
@@ -143,7 +164,7 @@ function engine(on: On, env: Record<string, string>) {
   on('command.register', () => ({}) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('prompt.compose', () => ({ sections: [] }))
-  on('model.complete', () => ({ isAnswered: false, reason: 'aborted' }) as never)
+  on('model.complete', complete)
   on('session.usage', () => ({ startedAt: 0, context: { window: 200_000, percent: 10 }, rateLimits: [] }) as never)
   on('ui.render', { component: 'Spinner' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -195,4 +216,16 @@ test('a task notification mid-turn does not wipe the turn', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
   expect(await ui.find({ type: 'Text', text: /fix the tests/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('a narration call that returns nothing does not mute narration for a minute', async ($, on) => {
+  let calls = 0
+  engine(on, {}, () => {
+    calls += 1
+    return { isAnswered: false, reason: 'aborted' } as never
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  await $.prompt.submit(submit)
+  expect(calls).toBe(2)
 })
