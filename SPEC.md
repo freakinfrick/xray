@@ -133,7 +133,16 @@ animated, but animated in its own way.
     in eighths.
 - Render risks to check live: `dimColor`+`inverse` (grey patch) in Konsole; eighth glyphs and
   fg-on-bg split cells in both schemes. Animation only at the 1 s tick.
-- Status: picks recorded; **no build until an explicit go.**
+- Go given 2026-10-02 (reply "1a"). **Built 2026-10-02** (3425627): `hooks/glyphs.ts` (eighth bars,
+  sparkline, tiles, 1 Hz frame), `Seg.inv`/`Seg.bg`, `Card.spare` (step trail / run history take the
+  3rd row only when wrapping leaves it free, so long narration still wraps), bisect `range` window +
+  `span` from the first "revisions left" seen (added to the kept recipe), `LastTurn` gains `title`
+  and colored `owed`. Checked: tsc, validate, 38 tests.
+- Live-checked 2026-10-02 (fresh Haiku session in tmux, node --test fix turn, 190 cols): step trail
+  `▆▆▆… 9 done · 3 failed`, split-cell tests bar, run history row, ctx/cache gauges + tok/s
+  sparkline, grey pending patch and running `◆` tile (SGR 7 seen), idle line tiles. Not seen live:
+  bisect tiles/range window, batch/build bars, panel (unit-tested). Not seen in Konsole itself
+  (tmux capture only): how dim+inverse and the eighth glyphs look on forest/forest-light.
 
 ## Later
 
