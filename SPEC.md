@@ -77,6 +77,26 @@ animated, but animated in its own way.
 - Card border color is quiet (dim) unless state matters: red failing, green done, peach warning.
 - Between turns: one line above the prompt: how the turn ended + what is still owed.
 
+## Round 4 picks (2026-10-02, after the v1 explainer)
+
+- User, verbatim: "xray v2 picks: F, P, A, C, L; also we can add 2 rows for height, 1 row so
+  cards have more room to avoid truncation, and 1 row to provide telemetry".
+  - F: fix rough edges (no-summary test run counted as 1 test; narration muted a minute after a
+    failed model call; idle line "running…" when a turn ends mid run).
+  - P: `/xray` detail panel. A: agents + goal card. C: custom recipes. L: taste ledger.
+  - V (verify v1 live) not picked; left card and colors stay unverified until seen in use.
+- Height: cards grow 4 → 6 rows. One extra content row so long text wraps instead of being cut;
+  one row of telemetry.
+- D4 revision log: round 2 said "tone telemetry down in the spinner". Trigger: user pick, round 4.
+  Revision: one telemetry row is glanceable and stays; anything beyond it lives in the panel.
+- Command split (agent default, easy to undo): bare `/xray` opens the panel; `/xray on|off` shows
+  or hides the cards.
+- Telemetry row (user pick): one full-width strip under the cards, 4 numbers:
+  `ctx 41% · 38 tok/s · cache 92% · turn 1m 12s`. Spend and the rest go to the panel.
+- Custom recipes (user pick): mockup page with 3-4 example custom layouts first; recipe code
+  only after a pick. Build order: F → taller cards + strip → agents card → panel → C mockups →
+  C → L.
+
 ## Later
 
 - Taste ledger (D5): picks sent from the mockup pages and later ratings become ledger entries
