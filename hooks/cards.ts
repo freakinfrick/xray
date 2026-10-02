@@ -19,7 +19,8 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)
   let what: string
   let tone: Tone
-  let since = t.startedAt
+  const done = t.done[t.done.length - 1]
+  let since = done?.endedAt ?? t.startedAt // idle time counts from the last finished step
   const first = live[0]
   if (first) {
     what = first.say + (live.length > 1 ? ` +${live.length - 1}` : '')

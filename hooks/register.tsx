@@ -7,6 +7,7 @@ import { carryTodos, finishStep, newTurn, queueFromResponse, startStep, type Tur
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
 const NARRATE_GAP_MS = 60_000
+const NARRATION_TTL_MS = 30_000
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
   '(TodoWrite, or TaskCreate/TaskUpdate): add the steps when you plan them and mark each one done as you finish it.'
@@ -154,8 +155,10 @@ export const register: Register = (on, options) => {
     const line = await next(e)
     const { Box, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
+    // A narration line is news for 30 s; after that the last finished step says more.
+    const said = now - s.narratedAt < NARRATION_TTL_MS ? s.narration : null
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2)
-    const cards = cols >= 72 ? [nowCard(s.turn, s.mode, s.narration, now), leftCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, s.narration, now), taskCard(s.turn, now)]
+    const cards = cols >= 72 ? [nowCard(s.turn, s.mode, said, now), leftCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, said, now), taskCard(s.turn, now)]
     const widths = cards.length === 3 ? [Math.floor(cols * 0.38), Math.floor(cols * 0.3)] : [Math.floor(cols * 0.55)]
     widths.push(cols - widths.reduce((a, b) => a + b, 0))
 

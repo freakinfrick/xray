@@ -121,3 +121,11 @@ test('with no turn tracked, the spinner is left exactly as the engine draws it',
   expect(await ui.find({ type: 'Text', text: /now/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('with nothing running, the clock counts from the last finished step', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Read', { file_path: 'a.ts' }, 1000)
+  finishStep(t, 'a', 'Read', { file_path: 'a.ts' }, true, '', undefined, 20_000)
+  expect(text(nowCard(t, 'requesting', null, 23_000).lines[0])).toBe('◇ waiting on the model')
+  expect(text(nowCard(t, 'requesting', null, 27_000).lines[0])).toBe('◇ waiting on the model · 7s')
+})
