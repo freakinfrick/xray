@@ -220,3 +220,7 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   (glyph + last turn + headline only). Other classes unchanged. Owed to-dos stay visible in the
   to-do card while a turn runs; the `/xray` panel does NOT list them (the 1a option text
   claimed it did; wrong).
+- Owed to-dos in the panel (2026-10-02, user "keep going" after the above): the `/xray` panel
+  gains a `still owed · N` section after `steps`: every open to-do of the shown turn, at most 8,
+  in its own hue, `◆` for the one in progress; `nothing ✓` when none are open, and no section
+  before any to-do list exists. Pure data in `panel.ts`, so it reads the same on every surface.
