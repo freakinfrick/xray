@@ -110,6 +110,31 @@ animated, but animated in its own way.
 - Queued steps, running agents, context warning → a tag in the to-do card's top border.
 - Go given for: to-do card → custom cards → taste ledger.
 
+## Round 6 pick (2026-10-02, whimsy + colored blocky glyphs)
+
+- User direction: "add more whimsy into the designs, and more aesthetic by leveraging the colored
+  blocky glyphs". Tension named: round 1 rejected Pixel Works as too cartoony; every direction kept
+  all round-5 values.
+- Mockup page offered r5 / A Inlay / B Bunting (pill titles, running border dash, border progress
+  lane) / C Grove (firefly, growing to-dos), per element, on forest + forest-light.
+- User, verbatim: "xray r6 picks: A" — **A · Inlay for every element.** Whimsy lives inside the
+  widgets; frames stay round 5:
+  - now: running step as an inverse tile ` ◆ `, a 1 Hz pulse glyph `▂▄▆█` after the elapsed time,
+    spare 3rd row = step trail (`▆` per step: green ok, red failed, cyan live blinking ▆/▄) + counts.
+  - to-do: chips as solid patches: done = inverse in its hue, in progress = `▐◉▌` + name in its
+    hue, pending = dim inverse (grey patch).
+  - tests: 16-cell eighth-precision bar, split cell green on red (`color` + `backgroundColor`);
+    row 3 = run history, one `▁…█` per run (pass fraction, green/red) + "36 → 39 passing".
+  - bisect: marks as inverse tiles ✓/✗, live `▒/▓`; row 3 = range bar "6 of 13" — **needs a new
+    measured value: commit count at bisect start.**
+  - telemetry: `ctx` eighth gauge (8 cells), tok/s sparkline over requests, `cache` gauge, turn.
+  - idle line: card title as an inverse tone tile; owed to-dos as inverse tiles in their hue.
+  - panel: requests wait `▒` + eighth-precision generate bar; step marks as inverse tiles; gauges
+    in eighths.
+- Render risks to check live: `dimColor`+`inverse` (grey patch) in Konsole; eighth glyphs and
+  fg-on-bg split cells in both schemes. Animation only at the 1 s tick.
+- Status: picks recorded; **no build until an explicit go.**
+
 ## Later
 
 - Taste ledger (D5): picks sent from the mockup pages and later ratings become ledger entries
