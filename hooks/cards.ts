@@ -3,12 +3,15 @@
 
 import type { LastTurn } from '../types'
 import { DEFAULTS, customCard } from './custom'
+import { SPARK, bar, frame, spark, tile } from './glyphs'
 import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
-export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean }
+// inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
+export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string }
 export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think'
-export type Card = { title: string; tone: Tone; note?: Line; lines: Line[] }
+// spare: a row drawn only when the lines leave one free after wrapping.
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
 export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta' }
@@ -43,17 +46,33 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   const el = secs(now - since)
   const last = t.done[t.done.length - 1]
   const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${last.say}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
-  return { title: 'now', tone, lines: [[{ t: (live.length ? '◆ ' : '◇ ') + what },...(el > 5 ? [{ t: ` · ${el}s`, dim: true }] : [])], sub] }
+  const f = frame(now)
+  const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
+  if (el > 5) head.push({ t: ` · ${el}s`, dim: true })
+  if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
+  return { title: 'now', tone, lines: [head, sub], spare: stepTrail(t, live.length > 0, f) }
+}
+
+const TRAIL = 10
+
+// The turn's steps as a row of blocks: green done, red failed, cyan running (blinking at the tick).
+function stepTrail(t: Turn, isRunning: boolean, f: number): Line | undefined {
+  if (!t.done.length && !isRunning) return undefined
+  const failed = t.done.filter(x => x.ok === false).length
+  const marks: Line = t.done.slice(-TRAIL).map(x => ({ t: '▆', color: x.ok === false ? 'red' : 'green' }))
+  if (isRunning) marks.push({ t: f % 2 ? '▆' : '▄', color: 'cyan' })
+  return [{ t: 'steps ', dim: true }, ...marks, { t: ` ${t.done.length} done${failed ? ` · ${failed} failed` : ''}`, dim: true }]
 }
 
 const NBSP = '\u00a0' // keeps a chip whole when its row wraps
 
-// One chip per to-do: grey while pending, its own color in progress (mark only) and when done.
+// One patch per to-do: a grey patch while pending, its own color in progress (mark and name) and a
+// solid patch in that color when done.
 function chip(x: Todo): Line {
   const name = clip(x.text, 18).replace(/ /g, NBSP)
-  if (x.status === 'completed') return [{ t: `[■${NBSP}${name}]`, color: x.color }]
-  if (x.status === 'in_progress') return [{ t: '[', dim: true }, { t: '◉', color: x.color }, { t: `${NBSP}${name}]`, dim: true }]
-  return [{ t: `[□${NBSP}${name}]`, dim: true }]
+  if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
+  if (x.status === 'in_progress') return [{ t: '▐◉▌', color: x.color }, { t: name, color: x.color }]
+  return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
 }
 
 // The to-do list as chips; what else is on the plate (queued calls, agents out, a filling context)
@@ -90,7 +109,7 @@ export function taskCard(t: Turn, now: number): Card {
   }
 }
 
-const BAR = 12
+const BAR = 16
 const isFailed = (r: Run) => (r.total ? r.fail > 0 : r.ok === false)
 const sayRun = (r: Run) => (r.isStopped ? 'stopped' : !r.total ? (r.ok ? 'passed' : 'failed') : r.fail ? `${r.fail} failing` : `all ${r.total} passed`)
 function testsCard(t: Turn, now: number): Card {
@@ -100,21 +119,38 @@ function testsCard(t: Turn, now: number): Card {
   const prev = t.runs.slice(0, -1).reverse().find(x => !x.running)
   if (r.running) {
     const el = secs(now - r.startedAt)
-    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '·'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${el}s` : '…'}` }], [{ t: prev ? `last run: ${sayRun(prev)}` : 'first run', dim: true }]] }
+    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${el}s` : '…'}` }], [{ t: prev ? `last run: ${sayRun(prev)}` : 'first run', dim: true }]], spare: runHistory(t) }
   }
-  if (r.isStopped) return { title: `tests · run ${n}`, tone: 'warn', lines: [[{ t: '·'.repeat(BAR) + ' ', dim: true }, { t: 'run stopped' }], [{ t: 'the turn ended before it finished', dim: true }]] }
-  const good = r.total ? Math.round((r.pass / r.total) * BAR) : r.ok ? BAR : 0
-  const bar: Line = [{ t: '█'.repeat(good), color: 'green' }, { t: '█'.repeat(BAR - good), color: 'red' }, { t: ' ' }]
+  if (r.isStopped) return { title: `tests · run ${n}`, tone: 'warn', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: 'run stopped' }], [{ t: 'the turn ended before it finished', dim: true }]] }
+  const passed = r.total ? r.pass / r.total : r.ok ? 1 : 0
+  const bar: Line = [...barOf(passed), { t: ' ' }]
   const failedBefore = t.runs.slice(0, -1).filter(isFailed).length
   const fixed: Line = [{ t: failedBefore ? `fixed after ${plural(failedBefore, 'failing run')}` : n > 1 ? 'passed every run' : 'passed first time', dim: true }]
-  if (!r.total) return { title: `tests · run ${n}`, tone: r.ok ? 'ok' : 'fail', lines: [[...bar, r.ok ? { t: 'passed ✓', color: 'green' } : { t: 'failed' }], r.ok ? fixed : [{ t: 'no test count in the output', dim: true }]] }
-  if (!isFailed(r)) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...bar, { t: `all ${r.total} pass ✓`, color: 'green' }], fixed] }
+  const spare = runHistory(t)
+  if (!r.total) return { title: `tests · run ${n}`, tone: r.ok ? 'ok' : 'fail', lines: [[...bar, r.ok ? { t: 'passed ✓', color: 'green' } : { t: 'failed' }], r.ok ? fixed : [{ t: 'no test count in the output', dim: true }]], spare }
+  if (!isFailed(r)) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...bar, { t: `all ${r.total} pass ✓`, color: 'green' }], fixed], spare }
   const name = r.failing[0]
   return {
     title: `tests · run ${n}`,
     tone: 'fail',
     lines: [[...bar, { t: `${r.pass}/${r.total} pass` }], [{ t: '✗ ', color: 'red' }, { t: name ? name + (r.fail > 1 ? ` +${r.fail - 1}` : '') : plural(r.fail, 'failing test') }]],
+    spare,
   }
+}
+
+// Passing share in green, the rest in red; the cell where they meet is split to the eighth.
+const barOf = (passed: number): Line => (passed <= 0 ? [{ t: '█'.repeat(BAR), color: 'red' }] : bar(passed, BAR, 'green', 'red'))
+
+// One block per finished run, as tall as its passing share; from two runs on.
+function runHistory(t: Turn): Line | undefined {
+  const done = t.runs.filter(x => !x.running && !x.isStopped).slice(-12)
+  if (done.length < 2) return undefined
+  const marks: Line = done.map(x => (x.total ? { t: SPARK[Math.round((x.pass / x.total) * 7)] as string, color: x.fail ? 'red' : 'green' } : { t: x.ok ? '█' : '▁', color: x.ok ? 'green' : 'red' }))
+  const counted = done.filter(x => x.total)
+  const first = counted[0]
+  const last = counted[counted.length - 1]
+  const said = first && last && counted.length > 1 ? ` ${first.pass} → ${last.pass} passing` : ''
+  return [{ t: 'runs ', dim: true }, ...marks, { t: said, dim: true }]
 }
 
 function filesCard(t: Turn): Card {
@@ -166,17 +202,21 @@ function dots(t: Turn): Line {
   return t.todos.slice(0, 12).map(x => ({ t: x.status === 'completed' ? '●' : x.status === 'in_progress' ? '◉' : '○', color: x.status === 'pending' ? undefined : 'green', dim: x.status === 'pending' }))
 }
 
+// A segment of bars, sparklines or marks only (dots and spaces aside): no words for a one-line summary.
+const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐][\s·█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐]*$/
+
 // The one line above the prompt between turns: how it ended, what is still owed.
 export function lastTurn(t: Turn, now: number): LastTurn {
   const card = taskCard(t, now)
-  const headline = (card.lines[0] ?? []).map(s => s.t).join('').replace(/[█■●◉○◆✗▁▂▃▄▅▆▇]+|·{2,}/g, '').replace(/\s{2,}/g, ' ').trim() || `${plural(t.done.length, 'step')}`
+  const words = (card.lines[0] ?? []).filter(s => !s.inv && !GLYPHS_ONLY.test(s.t))
+  const headline = words.map(s => s.t).join('').replace(/\s{2,}/g, ' ').replace(/^[\s·]+|[\s·]+$/g, '') || `${plural(t.done.length, 'step')}`
   const tone: LastTurn['tone'] = card.tone === 'fail' || card.tone === 'warn' ? 'fail' : card.tone === 'ok' ? 'ok' : 'plain'
-  return { headline: `${card.title}: ${headline}`, tone, owed: openTodos(t).map(x => x.text).slice(0, 4) }
+  return { title: card.title, headline, tone, owed: openTodos(t).slice(0, 4).map(x => ({ t: x.text, color: x.color })) }
 }
 
 // Long lines take the spare rows instead of being cut: each split breaks at a space and the
 // continuation is indented under the text. What still does not fit is truncated by the renderer.
-export function fitRows(lines: Line[], width: number, rows: number): Line[] {
+export function fitRows(lines: Line[], width: number, rows: number, spare?: Line): Line[] {
   const out = lines.filter((l, i) => i === 0 || l.some(s => s.t))
   for (let i = 0; i < out.length && out.length < rows; i++) {
     const line = out[i] ?? []
@@ -187,6 +227,7 @@ export function fitRows(lines: Line[], width: number, rows: number): Line[] {
     const [head, tail] = splitLine(line, cut, all[cut] === ' ' ? 1 : 0)
     out.splice(i, 1, head, [{ t: '  ' }, ...tail])
   }
+  if (spare && out.length < rows) out.push(spare)
   while (out.length < rows) out.push([])
   return out.slice(0, rows)
 }
@@ -209,19 +250,22 @@ function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
   return [head, tail]
 }
 
+const GAUGE = 8
+
 // The one telemetry line under the cards. Every figure is measured; a figure not known yet is left out.
 export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line {
   const parts: Line[] = []
-  if (ctxPercent !== null) parts.push([{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined, dim: ctxPercent < 70 }])
+  if (ctxPercent !== null) parts.push([{ t: 'ctx ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }])
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
-  if (out && gen) parts.push([{ t: `${Math.round(out / (gen / 1000))} tok/s`, dim: true }])
+  const rates = done.slice(-8).map(r => r.output / ((r.endedAt - r.firstAt) / 1000))
+  if (out && gen) parts.push([{ t: 'tok/s ', dim: true }, ...(rates.length > 1 ? [spark(rates), { t: ' ' }] : []), { t: String(Math.round(out / (gen / 1000))) }])
   const last = t.requests[t.requests.length - 1]
   const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
-  if (last && sent) parts.push([{ t: `cache ${Math.round((last.cacheRead / sent) * 100)}%`, dim: true }])
-  parts.push([{ t: `turn ${clock(now - t.startedAt)}`, dim: true }])
-  return parts.flatMap((p, i) => (i ? [{ t: ' · ', dim: true }, ...p] : p))
+  if (last && sent) parts.push([{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, 'cyan'), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }])
+  parts.push([{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }])
+  return parts.flatMap((p, i) => (i ? [{ t: '   ' }, ...p] : p))
 }
 
 const clock = (ms: number) => {

@@ -1,6 +1,7 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
 import type { Line } from './cards'
+import { bar, tile } from './glyphs'
 import type { Entry } from './ledger'
 import type { Request, Step, Turn } from './track'
 
@@ -20,22 +21,21 @@ const when = (iso: string) => {
 }
 const pctColor = (p: number) => (p >= 90 ? 'red' : p >= 70 ? 'yellow' : 'green')
 
-function gauge(percent: number): Line {
-  const on = Math.max(0, Math.min(GAUGE, Math.round((percent / 100) * GAUGE)))
-  return [{ t: '█'.repeat(on), color: pctColor(percent) }, { t: '░'.repeat(GAUGE - on), dim: true }]
-}
+const gauge = (percent: number): Line => bar(percent / 100, GAUGE, pctColor(percent))
 
-// Each request as a bar: waiting for the first piece (dim), then generating (cyan), on one time scale.
+// Each request as a bar: waiting for the first piece (dim ▒), then generating (cyan, to the eighth of
+// a cell), on one time scale.
 function requestRow(r: Request, n: number, longest: number): Line {
   const total = r.endedAt - r.startedAt
   const wait = Math.round(((r.firstAt - r.startedAt) / longest) * BAR)
-  const gen = Math.max(1, Math.round(((r.endedAt - r.firstAt) / longest) * BAR))
+  const genAt = Math.min(BAR - wait, Math.max(1 / 8, ((r.endedAt - r.firstAt) / longest) * BAR))
+  const gen = Math.max(1, Math.ceil(genAt))
   const sent = r.input + r.cacheRead + r.cacheWrite
   const rate = r.endedAt > r.firstAt ? Math.round(r.output / ((r.endedAt - r.firstAt) / 1000)) : 0
   return [
     { t: `#${String(n).padEnd(3)}`, dim: true },
-    { t: '░'.repeat(wait), dim: true },
-    { t: '█'.repeat(gen), color: 'cyan' },
+    { t: '▒'.repeat(wait), dim: true },
+    ...bar(genAt / gen, gen, 'cyan'),
     { t: ' '.repeat(Math.max(0, BAR - wait - gen) + 1) },
     { t: secs(total).padStart(6) },
     { t: `  ${kilo(r.output)} out`, dim: true },
@@ -45,8 +45,8 @@ function requestRow(r: Request, n: number, longest: number): Line {
 }
 
 function stepRow(s: Step, now: number): Line {
-  const mark: Line[number] = s.endedAt === undefined ? { t: '◆ ', color: 'cyan' } : s.ok === false ? { t: '✗ ', color: 'red' } : { t: '✓ ', color: 'green' }
-  return [mark, { t: (s.say.length > 36 ? s.say.slice(0, 35) + '…' : s.say).padEnd(36) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
+  const mark = s.endedAt === undefined ? tile(' ◆ ', 'cyan') : s.ok === false ? tile(' ✗ ', 'red') : tile(' ✓ ', 'green')
+  return [mark, { t: ' ' }, { t: (s.say.length > 36 ? s.say.slice(0, 35) + '…' : s.say).padEnd(36) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
 }
 
 export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: readonly Entry[] = []): Section[] {

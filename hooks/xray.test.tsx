@@ -64,7 +64,9 @@ test('a fix-the-tests turn picks the tests card and shows what still fails', asy
   finishStep(t, 'c', 'Bash', { command: 'npm test' }, true, 'Tests: 42 passed, 42 total', undefined, 8000)
   expect(taskCard(t, 8000).tone).toBe('ok')
   expect(t.edited.get('cost.ts')?.checked).toBe(true)
-  expect(lastTurn(t, 9000)).toEqual({ headline: 'tests · run 2: all 42 pass ✓', tone: 'ok', owed: [] })
+  expect(text(taskCard(t, 8000).spare)).toBe('runs ██ 41 → 42 passing')
+  expect(taskCard(t, 8000).spare?.[1]?.color).toBe('red')
+  expect(lastTurn(t, 9000)).toEqual({ title: 'tests · run 2', headline: 'all 42 pass ✓', tone: 'ok', owed: [] })
 })
 
 test('a test run with no summary says passed or failed, never a made-up count', async () => {
@@ -78,14 +80,14 @@ test('a test run with no summary says passed or failed, never a made-up count', 
   finishStep(t, 'b', 'Bash', { command: 'npm test' }, true, 'ok', undefined, 30)
   expect(taskCard(t, 30).tone).toBe('ok')
   expect(text(taskCard(t, 30).lines[1])).toBe('fixed after 1 failing run')
-  expect(lastTurn(t, 40).headline).toBe('tests · run 2: passed ✓')
+  expect(lastTurn(t, 40).headline).toBe('passed ✓')
 })
 
 test('a run cut off by the end of the turn reads as stopped, not running', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'pytest' }, 0)
   endTurn(t)
-  expect(lastTurn(t, 10)).toEqual({ headline: 'tests · run 1: run stopped', tone: 'fail', owed: [] })
+  expect(lastTurn(t, 10)).toEqual({ title: 'tests · run 1', headline: 'run stopped', tone: 'fail', owed: [] })
 })
 
 test('a long line takes the spare row instead of being cut, splitting at a space', async () => {
@@ -97,12 +99,20 @@ test('a long line takes the spare row instead of being cut, splitting at a space
   expect(styled.map(text)).toEqual(['next ▸ updating', '  all of the', '  call sites'])
 })
 
+test('a spare row is drawn only when the lines leave one free after wrapping', async () => {
+  const spare = [{ t: 'steps ▆▆' }]
+  expect(fitRows([[{ t: 'a' }], [{ t: 'short' }]], 20, 3, spare).map(l => text(l))).toEqual(['a', 'short', 'steps ▆▆'])
+  expect(fitRows([[{ t: 'a' }], [{ t: 'a narration long enough to wrap' }]], 20, 3, spare).map(l => text(l))).toEqual(['a', 'a narration long', '  enough to wrap'])
+})
+
 test('the telemetry line shows only measured figures', async () => {
   const t = newTurn('x', 0)
   expect(text(telemetry(t, null, 5000))).toBe('turn 5s')
   t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 3000, output: 80, input: 100, cacheRead: 800, cacheWrite: 100 })
-  expect(text(telemetry(t, 41.4, 72_000))).toBe('ctx 41% · 40 tok/s · cache 80% · turn 1m 12s')
-  expect(telemetry(t, 74, 0)[0]?.color).toBe('yellow')
+  expect(text(telemetry(t, 41.4, 72_000))).toBe('ctx ███▎░░░░ 41%   tok/s 40   cache ██████▍░ 80%   turn 1m 12s')
+  expect(telemetry(t, 74, 0).find(x => x.t === ' 74%')?.color).toBe('yellow')
+  t.requests.push({ startedAt: 3000, firstAt: 3500, endedAt: 4500, output: 20, input: 100, cacheRead: 800, cacheWrite: 100 })
+  expect(text(telemetry(t, null, 5000))).toContain('tok/s █▁ 33')
 })
 
 test('spawned agents make the agents card: who runs, what the oldest is doing, the goal', async () => {
@@ -127,7 +137,7 @@ test('spawned agents make the agents card: who runs, what the oldest is doing, t
   card = taskCard(t, 40)
   expect(text(card.lines[0])).toBe('●✗ 1 done · 1 failed')
   expect(card.tone).toBe('fail')
-  expect(lastTurn(t, 40).headline).toBe('agents · 2: 1 done · 1 failed')
+  expect(lastTurn(t, 40).headline).toBe('1 done · 1 failed')
 })
 
 test('a background agent still running carries into the next turn; a foreground one ends with its call', async () => {
@@ -172,7 +182,9 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress' }, { content: 'commit', status: 'pending' }] }, 0)
   const card = todoCard(t, 50)
   expect(card.title).toBe('to-do · 1 of 3')
-  expect(text(card.lines[0]).replace(/\u00a0/g, ' ')).toBe('[■ read spec] [◉ draw cards] [□ commit]')
+  expect(text(card.lines[0]).replace(/\u00a0/g, ' ')).toBe(' read spec  ▐◉▌draw cards  commit ')
+  expect(card.lines[0]?.[0]?.inv).toBe(true) // done: a solid patch in its hue
+  expect(card.lines[0]?.at(-1)?.inv).toBe(true) // pending: a grey patch
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
   expect(t.todos.some(x => x.color === 'red')).toBe(false)
   const done = card.lines[0]?.[0]
@@ -209,8 +221,11 @@ test('the now card names the running step, and time only past 5 seconds', async 
   const t = newTurn('x', 0)
   expect(text(nowCard(t, 'thinking', null, 1000).lines[0])).toBe('◇ thinking')
   startStep(t, 'a', 'Bash', { command: 'npm test' }, 1000)
-  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe('◆ running the tests')
-  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe('◆ running the tests · 8s')
+  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe(' ◆  running the tests ▂')
+  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s ▄')
+  expect(nowCard(t, 'tool-use', null, 9000).lines[0]?.[0]?.inv).toBe(true)
+  expect(text(nowCard(t, 'tool-use', null, 9000).spare)).toBe('steps ▆ 0 done') // live step, blinking ▆/▄ at the tick
+  expect(text(nowCard(t, 'tool-use', null, 10_000).spare)).toBe('steps ▄ 0 done')
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[1])).toBe('» Running the suite.')
 })
 
@@ -323,12 +338,12 @@ test('the panel lists requests on one time scale, recent steps, and session budg
   const usage = { context: { tokens: 82_000, window: 200_000, percent: 41 }, cost: { usd: 1.84 }, rateLimits: [{ kind: 'five_hour', percentUsed: 92 }] }
   const [req, steps, session] = panel(t, usage, 2500)
   expect(req?.title).toBe('requests · 2')
-  expect(text(req?.rows[0])).toBe('#1  ' + '░'.repeat(7) + '█'.repeat(13) + ' ' + '  3.0s  80 out · 40 tok/s · cache 80%')
+  expect(text(req?.rows[0])).toBe('#1  ' + '▒'.repeat(7) + '█'.repeat(13) + ' ' + '  3.0s  80 out · 40 tok/s · cache 80%')
   expect(text(req?.rows[1])).toContain('20 out · 40 tok/s')
   expect(steps?.title).toBe('steps · 1 done · 1 failed')
-  expect(text(steps?.rows[0]).startsWith('✗ reading a.ts')).toBe(true)
-  expect(text(steps?.rows[1]).startsWith('◆ running the tests')).toBe(true)
-  expect(text(session?.rows[0])).toBe('context   █████░░░░░░░ 41% · 82k of 200k')
+  expect(text(steps?.rows[0]).startsWith(' ✗  reading a.ts')).toBe(true)
+  expect(text(steps?.rows[1]).startsWith(' ◆  running the tests')).toBe(true)
+  expect(text(session?.rows[0])).toBe('context   ████▉░░░░░░░ 41% · 82k of 200k')
   expect(session?.rows[1]?.[1]?.color).toBe('red')
   expect(text(session?.rows[2])).toBe('spent     $1.84 this session')
   expect(panel(null, null, 0)[0]?.title).toBe('xray')
@@ -374,13 +389,15 @@ test('git bisect makes a bisect card: marks per step, commits left, commit under
   bash(t, 'c', 'git bisect good', 'Bisecting: 6 revisions left to test after this (roughly 3 steps)\n[c1d2e3f4] lexer: utf8', 200)
   const card = taskCard(t, 300)
   expect(card.title).toBe('bisect · step 2')
-  expect(text(card.lines[0])).toBe('✗● 6 commits · ~3 steps')
+  expect(text(card.lines[0])).toBe('✗ ✓ 6 commits · ~3 steps')
+  expect(card.lines[0]?.[0]).toMatchObject({ color: 'red', inv: true })
   expect(text(card.lines[1])).toBe('testing c1d2e3f · "lexer: utf8"')
+  expect(text(card.lines[2])).toBe('░░░░███░░░░░ 6 of 28')
   bash(t, 'd', 'git bisect bad', 'c1d2e3f4aa is the first bad commit', 400)
   expect(taskCard(t, 500).tone).toBe('ok')
   expect(text(taskCard(t, 500).lines[2])).toBe('first bad: c1d2e3f ✓')
   expect(text(taskCard(t, 500).lines[1])).toBe('')
-  expect(lastTurn(t, 500).headline).toBe('bisect · step 3: 6 commits · ~3 steps')
+  expect(lastTurn(t, 500)).toMatchObject({ title: 'bisect · step 3', headline: '6 commits · ~3 steps' })
 })
 
 test('a benchmark rerun three times makes a bench card; a plain command repeated does not', async () => {
@@ -407,7 +424,7 @@ test('a background job followed through its output file makes a batch card with 
   readJob(t, 'start\n100/1200 shards\n340/1200 wrote shard_0340.parquet\n', 90, 360_000)
   const card = taskCard(t, 360_000)
   expect(card.title).toBe('batch · 340 of 1200')
-  expect(text(card.lines[0])).toBe('███········· 28% · ETA 17m 55s')
+  expect(text(card.lines[0])).toBe('███▍░░░░░░░░ 28% · ETA 17m 55s')
   expect(text(card.lines[1])).toBe('48/min · started 6m 00s')
   expect(text(card.lines[2])).toBe('last: 340/1200 wrote shard_0340.parquet')
 })
@@ -438,7 +455,7 @@ test('a rerun command past a minute makes a build card measured against the last
   expect(t.signal).toBe('build')
   const card = taskCard(t, 461_000)
   expect(card.title).toBe('build · cargo build --release')
-  expect(text(card.lines[0])).toBe('████████···· 2m 41s of ~3m 50s')
+  expect(text(card.lines[0])).toBe('████████▍░░░ 2m 41s of ~3m 50s')
 })
 
 test('a written recipe is kept only within the kit; anything else falls back to the kept layout', async () => {

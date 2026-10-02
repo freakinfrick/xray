@@ -3,10 +3,11 @@
 // A small model may write the recipe; checkRecipe keeps it to the kit, and DEFAULTS stand in.
 
 import type { Card, Line, Tone } from './cards'
+import { bar, frame, spark, tile } from './glyphs'
 import type { Cmd, Turn } from './track'
 
 export type Signal = 'bisect' | 'bench' | 'batch' | 'build'
-export type Val = { kind: 'ratio'; v: number } | { kind: 'series'; v: number[] } | { kind: 'marks'; v: ('good' | 'bad' | 'live')[] } | { kind: 'text'; v: string; dim?: boolean; color?: string }
+export type Val = { kind: 'ratio'; v: number } | { kind: 'series'; v: number[] } | { kind: 'marks'; v: ('good' | 'bad' | 'live')[] } | { kind: 'window'; v: number } | { kind: 'text'; v: string; dim?: boolean; color?: string }
 export type Sources = Record<string, Val>
 export type Widget = { src: string; label?: string }
 export type Recipe = { title: string; rows: Widget[][] }
@@ -115,12 +116,15 @@ export function sources(t: Turn, signal: Signal, now: number): Sources {
         if (m) marks.push(m[1] === 'good' || m[1] === 'old' ? 'good' : 'bad')
       }
       const text = cmds.map(c => c.text ?? '').join('\n')
-      const left = [...text.matchAll(/Bisecting: (\d+) revisions? left to test after this \(roughly (\d+) steps?\)/g)].pop()
+      const lefts = [...text.matchAll(/Bisecting: (\d+) revisions? left to test after this \(roughly (\d+) steps?\)/g)]
+      const left = lefts[lefts.length - 1]
+      const start = Number(lefts[0]?.[1] ?? 0)
       const at = [...text.matchAll(/^\[([0-9a-f]{7,40})\] (.+)$/gm)].pop()
       const found = text.match(/^([0-9a-f]{7,40}) is the first bad commit/m)
       const out: Sources = { marks: { kind: 'marks', v: cmds.some(c => c.endedAt === undefined) ? [...marks, 'live'] : marks }, steps: T(String(marks.length)) }
       if (left) Object.assign(out, { left: T(`${left[1]} commits`), remaining: T(`~${left[2]} steps`, { dim: true }) })
       if (at && !found) Object.assign(out, { commit: T((at[1] ?? '').slice(0, 7), { dim: true }), subject: T(`"${at[2]}"`) })
+      if (left && start && !found) Object.assign(out, { range: { kind: 'window', v: Number(left[1]) / start }, span: T(`${left[1]} of ${start}`, { color: 'cyan' }) })
       if (found) out.found = T(`first bad: ${(found[1] ?? '').slice(0, 7)} ✓`, { color: 'green' })
       return out
     }
@@ -142,7 +146,7 @@ export function sources(t: Turn, signal: Signal, now: number): Sources {
 export const SOURCE_DOCS: Record<Signal, Record<string, string>> = {
   batch: { progress: 'bar: items done of total', percent: 'percent done', done: 'items done', total: 'items in all', rate: 'items per minute', eta: 'time left at the current rate', elapsed: 'time since the job started', lastline: 'latest line the job printed' },
   bench: { series: 'sparkline: the measured value per run', first: 'first run value', last: 'latest run value', trend: 'first → latest value', change: 'change first → latest, colored good/bad', best: 'best value and its run', runs: 'how many runs', target: 'the goal the person stated, ✓ once met' },
-  bisect: { marks: 'one mark per step: good, bad, testing now', steps: 'steps taken', left: 'commits left to test', remaining: 'steps left, roughly', commit: 'commit under test', subject: 'its subject line', found: 'the first bad commit, once found' },
+  bisect: { marks: 'one mark per step: good, bad, testing now', steps: 'steps taken', left: 'commits left to test', remaining: 'steps left, roughly', range: 'window bar: commits left against those left at the first step', span: 'commits left of those left at the first step, in numbers', commit: 'commit under test', subject: 'its subject line', found: 'the first bad commit, once found' },
   build: { progress: 'bar: elapsed against the last run of the same command', elapsed: 'time this run has taken', previous: 'how long the last run took', versus: 'elapsed of the last run\'s time', command: 'the command', lastline: 'latest line it printed' },
 }
 
@@ -150,7 +154,7 @@ export const SOURCE_DOCS: Record<Signal, Record<string, string>> = {
 export const DEFAULTS: Record<Signal, Recipe> = {
   batch: { title: 'batch · {done} of {total}', rows: [[{ src: 'progress' }, { src: 'percent' }, { src: 'eta', label: 'ETA' }], [{ src: 'rate' }, { src: 'elapsed', label: 'started' }], [{ src: 'lastline', label: 'last:' }]] },
   bench: { title: 'bench · run {runs}', rows: [[{ src: 'series' }, { src: 'trend' }, { src: 'change' }], [{ src: 'best', label: 'best' }], [{ src: 'target', label: 'your target:' }]] },
-  bisect: { title: 'bisect · step {steps}', rows: [[{ src: 'marks' }, { src: 'left' }, { src: 'remaining' }], [{ src: 'commit', label: 'testing' }, { src: 'subject' }], [{ src: 'found' }]] },
+  bisect: { title: 'bisect · step {steps}', rows: [[{ src: 'marks' }, { src: 'left' }, { src: 'remaining' }], [{ src: 'commit', label: 'testing' }, { src: 'subject' }], [{ src: 'range' }, { src: 'span' }, { src: 'found' }]] },
   build: { title: 'build · {command}', rows: [[{ src: 'progress' }, { src: 'versus' }], [{ src: 'previous', label: 'last run took' }], [{ src: 'lastline', label: 'last:' }]] },
 }
 
@@ -182,23 +186,23 @@ export function checkRecipe(raw: unknown, signal: Signal, measured?: readonly st
   return { title: r.title, rows }
 }
 
-const SPARK = '▁▂▃▄▅▆▇█'
 const BAR = 12
 
-function widget(v: Val): Line {
+// f: the animation frame (whole seconds); a mark under test blinks at the tick.
+function widget(v: Val, f: number): Line {
   switch (v.kind) {
-    case 'ratio': {
-      const on = Math.round(Math.max(0, Math.min(1, v.v)) * BAR)
-      return [{ t: '█'.repeat(on), color: 'cyan' }, { t: '·'.repeat(BAR - on), dim: true }]
-    }
-    case 'series': {
-      const xs = v.v.slice(-12)
-      const lo = Math.min(...xs)
-      const hi = Math.max(...xs)
-      return [{ t: xs.map(x => SPARK[hi > lo ? Math.round(((x - lo) / (hi - lo)) * 7) : 3]).join(''), color: 'cyan' }]
-    }
+    case 'ratio':
+      return bar(v.v, BAR, 'cyan')
+    case 'series':
+      return [spark(v.v.slice(-12))]
     case 'marks':
-      return v.v.map(m => (m === 'good' ? { t: '●', color: 'green' } : m === 'bad' ? { t: '✗', color: 'red' } : { t: '◆', color: 'cyan' }))
+      return v.v.flatMap((m, i) => [...(i ? [{ t: ' ' }] : []), m === 'good' ? tile('✓', 'green') : m === 'bad' ? tile('✗', 'red') : { t: f % 2 ? '▓' : '▒', color: 'cyan' }])
+    case 'window': {
+      // What is left, as a lit stretch in the middle of the range it started from.
+      const lit = Math.max(1, Math.round(Math.max(0, Math.min(1, v.v)) * BAR))
+      const before = Math.floor((BAR - lit) / 2)
+      return [{ t: '░'.repeat(before), dim: true }, { t: '█'.repeat(lit), color: 'cyan' }, { t: '░'.repeat(BAR - lit - before), dim: true }]
+    }
     case 'text':
       return [{ t: v.v, dim: v.dim, color: v.color }]
   }
@@ -229,7 +233,7 @@ export function customCard(t: Turn, signal: Signal, recipe: Recipe, now: number)
       if (prev) line.push({ t: prev === 'text' && v.kind === 'text' ? ' · ' : ' ', dim: true })
       prev = v.kind
       if (w.label) line.push({ t: w.label + ' ', dim: true })
-      line.push(...widget(v))
+      line.push(...widget(v, frame(now)))
     }
     return line
   })
@@ -244,7 +248,7 @@ export const WRITER =
   '{"src": source name, "label"?: at most 12 characters}}. Use only the sources listed. Answer at a glance: how far along, ' +
   'how it is going, what is happening now. Start from the kept layout and change only what this task needs: its words, ' +
   'or a value that matters more here; keep every value it shows. Numbers in the title only as {placeholders}. A label says what a value means to a person ("left", "ETA"); never repeat a source ' +
-  'name as a label, and never label a bar, sparkline or marks. Keep the number that matters most in the title. ' +
+  'name as a label, and never label a bar, sparkline, window or marks. Keep the number that matters most in the title. ' +
   'Follow every rule from the person below.'
 
 export function writerPrompt(t: Turn, signal: Signal, now: number, rules: string[]): string {

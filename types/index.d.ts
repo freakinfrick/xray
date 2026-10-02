@@ -1,4 +1,4 @@
-export type LastTurn = { headline: string; tone: 'ok' | 'fail' | 'plain'; owed: string[] }
+export type LastTurn = { title: string; headline: string; tone: 'ok' | 'fail' | 'plain'; owed: { t: string; color?: string }[] }
 
 declare module 'claude-code' {
   interface PluginState {

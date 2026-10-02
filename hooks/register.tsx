@@ -276,11 +276,11 @@ export const register: Register = (on, options) => {
     widths.push(cols - widths.reduce((a, b) => a + b, 0))
 
     const segs = (l: Line, k: string) => l.map((s, i) => (
-      <Text key={`${k}${i}`} color={s.color} dimColor={s.dim} bold={s.bold}>
+      <Text key={`${k}${i}`} color={s.color} backgroundColor={s.bg} dimColor={s.dim} bold={s.bold} inverse={s.inv}>
         {s.t}
       </Text>
     ))
-    const body = cards.map((c, i) => fitRows(c.lines, Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS))
+    const body = cards.map((c, i) => fitRows(c.lines, Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS, c.spare))
     const row = (r: number) => (
       <Box key={`r${r}`} flexDirection="row">
         {cards.map((c, i) => {
@@ -342,7 +342,7 @@ export const register: Register = (on, options) => {
             {sec.rows.map((l, r) => (
               <Text key={`p${i}r${r}`} wrap="truncate-end">
                 {l.map((g, k) => (
-                  <Text key={`g${k}`} color={g.color} dimColor={g.dim} bold={g.bold}>
+                  <Text key={`g${k}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
                     {g.t}
                   </Text>
                 ))}
@@ -360,14 +360,26 @@ export const register: Register = (on, options) => {
     if (!l) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
+    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
+    const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
 
     return (
       <Box paddingX={1}>
         <Text wrap="truncate-end">
           <Text dimColor>last turn </Text>
-          <Text color={color}>{l.headline}</Text>
+          <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
+          <Text color={color}>{` ${l.headline}`}</Text>
           <Text dimColor>{'   still owed '}</Text>
-          {l.owed.length ? <Text color="cyan">{l.owed.join(' · ')}</Text> : <Text color="green">nothing ✓</Text>}
+          {owed.length ? (
+            owed.map((x, i) => (
+              <Text key={`o${i}`}>
+                {i ? ' ' : ''}
+                <Text color={x.color ?? 'cyan'} inverse>{` ${x.t} `}</Text>
+              </Text>
+            ))
+          ) : (
+            <Text color="green">nothing ✓</Text>
+          )}
         </Text>
       </Box>
     )
