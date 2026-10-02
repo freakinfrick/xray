@@ -3,6 +3,7 @@ import { test, expect, mock } from 'claude-code/testing'
 
 import { fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
+import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep } from './track'
@@ -436,4 +437,36 @@ test('the recipe writer is told the task, the sources with their values, and the
   expect(p).toContain('- progress: bar: items done of total (now: 10%)')
   expect(p).toContain('- eta: time left at the current rate (now: not measured yet)')
   expect(p).toContain('- at most 3 widgets per row')
+})
+
+test('a rating reads as good or bad with an optional note', async () => {
+  expect(parseRating('rate good')).toEqual({ verdict: 'good' })
+  expect(parseRating('rate bad  too busy, drop the rate')).toEqual({ verdict: 'bad', note: 'too busy, drop the rate' })
+  expect(parseRating('on')).toBeNull()
+})
+
+test('the ledger binds the writer: seed rules, ratings for this card, and a disliked layout refused', async () => {
+  const bad = { title: 'b', rows: [[{ src: 'marks' }]] }
+  const entries = [
+    { at: 'x', verdict: 'bad' as const, signal: 'bisect' as const, recipe: bad, note: 'too bare' },
+    { at: 'y', verdict: 'good' as const, signal: 'batch' as const, recipe: DEFAULTS.batch },
+    { at: 'z', verdict: 'good' as const, note: 'love the borders' },
+  ]
+  const r = rules(entries, 'bisect')
+  expect(r.slice(0, SEED.length)).toEqual(SEED)
+  expect(r).toContain('Disliked the bisect card "b" with rows marks: too bare. Do not repeat it.')
+  expect(r).toContain('Liked the cards: love the borders.')
+  expect(r.some(x => x.includes('batch card'))).toBe(false)
+  expect(isRefused(entries, 'bisect', bad)).toBe(true)
+  expect(isRefused(entries, 'bisect', DEFAULTS.bisect)).toBe(false)
+})
+
+test('/xray rate files the rating; the panel lists it', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const r = await $.command.run({ command: 'xray', args: 'rate bad too busy', origin: { kind: 'composer' } } as never)
+  expect(r.text).toBe('the cards rated bad. 1 in the taste ledger.')
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
+  expect(await ui.find({ type: 'Text', text: /taste ledger · 1/ })).toBeDefined()
+  await ui.unmount()
 })

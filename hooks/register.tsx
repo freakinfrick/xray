@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
-import { WRITER, parseRecipe, writerPrompt } from './custom'
+import { DEFAULTS, WRITER, parseRecipe, writerPrompt } from './custom'
+import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { sayStep } from './parse'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep, type Turn } from './track'
@@ -32,6 +33,7 @@ type Live = {
   ctx: number | null
   isTicking: boolean
   isWriting: boolean // custom cards: a small model may lay out the task card
+  ledger: Entry[] // the taste ledger, from the store
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -83,10 +85,10 @@ async function writeRecipe($: EngineInterface, s: Live, t: Turn) {
   const signal = t.signal
   if (!s.isWriting || !signal || t.isRecipeAsked || isOff(s)) return
   t.isRecipeAsked = true
-  const prompt = writerPrompt(t, signal, await $.clock.now(), [])
+  const prompt = writerPrompt(t, signal, await $.clock.now(), rules(s.ledger, signal))
   const r = await $.model.complete({ model: 'haiku', system: WRITER, prompt, maxTokens: 300, effort: 'low', timeoutMs: 10_000 }).catch(() => null)
   const recipe = r?.isAnswered ? parseRecipe(r.text, signal) : null
-  if (recipe && t.signal === signal) {
+  if (recipe && t.signal === signal && !isRefused(s.ledger, signal, recipe)) {
     t.recipe = recipe
     $.ui.invalidate('ui.render')
   }
@@ -111,19 +113,32 @@ async function narrate($: EngineInterface, s: Live) {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
-    await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards', argumentHint: '[on|off]', immediate: true })
+    const kept = await $.store.get('ledger')
+    s.ledger = Array.isArray(kept) ? (kept as Entry[]) : []
+    await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards; rate good|bad rates the custom card', argumentHint: '[on|off|rate good|bad <note>]', immediate: true })
 
     return next(e)
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
+    const rating = parseRating(e.args)
+    if (rating) {
+      // Rates the custom card on screen (or the last turn's); with none, the note is about the cards at large.
+      const t = s.turn?.signal ? s.turn : s.prev?.signal ? s.prev : null
+      const signal = t?.signal
+      const entry: Entry = { at: new Date(await $.clock.now()).toISOString(), ...rating, ...(t && signal ? { signal, recipe: t.recipe ?? DEFAULTS[signal] } : {}) }
+      s.ledger = addEntry(s.ledger, entry)
+      await $.store.set('ledger', s.ledger)
+
+      return { text: `${signal ? `the ${signal} card` : 'the cards'} rated ${rating.verdict}. ${s.ledger.length} in the taste ledger.` }
+    }
     if (arg === 'on' || arg === 'off') {
       s.isHidden = arg === 'off'
       await $.store.set('isHidden', s.isHidden)
@@ -316,7 +331,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const usage = await $.session.usage().catch(() => null)
-    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now())
+    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger)
 
     return (
       <Box flexDirection="column" paddingX={1}>

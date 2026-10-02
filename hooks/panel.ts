@@ -1,6 +1,7 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
 import type { Line } from './cards'
+import type { Entry } from './ledger'
 import type { Request, Step, Turn } from './track'
 
 export type Usage = { context: { tokens?: number; window: number; percent?: number }; cost?: { usd: number }; rateLimits: { kind: string; percentUsed: number; resetsAt?: string }[] }
@@ -48,7 +49,7 @@ function stepRow(s: Step, now: number): Line {
   return [mark, { t: (s.say.length > 36 ? s.say.slice(0, 35) + '…' : s.say).padEnd(36) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
 }
 
-export function panel(t: Turn | null, usage: Usage | null, now: number): Section[] {
+export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: readonly Entry[] = []): Section[] {
   const out: Section[] = []
   if (t) {
     const reqs = t.requests.slice(-MAX_REQUESTS)
@@ -67,6 +68,11 @@ export function panel(t: Turn | null, usage: Usage | null, now: number): Section
     if (usage.cost) rows.push([{ t: 'spent'.padEnd(10), dim: true }, { t: `$${usage.cost.usd.toFixed(2)}` }, { t: ' this session', dim: true }])
     if (rows.length) out.push({ title: 'session', rows })
   }
+  if (ledger.length)
+    out.push({
+      title: `taste ledger · ${ledger.length}`,
+      rows: ledger.slice(-3).map(e => [{ t: e.verdict === 'good' ? '+ ' : '− ', color: e.verdict === 'good' ? 'green' : 'red' }, { t: e.signal ? `${e.signal} card` : 'cards' }, { t: e.note ? ` · ${e.note}` : '', dim: true }]),
+    })
   if (!out.length) out.push({ title: 'xray', rows: [[{ t: 'nothing measured yet: send a prompt', dim: true }]] })
   return out
 }
