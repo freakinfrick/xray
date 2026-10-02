@@ -159,3 +159,8 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Known limits: a foreground command's output is only seen when it ends (no streaming event), so
   batch progress needs a background job or repeated reads; on forest-light the bright hues barely
   differ from the normal ones, so about 5 to-do hues read as distinct there (10 on forest).
+- Live-checked 2026-10-02 (fresh Haiku sessions in tmux, git bisect over 13 commits): chips fill
+  ■/◉/□, bisect card found the planted commit, idle line, panel says "layout written for this
+  task" once a written recipe passed `checkRecipe` (no typed numbers in the title, every kept
+  value present). A bisect step run as one combined command (`… && git bisect good || git bisect
+  bad`) is read as its first verb.
