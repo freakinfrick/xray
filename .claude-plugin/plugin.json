@@ -1,0 +1,21 @@
+{
+  "name": "xray",
+  "version": "0.1.0",
+  "description": "xray-spinners: glanceable cards under the spinner showing what Claude is doing, what is left on its plate, and how the task stands",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "freakinfrick"
+  },
+  "userConfig": {
+    "narration": {
+      "type": "string",
+      "title": "xray: narration line",
+      "description": "A one-sentence \u00bb line from a small model (Haiku) at task start and on the first failure, at most once a minute. Off = cards show measured state only, no extra model calls.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    }
+  }
+}
