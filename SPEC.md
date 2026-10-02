@@ -224,3 +224,10 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   gains a `still owed · N` section after `steps`: every open to-do of the shown turn, at most 8,
   in its own hue, `◆` for the one in progress; `nothing ✓` when none are open, and no section
   before any to-do list exists. Pure data in `panel.ts`, so it reads the same on every surface.
+- Panel fits the phone (2026-10-02, user go on 1a): `panel()` lays out by the width it is
+  given (`e.props.bodyColumns` − the 2-col padding), not by device class, so any narrow pane
+  benefits; at ≥ 60 cols the panel is unchanged. Under 60: request bars shrink (min 8 cells)
+  and trailing extras (tok/s, cache %) drop when they would not fit; step text shrinks to the
+  width; session rows drop their dim tail when it would not fit. Rows: when the surface
+  measures < 30 rows (phone with keyboard up ≈ 21), at most 3 requests, 3 steps, 4 owed,
+  1 ledger entry. Measured basis: `~/claude/mods/mobile/README.md` (47 × 42, keyboard ≈ 21).
