@@ -331,6 +331,10 @@ test('the panel lists requests on one time scale, recent steps, and session budg
   expect(session?.rows[1]?.[1]?.color).toBe('red')
   expect(text(session?.rows[2])).toBe('spent     $1.84 this session')
   expect(panel(null, null, 0)[0]?.title).toBe('xray')
+  t.signal = 'bisect'
+  expect(text(panel(t, null, 0).find(x => x.title === 'task card')?.rows[0])).toBe('bisect · kept layout')
+  t.recipe = DEFAULTS.bisect
+  expect(text(panel(t, null, 0).find(x => x.title === 'task card')?.rows[0])).toBe('bisect · layout written for this task')
 })
 
 test('the panel draws in its pane', async ($, on) => {

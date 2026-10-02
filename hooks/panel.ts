@@ -68,6 +68,8 @@ export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: 
     if (usage.cost) rows.push([{ t: 'spent'.padEnd(10), dim: true }, { t: `$${usage.cost.usd.toFixed(2)}` }, { t: ' this session', dim: true }])
     if (rows.length) out.push({ title: 'session', rows })
   }
+  if (t?.signal)
+    out.push({ title: 'task card', rows: [[{ t: `${t.signal} · ` }, t.recipe ? { t: 'layout written for this task', color: 'cyan' } : { t: t.isRecipeAsked ? 'kept layout (the written one did not pass)' : 'kept layout', dim: true }], [{ t: '/xray rate good|bad <note> files it in the taste ledger', dim: true }]] })
   if (ledger.length)
     out.push({
       title: `taste ledger · ${ledger.length}`,
