@@ -120,7 +120,7 @@ export function sources(t: Turn, signal: Signal, now: number): Sources {
       const found = text.match(/^([0-9a-f]{7,40}) is the first bad commit/m)
       const out: Sources = { marks: { kind: 'marks', v: cmds.some(c => c.endedAt === undefined) ? [...marks, 'live'] : marks }, steps: T(String(marks.length)) }
       if (left) Object.assign(out, { left: T(`${left[1]} commits`), remaining: T(`~${left[2]} steps`, { dim: true }) })
-      if (at) Object.assign(out, { commit: T((at[1] ?? '').slice(0, 7), { dim: true }), subject: T(`"${at[2]}"`) })
+      if (at && !found) Object.assign(out, { commit: T((at[1] ?? '').slice(0, 7), { dim: true }), subject: T(`"${at[2]}"`) })
       if (found) out.found = T(`first bad: ${(found[1] ?? '').slice(0, 7)} ✓`, { color: 'green' })
       return out
     }

@@ -374,6 +374,8 @@ test('git bisect makes a bisect card: marks per step, commits left, commit under
   bash(t, 'd', 'git bisect bad', 'c1d2e3f4aa is the first bad commit', 400)
   expect(taskCard(t, 500).tone).toBe('ok')
   expect(text(taskCard(t, 500).lines[2])).toBe('first bad: c1d2e3f ✓')
+  expect(text(taskCard(t, 500).lines[1])).toBe('')
+  expect(lastTurn(t, 500).headline).toBe('bisect · step 3: 6 commits · ~3 steps')
 })
 
 test('a benchmark rerun three times makes a bench card; a plain command repeated does not', async () => {

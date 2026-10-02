@@ -169,7 +169,7 @@ function dots(t: Turn): Line {
 // The one line above the prompt between turns: how it ended, what is still owed.
 export function lastTurn(t: Turn, now: number): LastTurn {
   const card = taskCard(t, now)
-  const headline = (card.lines[0] ?? []).map(s => s.t).join('').replace(/[█■●◉○◆✗]+|·{2,}/g, '').trim() || `${plural(t.done.length, 'step')}`
+  const headline = (card.lines[0] ?? []).map(s => s.t).join('').replace(/[█■●◉○◆✗▁▂▃▄▅▆▇]+|·{2,}/g, '').replace(/\s{2,}/g, ' ').trim() || `${plural(t.done.length, 'step')}`
   const tone: LastTurn['tone'] = card.tone === 'fail' || card.tone === 'warn' ? 'fail' : card.tone === 'ok' ? 'ok' : 'plain'
   return { headline: `${card.title}: ${headline}`, tone, owed: openTodos(t).map(x => x.text).slice(0, 4) }
 }
