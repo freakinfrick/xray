@@ -215,3 +215,5 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   plugin → 📱; without → no glyph, strip intact); live `/xray` loads with and without device.
 - Opsec: class only (the device mod never exposes more).
 - Mobile reference for later rounds: `~/claude/mods/mobile/README.md` (47×42 Termius capture).
+- Mobile strip tail (2026-10-02, user 1b "for now"): the idle strip's `still owed` tail is cut
+  mid-word at 47 cols (capture 2, `mods/mobile/`). Left as is; revisit with the mobile pass.
