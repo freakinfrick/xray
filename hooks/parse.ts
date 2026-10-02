@@ -27,6 +27,10 @@ export function parseTestOutput(text: string): TestRun | null {
       pass += Number(m[1])
       fail += Number(m[2])
     }
+  } else if (/^\s*\d+ (pass|fail)$/m.test(s)) {
+    // bun test (and so `claude plugin test`): " 23 pass" / " 1 fail" on lines of their own
+    pass = num(/^\s*(\d+) pass$/m, s)
+    fail = num(/^\s*(\d+) fail$/m, s)
   } else if (/^# (pass|fail) +\d+/m.test(s)) {
     pass = num(/^# pass +(\d+)/m, s)
     fail = num(/^# fail +(\d+)/m, s)
@@ -43,14 +47,14 @@ export function parseTestOutput(text: string): TestRun | null {
   }
   if (!pass && !fail) return null
   const failing = new Set<string>()
-  for (const m of s.matchAll(/^\s*(?:FAILED|✗|✕|×|--- FAIL:|not ok \d+ -)\s+(.+?)\s*$/gm)) failing.add(tidyName(m[1] ?? ''))
+  for (const m of s.matchAll(/^\s*(?:FAILED|✗|✕|×|--- FAIL:|not ok \d+ -|\(fail\))\s+(.+?)\s*$/gm)) failing.add(tidyName(m[1] ?? ''))
   for (const m of s.matchAll(/^\s*●\s+(.+?)\s*$/gm)) failing.add(tidyName(m[1] ?? ''))
   return { pass, fail, total: pass + fail, failing: [...failing].filter(Boolean).slice(0, 8) }
 }
 
 const tidyName = (n: string) =>
   n
-    .replace(/\s+\(\d+(\.\d+)?\s*m?s\)$/, '')
+    .replace(/\s+[([]\d+(\.\d+)?\s*m?s[)\]]$/, '')
     .replace(/\s+-\s+.*$/, '')
     .replace(/^.*::/, '')
     .slice(0, 60)

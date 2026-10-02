@@ -29,6 +29,8 @@ test('test output counts come out of jest, pytest, cargo and go summaries', asyn
   expect(parseTestOutput('test result: ok. 12 passed; 0 failed; 0 ignored')).toEqual({ pass: 12, fail: 0, total: 12, failing: [] })
   expect(parseTestOutput('--- FAIL: TestX (0.00s)\n--- PASS: TestY (0.00s)\nFAIL')?.fail).toBe(1)
   expect(parseTestOutput('hello world')).toBeNull()
+  const bun = parseTestOutput('(fail) the panel draws in its pane [42ms]\n 23 pass\n 1 fail\nRan 24 tests across 1 file.')
+  expect(bun).toEqual({ pass: 23, fail: 1, total: 24, failing: ['the panel draws in its pane'] })
 })
 
 test('steps are named in plain words', async () => {
@@ -247,7 +249,7 @@ test('a conductor pane (CLAUDE_HUMAN_MODS=off) never draws the cards', async ($,
   await ui.unmount()
 })
 
-const compose = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] } as const
+const compose = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: ['Bash', 'TodoWrite'], outputStyle: null, traits: [] } as const
 
 test('the to-do nudge joins the system prompt, except in conductor panes', async ($, on) => {
   engine(on, {})
@@ -314,4 +316,11 @@ test('the panel draws in its pane', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /requests · 0/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /context/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('no to-do nudge when the session has no to-do tool', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const r = await $.prompt.compose({ ...compose, tools: ['Bash'] })
+  expect(r.sections.some(x => x.id === 'xray-todos')).toBe(false)
 })

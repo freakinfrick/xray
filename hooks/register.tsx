@@ -104,7 +104,8 @@ export const register: Register = (on, options) => {
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    if (isOff(s)) return r
+    // Only worth asking for when the session has a to-do tool to keep the list with.
+    if (isOff(s) || !e.tools.some(x => x === 'TodoWrite' || x === 'TaskCreate')) return r
 
     return { sections: [...r.sections, { id: 'xray-todos', text: TODO_NUDGE, scope: 'session' }] }
   })
