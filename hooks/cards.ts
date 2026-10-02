@@ -206,6 +206,10 @@ function dots(t: Turn): Line {
 const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐][\s·█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐]*$/
 
 // The one line above the prompt between turns: how it ended, what is still owed.
+// The device mod's class as the idle strip's leading glyph; unknown (or no device mod) draws nothing.
+const DEVICE_GLYPH: Record<string, string> = { mobile: '📱', desktop: '🖥', local: '⌂' }
+export const deviceGlyph = (cls: string | undefined): string | undefined => (cls ? DEVICE_GLYPH[cls] : undefined)
+
 export function lastTurn(t: Turn, now: number): LastTurn {
   const card = taskCard(t, now)
   const words = (card.lines[0] ?? []).filter(s => !s.inv && !GLYPHS_ONLY.test(s.t))

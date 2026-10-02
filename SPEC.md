@@ -207,5 +207,11 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   `📱` mobile / `🖥` desktop / `⌂` local, nothing for unknown. No extra row (mobile has 42).
 - Read at render time, so the device mod's `session.start` has run. Guarded: with the device
   mod absent, the strip draws as before.
+- **Not a declared `dependencies` entry** (measured 2026-10-02): with `"dependencies": ["device"]`
+  in plugin.json, xray does not load at all where device is absent (`/xray` unknown under a
+  settings file listing xray alone; loads again with the entry removed). The noun is typed
+  locally (`DeviceNoun` in register.tsx) and the call is wrapped in try/catch.
+- Built + checked: validate, tsc, 41 tests (glyph map; strip mounted with a stand-in device
+  plugin → 📱; without → no glyph, strip intact); live `/xray` loads with and without device.
 - Opsec: class only (the device mod never exposes more).
 - Mobile reference for later rounds: `~/claude/mods/mobile/README.md` (47×42 Termius capture).

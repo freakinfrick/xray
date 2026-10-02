@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
@@ -111,6 +111,19 @@ async function narrate($: EngineInterface, s: Live) {
     s.narration = r.text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120)
     $.ui.invalidate('ui.render')
   } else if (s.narratedAt === now) s.narratedAt = before // no sentence came back: the next trigger may try again
+}
+
+// The device mod (~/claude/mods/device) is optional, so it is not a declared dependency: one
+// would stop xray loading wherever it is absent. Its noun is typed here and, when absent, the call
+// throws and the strip draws without a glyph.
+type DeviceNoun = { device: { class: () => Promise<string> } }
+
+async function deviceClass($: EngineInterface): Promise<string | undefined> {
+  try {
+    return await ($ as unknown as DeviceNoun).device.class()
+  } catch {
+    return undefined
+  }
 }
 
 export const register: Register = (on, options) => {
@@ -362,10 +375,13 @@ export const register: Register = (on, options) => {
     const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
     // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
     const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
+    // The device mod is optional: absent, the strip draws as it did.
+    const glyph = deviceGlyph(await deviceClass($))
 
     return (
       <Box paddingX={1}>
         <Text wrap="truncate-end">
+          {glyph ? <Text>{`${glyph} `}</Text> : null}
           <Text dimColor>last turn </Text>
           <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
           <Text color={color}>{` ${l.headline}`}</Text>

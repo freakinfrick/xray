@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
@@ -516,5 +516,37 @@ test('/xray rate files the rating; the panel lists it', async ($, on) => {
   expect(r.text).toBe('the cards rated bad. 1 in the taste ledger.')
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
   expect(await ui.find({ type: 'Text', text: /taste ledger · 1/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the idle strip leads with the device class glyph, nothing when unknown or absent', async () => {
+  expect(deviceGlyph('mobile')).toBe('📱')
+  expect(deviceGlyph('desktop')).toBe('🖥')
+  expect(deviceGlyph('local')).toBe('⌂')
+  expect(deviceGlyph('unknown')).toBeUndefined()
+  expect(deviceGlyph(undefined)).toBeUndefined()
+})
+
+const LAST = { title: 'tests', headline: 'all 11 pass ✓', tone: 'ok' as const, owed: [] }
+const fakeDevice = {
+  name: 'device',
+  register: (on: On) => {
+    on('engine.create', async (_$, e, next) => ({ ...(await next(e)), device: { class: async () => 'mobile' } }))
+  },
+}
+
+test('the idle strip leads with 📱 when the device mod says mobile', { plugins: [fakeDevice] }, async ($, on) => {
+  on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /📱/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('without the device mod the idle strip draws as before, no glyph', async ($, on) => {
+  on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /📱|🖥|⌂/ })).toBeUndefined()
   await ui.unmount()
 })
