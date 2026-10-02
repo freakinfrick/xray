@@ -149,6 +149,13 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   start → step → done, tests 1/3 → all pass, telemetry, idle line, panel with 6 requests).
 - **Plugin dirs do not hot-reload:** `CLAUDE_CODE_PLUGIN_DIRS` loads at session start; a running
   session keeps the old module. Live checks need a fresh session.
-- **Next:** custom recipes (C) wait on picks from
-  `~/claude/.explainers/2026-10-02-xray-custom.html` (4 mockups: batch k/N, bench, bisect, long
-  build; recipe writer 1a model / 1b fixed). Taste ledger (L) after C.
+- **Round 5 built 2026-10-02:** to-do card (chips, one hue per to-do from 10 ANSI hues without
+  red, plate tags in the border); custom cards in `hooks/custom.ts` (signals bisect > bench >
+  batch > build, sticky per turn; sources measured; kept mockup recipes as `DEFAULTS`; Haiku
+  writes a recipe once per signal per turn, `checkRecipe` keeps it to the kit; userConfig
+  `customCards` on/off); batch follows a background job's `.output` file via `$.fs`; taste ledger
+  in `hooks/ledger.ts` (`SEED` rules + `/xray rate good|bad <note>` in `$.store`, a recipe rated
+  bad for that card is refused, panel lists the last 3).
+- Known limits: a foreground command's output is only seen when it ends (no streaming event), so
+  batch progress needs a background job or repeated reads; on forest-light the bright hues barely
+  differ from the normal ones, so about 5 to-do hues read as distinct there (10 on forest).

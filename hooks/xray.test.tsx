@@ -437,6 +437,7 @@ test('the recipe writer is told the task, the sources with their values, and the
   expect(p).toContain('- progress: bar: items done of total (now: 10%)')
   expect(p).toContain('- eta: time left at the current rate (now: not measured yet)')
   expect(p).toContain('- at most 3 widgets per row')
+  expect(p).toContain(`Kept layout: ${JSON.stringify(DEFAULTS.batch)}`)
 })
 
 test('a rating reads as good or bad with an optional note', async () => {

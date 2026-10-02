@@ -237,7 +237,10 @@ export const WRITER =
   'You lay out one small status card for a person watching a coding agent work. Reply with JSON only, no prose: ' +
   '{"title": string of at most 28 characters (may hold {source} placeholders), "rows": 1 to 3 rows, each a list of 1 to 4 ' +
   '{"src": source name, "label"?: at most 12 characters}}. Use only the sources listed. Answer at a glance: how far along, ' +
-  'how it is going, what is happening now. Labels in plain words. Follow every rule from the person below.'
+  'how it is going, what is happening now. Start from the kept layout and change only what this task needs: its words, ' +
+  'or a value that matters more here. A label says what a value means to a person ("left", "ETA"); never repeat a source ' +
+  'name as a label, and never label a bar, sparkline or marks. Keep the number that matters most in the title. ' +
+  'Follow every rule from the person below.'
 
 export function writerPrompt(t: Turn, signal: Signal, now: number, rules: string[]): string {
   const src = sources(t, signal, now)
@@ -246,7 +249,7 @@ export function writerPrompt(t: Turn, signal: Signal, now: number, rules: string
     const shown = !v ? 'not measured yet' : v.kind === 'text' ? v.v : v.kind === 'ratio' ? `${Math.round(v.v * 100)}%` : JSON.stringify(v.v).slice(0, 60)
     return `- ${name}: ${doc} (now: ${shown})`
   })
-  return [`The person asked: ${t.prompt.replace(/\s+/g, ' ').slice(0, 300)}`, `What is happening: ${signal}`, 'Sources:', ...list, 'Rules from the person:', ...rules.map(r => `- ${r}`)].join('\n')
+  return [`The person asked: ${t.prompt.replace(/\s+/g, ' ').slice(0, 300)}`, `What is happening: ${signal}`, 'Sources:', ...list, `Kept layout: ${JSON.stringify(DEFAULTS[signal])}`, 'Rules from the person:', ...rules.map(r => `- ${r}`)].join('\n')
 }
 
 // The first JSON object in a reply.
