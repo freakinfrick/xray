@@ -1,4 +1,5 @@
-import { test, expect } from 'claude-code/testing'
+import type { On } from 'claude-code'
+import { test, expect, mock } from 'claude-code/testing'
 
 import { lastTurn, leftCard, nowCard, taskCard } from './cards'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
@@ -128,4 +129,43 @@ test('with nothing running, the clock counts from the last finished step', async
   finishStep(t, 'a', 'Read', { file_path: 'a.ts' }, true, '', undefined, 20_000)
   expect(text(nowCard(t, 'requesting', null, 23_000).lines[0])).toBe('◇ waiting on the model')
   expect(text(nowCard(t, 'requesting', null, 27_000).lines[0])).toBe('◇ waiting on the model · 7s')
+})
+
+const spinnerProps = { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' } as const
+const submit = { text: 'fix the tests', wait: false, origin: { kind: 'composer' } } as const
+
+// The engine beneath the plugin, for the events a session start and a prompt pass through.
+function engine(on: On, env: Record<string, string>) {
+  mock.clock(on, { now: 1_000_000 })
+  mock.env(on, env)
+  mock.store(on)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({}) as never)
+  on('prompt.submit', ($, e) => ({ text: e.text }))
+  on('model.complete', () => ({ isAnswered: false, reason: 'aborted' }) as never)
+  on('session.usage', () => ({ startedAt: 0, context: { window: 200_000, percent: 10 }, rateLimits: [] }) as never)
+  on('ui.render', { component: 'Spinner' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>Sauteing…</Text>
+  })
+}
+
+test('after a prompt the cards draw under the spinner', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
+  expect(await ui.find({ type: 'Text', text: /now/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /thinking/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a conductor pane (CLAUDE_HUMAN_MODS=off) never draws the cards', async ($, on) => {
+  engine(on, { CLAUDE_HUMAN_MODS: 'off' })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
+  expect(await ui.find({ type: 'Text', text: /now/ })).toBeUndefined()
+  await ui.unmount()
 })
