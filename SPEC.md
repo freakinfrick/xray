@@ -97,6 +97,19 @@ animated, but animated in its own way.
   only after a pick. Build order: F → taller cards + strip → agents card → panel → C mockups →
   C → L.
 
+## Round 5 picks (2026-10-02, custom-card mockups)
+
+- User, verbatim: "recipe writer 1a — keep all; make "left" say "to-do" instead, and have each task
+  as a "box" "package" within that are grey until they are complete, then they are colored
+  according to the task, each to-do task gets a unique color".
+- Custom cards: all four kept (A batch k/N + ETA, B bench trend, C git bisect, D long build vs last
+  run). Recipe writer = small model, validated by the mod, ready-made card on any miss.
+- Left card → **to-do** card, named chips `[■ read spec] [◉ draw cards] [□ commit]`: grey while
+  pending, its own color in progress / done, one unique color per to-do (follow-up pick: chips over
+  package boxes and a square row).
+- Queued steps, running agents, context warning → a tag in the to-do card's top border.
+- Go given for: to-do card → custom cards → taste ledger.
+
 ## Later
 
 - Taste ledger (D5): picks sent from the mockup pages and later ratings become ledger entries

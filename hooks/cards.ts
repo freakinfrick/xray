@@ -2,12 +2,12 @@
 // the terminal's own palette (herdr forest / forest-light); undefined = the terminal's default ink.
 
 import type { LastTurn } from '../types'
-import { openTodos, runningAgents, type Run, type Turn } from './track'
+import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean }
 export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think'
-export type Card = { title: string; tone: Tone; note?: string; lines: Line[] }
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[] }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
 export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta' }
@@ -45,18 +45,31 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   return { title: 'now', tone, lines: [[{ t: (live.length ? '◆ ' : '◇ ') + what },...(el > 5 ? [{ t: ` · ${el}s`, dim: true }] : [])], sub] }
 }
 
-export function leftCard(t: Turn, ctxPercent: number | null): Card {
-  const open = openTodos(t)
+const NBSP = '\u00a0' // keeps a chip whole when its row wraps
+
+// One chip per to-do: grey while pending, its own color in progress (mark only) and when done.
+function chip(x: Todo): Line {
+  const name = clip(x.text, 18).replace(/ /g, NBSP)
+  if (x.status === 'completed') return [{ t: `[■${NBSP}${name}]`, color: x.color }]
+  if (x.status === 'in_progress') return [{ t: '[', dim: true }, { t: '◉', color: x.color }, { t: `${NBSP}${name}]`, dim: true }]
+  return [{ t: `[□${NBSP}${name}]`, dim: true }]
+}
+
+// The to-do list as chips; what else is on the plate (queued calls, agents out, a filling context)
+// rides in the top border.
+export function todoCard(t: Turn, ctxPercent: number | null): Card {
+  const done = t.todos.filter(x => x.status === 'completed').length
   const q = t.queued.size
   const bg = runningAgents(t).length
-  const head = [q ? `${q} queued` : '', open.length ? plural(open.length, 'to-do') : '', bg ? plural(bg, 'agent') + ' running' : ''].filter(Boolean).join(' · ') || 'nothing queued'
-  const next = [...t.queued.values()][0] ?? open.find(x => x.status === 'in_progress')?.active ?? open[0]?.text
   const warn = ctxPercent !== null && ctxPercent >= 70
+  const tags: Line = [...(q ? [{ t: `${q} queued`, dim: true }] : []), ...(bg ? [{ t: plural(bg, 'agent'), dim: true }] : []), ...(warn ? [{ t: `⚠ context ${Math.round(ctxPercent)}%`, color: 'yellow' }] : [])]
+  const note = tags.flatMap((s, i) => (i ? [{ t: ' · ', dim: true }, s] : [s]))
+  const chips = t.todos.flatMap((x, i) => (i ? [{ t: ' ' }, ...chip(x)] : chip(x)))
   return {
-    title: 'left',
-    tone: warn ? 'warn' : 'quiet',
-    note: warn ? `⚠ context ${Math.round(ctxPercent)}%` : undefined,
-    lines: [[{ t: head, dim: !q && !open.length && !bg }], next ? [{ t: 'next ▸ ', dim: true }, { t: next }] : [{ t: open.length ? '' : 'no to-do list yet', dim: true }]],
+    title: t.todos.length ? `to-do · ${done} of ${t.todos.length}` : 'to-do',
+    tone: warn ? 'warn' : t.todos.length && done === t.todos.length ? 'ok' : 'quiet',
+    note: note.length ? note : undefined,
+    lines: t.todos.length ? [chips] : [[{ t: 'no to-do list yet', dim: true }]],
   }
 }
 

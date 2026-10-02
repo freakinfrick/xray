@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry } from './cards'
+import { fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep } from './track'
@@ -45,7 +45,7 @@ test('a fix-the-tests turn picks the tests card and shows what still fails', asy
   const t = newTurn('fix the failing cost test', 0)
   queueFromResponse(t, [{ type: 'text' }, { type: 'tool_use', id: 'a', name: 'Edit', input: { file_path: 'cost.ts' } }, { type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'npm test' } }])
   expect(t.queued.size).toBe(2)
-  expect(text(leftCard(t, 40).lines[0])).toBe('2 queued')
+  expect(text(todoCard(t, 40).note)).toBe('2 queued')
   startStep(t, 'a', 'Edit', { file_path: 'cost.ts' }, 1000)
   finishStep(t, 'a', 'Edit', { file_path: 'cost.ts' }, true, '', undefined, 1500)
   startStep(t, 'b', 'Bash', { command: 'npm test' }, 2000)
@@ -118,7 +118,7 @@ test('spawned agents make the agents card: who runs, what the oldest is doing, t
   expect(text(card.lines[0])).toBe('◆◆ 2 running')
   expect(text(card.lines[1])).toBe('▸ map token use: reading token.ts')
   expect(text(card.lines[2])).toBe('goal ▸ audit the auth flow')
-  expect(text(leftCard(t, 10).lines[0])).toBe('2 agents running')
+  expect(text(todoCard(t, 10).note)).toBe('2 agents')
   finishAgent(t, { agentId: 'ag1' }, true, 30)
   finishAgent(t, { agentId: 'ag2' }, false, 31)
   card = taskCard(t, 40)
@@ -163,20 +163,43 @@ test('reads without edits make it research; to-dos become the questions', async 
   expect(text(card.lines[1])).toBe('? cache counted?')
 })
 
-test('the plate: queued calls first, then open to-dos; context warns only past 70%', async () => {
+test('the to-do card: one chip per to-do, grey until done, each in its own hue; plate tags in the border', async () => {
   const t = newTurn('x', 0)
-  startStep(t, 'c', 'TaskCreate', { subject: 'write docs', activeForm: 'writing docs' }, 0)
-  finishStep(t, 'c', 'TaskCreate', { subject: 'write docs' }, true, '', { task: { id: '7', subject: 'write docs' } }, 1)
-  expect(text(leftCard(t, 50).lines[0])).toBe('1 to-do')
-  expect(text(leftCard(t, 50).lines[1])).toBe('next ▸ write docs')
-  expect(leftCard(t, 50).note).toBeUndefined()
-  expect(leftCard(t, 72).note).toBe('⚠ context 72%')
-  startStep(t, 'u', 'TaskUpdate', { taskId: '7', status: 'completed' }, 2)
-  expect(text(leftCard(t, 50).lines[0])).toBe('nothing queued')
+  expect(text(todoCard(t, 10).lines[0])).toBe('no to-do list yet')
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress' }, { content: 'commit', status: 'pending' }] }, 0)
+  const card = todoCard(t, 50)
+  expect(card.title).toBe('to-do · 1 of 3')
+  expect(text(card.lines[0]).replace(/\u00a0/g, ' ')).toBe('[■ read spec] [◉ draw cards] [□ commit]')
+  expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
+  expect(t.todos.some(x => x.color === 'red')).toBe(false)
+  const done = card.lines[0]?.[0]
+  expect(done?.color).toBe(t.todos[0]?.color)
+  expect(card.lines[0]?.at(-1)?.dim).toBe(true)
+  expect(card.note).toBeUndefined()
+  expect(text(todoCard(t, 72).note)).toBe('⚠ context 72%')
+  // a rewrite keeps each surviving to-do's hue
+  const hue = t.todos[1]?.color
+  startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'draw cards', status: 'completed' }, { content: 'commit', status: 'in_progress' }, { content: 'push', status: 'pending' }] }, 1)
+  expect(t.todos[0]?.color).toBe(hue)
+  expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
+  // chips wrap whole: a row breaks between chips, never inside one
+  const rows = fitRows(todoCard(t, 10).lines, 26, 3).map(l => text(l).replace(/\u00a0/g, ' '))
+  expect(rows.every(r => (r.match(/\[/g) ?? []).length === (r.match(/\]/g) ?? []).length)).toBe(true)
   const next = newTurn('y', 10)
-  t.todos.push({ id: '8', text: 'still open', active: 'x', status: 'pending' })
   carryTodos(t, next)
-  expect(next.todos.map(x => x.text)).toEqual(['still open'])
+  expect(next.todos.map(x => x.text)).toEqual(['commit', 'push'])
+})
+
+test('task-tool to-dos get hues too, and the border tags queued calls and agents', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'c', 'TaskCreate', { subject: 'write docs' }, 0)
+  finishStep(t, 'c', 'TaskCreate', { subject: 'write docs' }, true, '', { task: { id: '7', subject: 'write docs' } }, 1)
+  expect(t.todos[0]?.color).toBeDefined()
+  queueFromResponse(t, [{ type: 'tool_use', id: 'q', name: 'Read', input: { file_path: 'a.ts' } }])
+  spawnAgent(t, { toolUseId: 'g', label: 'g', isBackground: true, startedAt: 0 })
+  expect(text(todoCard(t, 10).note)).toBe('1 queued · 1 agent')
+  startStep(t, 'u', 'TaskUpdate', { taskId: '7', status: 'completed' }, 2)
+  expect(todoCard(t, 10).tone).toBe('ok')
 })
 
 test('the now card names the running step, and time only past 5 seconds', async () => {

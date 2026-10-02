@@ -2,7 +2,18 @@
 
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
 
-export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed' }
+export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string }
+// One hue per to-do, kept for its life. Red is left out: on these cards it means failing.
+export const TODO_COLORS = ['green', 'cyan', 'yellow', 'magenta', 'blue', 'greenBright', 'cyanBright', 'yellowBright', 'magentaBright', 'blueBright']
+
+// A to-do without a hue takes the first one no other to-do holds (cycling once all ten are taken).
+function colorTodos(t: Turn) {
+  for (const x of t.todos) {
+    if (x.color) continue
+    const taken = new Set(t.todos.map(y => y.color))
+    x.color = TODO_COLORS.find(c => !taken.has(c)) ?? TODO_COLORS[t.todos.indexOf(x) % TODO_COLORS.length]
+  }
+}
 export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean }
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
 export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
@@ -96,7 +107,10 @@ export function startStep(t: Turn, id: string, tool: string, input: Record<strin
   t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now })
   if (tool === 'Bash' && isTestCommand(String(input.command ?? ''))) t.runs.push({ pass: 0, fail: 0, total: 0, failing: [], running: true, startedAt: now })
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
-    t.todos = (input.todos as { content: string; activeForm?: string; status: Todo['status'] }[]).map((x, i) => ({ id: `w${i}`, text: x.content, active: x.activeForm ?? x.content, status: x.status }))
+    // A rewrite of the list keeps each surviving to-do's hue, matched by its text.
+    const hue = new Map(t.todos.map(x => [x.text, x.color]))
+    t.todos = (input.todos as { content: string; activeForm?: string; status: Todo['status'] }[]).map((x, i) => ({ id: `w${i}`, text: x.content, active: x.activeForm ?? x.content, status: x.status, color: hue.get(x.content) }))
+    colorTodos(t)
   }
   if (tool === 'TaskUpdate') {
     const todo = t.todos.find(x => x.id === String(input.taskId))
@@ -136,6 +150,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
   if (tool === 'TaskCreate' && ok) {
     const task = (result as { task?: { id?: string; subject?: string } } | undefined)?.task
     if (task?.id) t.todos.push({ id: String(task.id), text: String(input.subject ?? task.subject ?? ''), active: String(input.activeForm ?? input.subject ?? ''), status: 'pending' })
+    colorTodos(t)
   }
   pickTemplate(t)
 }

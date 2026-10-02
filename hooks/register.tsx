@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
 import { panel } from './panel'
 import { sayStep } from './parse'
 import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep, type Turn } from './track'
@@ -216,7 +216,7 @@ export const register: Register = (on, options) => {
     // A narration line is news for 30 s; after that the last finished step says more.
     const said = now - s.narratedAt < NARRATION_TTL_MS ? s.narration : null
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2)
-    const cards = cols >= 72 ? [nowCard(s.turn, s.mode, said, now), leftCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, said, now), taskCard(s.turn, now)]
+    const cards = cols >= 72 ? [nowCard(s.turn, s.mode, said, now), todoCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, said, now), taskCard(s.turn, now)]
     const widths = cards.length === 3 ? [Math.floor(cols * 0.38), Math.floor(cols * 0.3)] : [Math.floor(cols * 0.55)]
     widths.push(cols - widths.reduce((a, b) => a + b, 0))
 
@@ -234,12 +234,12 @@ export const register: Register = (on, options) => {
           const dim = c.tone === 'quiet'
           if (r === 0) {
             const head = `╭─ ${c.title} `
-            const note = c.note ? ` ${c.note} ` : ''
-            const fill = Math.max(0, w - head.length - note.length - 2)
+            const note = c.note ? c.note.map(x => x.t).join('') : ''
+            const fill = Math.max(0, w - head.length - (note ? note.length + 2 : 0) - 2)
             return (
               <Text key={`c${i}`} wrap="truncate-end">
                 <Text color={color} dimColor={dim}>{head + '─'.repeat(fill)}</Text>
-                {note ? <Text color="yellow">{note}</Text> : null}
+                {c.note ? <Text>{[<Text key="a"> </Text>, ...segs(c.note, `n${i}`), <Text key="z"> </Text>]}</Text> : null}
                 <Text color={color} dimColor={dim}>{'─╮'}</Text>
               </Text>
             )
