@@ -156,7 +156,8 @@ export const DEFAULTS: Record<Signal, Recipe> = {
 
 // ---- checking and drawing -------------------------------------------------------------------------
 
-// A written recipe is kept only if it is a recipe over this signal's sources, within the card's room.
+// A written recipe is kept only if it is a recipe over this signal's sources, within the card's room,
+// with no number typed into its title (one would freeze there) and every value the kept layout shows.
 export function checkRecipe(raw: unknown, signal: Signal): Recipe | null {
   const known = SOURCE_DOCS[signal]
   if (!raw || typeof raw !== 'object') return null
@@ -174,6 +175,9 @@ export function checkRecipe(raw: unknown, signal: Signal): Recipe | null {
     }
     rows.push(out)
   }
+  if (/\d/.test(r.title.replace(/\{\w+\}/g, ''))) return null
+  const used = new Set([...rows.flat().map(w => w.src), ...[...r.title.matchAll(/\{(\w+)\}/g)].map(m => m[1])])
+  if (DEFAULTS[signal].rows.flat().some(w => !used.has(w.src))) return null
   return { title: r.title, rows }
 }
 
@@ -238,7 +242,7 @@ export const WRITER =
   '{"title": string of at most 28 characters (may hold {source} placeholders), "rows": 1 to 3 rows, each a list of 1 to 4 ' +
   '{"src": source name, "label"?: at most 12 characters}}. Use only the sources listed. Answer at a glance: how far along, ' +
   'how it is going, what is happening now. Start from the kept layout and change only what this task needs: its words, ' +
-  'or a value that matters more here. A label says what a value means to a person ("left", "ETA"); never repeat a source ' +
+  'or a value that matters more here; keep every value it shows. Numbers in the title only as {placeholders}. A label says what a value means to a person ("left", "ETA"); never repeat a source ' +
   'name as a label, and never label a bar, sparkline or marks. Keep the number that matters most in the title. ' +
   'Follow every rule from the person below.'
 

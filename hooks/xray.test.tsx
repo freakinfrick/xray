@@ -421,12 +421,16 @@ test('a rerun command past a minute makes a build card measured against the last
 })
 
 test('a written recipe is kept only within the kit; anything else falls back to the kept layout', async () => {
-  expect(checkRecipe({ title: 'shards · {done}/{total}', rows: [[{ src: 'progress' }, { src: 'eta', label: 'left' }]] }, 'batch')).toEqual({ title: 'shards · {done}/{total}', rows: [[{ src: 'progress' }, { src: 'eta', label: 'left' }]] })
+  const full = { title: 'shards · {done}/{total}', rows: [[{ src: 'progress' }, { src: 'percent' }, { src: 'eta', label: 'left' }], [{ src: 'rate' }, { src: 'elapsed' }], [{ src: 'lastline' }]] }
+  expect(checkRecipe(full, 'batch')).toEqual(full)
+  expect(checkRecipe({ ...full, title: 'shards · 340 done' }, 'batch')).toBeNull()
+  expect(checkRecipe({ ...full, rows: [[{ src: 'progress' }, { src: 'eta' }]] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: 'x', rows: [[{ src: 'tokens' }]] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: '{cost}', rows: [[{ src: 'eta' }]] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: 'x', rows: [[], [], [], []] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: 'x', rows: [[{ src: 'eta', label: 'a label far too long' }]] }, 'batch')).toBeNull()
-  expect(parseRecipe('Here: {"title":"bisect","rows":[[{"src":"marks"}]]} done', 'bisect')?.rows[0]?.[0]?.src).toBe('marks')
+  expect(parseRecipe(`Here: ${JSON.stringify(DEFAULTS.bisect)} done`, 'bisect')?.rows[0]?.[0]?.src).toBe('marks')
+  expect(parseRecipe('{"title":"bisect","rows":[[{"src":"marks"}]]}', 'bisect')).toBeNull()
   expect(parseRecipe('no json', 'bisect')).toBeNull()
   for (const [sig, r] of Object.entries(DEFAULTS)) expect(checkRecipe(r, sig as keyof typeof DEFAULTS)).toEqual(r)
 })
