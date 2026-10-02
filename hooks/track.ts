@@ -7,6 +7,8 @@ export type Step = { id: string; tool: string; say: string; startedAt: number; e
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
 export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
 export type Template = 'default' | 'research' | 'tests' | 'refactor'
+// One model request: when it was sent, when its first piece arrived, what the API counted.
+export type Request = { startedAt: number; firstAt: number; endedAt: number; output: number; input: number; cacheRead: number; cacheWrite: number }
 
 export type Turn = {
   startedAt: number
@@ -19,6 +21,7 @@ export type Turn = {
   edited: Map<string, { at: number; checked: boolean }>
   sources: string[]
   failures: number
+  requests: Request[]
   template: Template
 }
 
@@ -33,6 +36,7 @@ export const newTurn = (prompt: string, now: number): Turn => ({
   edited: new Map(),
   sources: [],
   failures: 0,
+  requests: [],
   template: 'default',
 })
 

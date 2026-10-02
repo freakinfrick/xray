@@ -140,6 +140,61 @@ export function lastTurn(t: Turn, now: number): LastTurn {
   return { headline: `${card.title}: ${headline}`, tone, owed: openTodos(t).map(x => x.text).slice(0, 4) }
 }
 
+// Long lines take the spare rows instead of being cut: each split breaks at a space and the
+// continuation is indented under the text. What still does not fit is truncated by the renderer.
+export function fitRows(lines: Line[], width: number, rows: number): Line[] {
+  const out = lines.filter((l, i) => i === 0 || l.some(s => s.t))
+  for (let i = 0; i < out.length && out.length < rows; i++) {
+    const line = out[i] ?? []
+    const all = line.map(s => s.t).join('')
+    if (all.length <= width) continue
+    const space = all.lastIndexOf(' ', width)
+    const cut = space > width / 3 ? space : width
+    const [head, tail] = splitLine(line, cut, all[cut] === ' ' ? 1 : 0)
+    out.splice(i, 1, head, [{ t: '  ' }, ...tail])
+  }
+  while (out.length < rows) out.push([])
+  return out.slice(0, rows)
+}
+
+function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
+  const head: Line = []
+  const tail: Line = []
+  let at = 0
+  for (const s of line) {
+    const end = at + s.t.length
+    if (end <= cut) head.push(s)
+    else if (at >= cut + skip) tail.push(s)
+    else {
+      if (cut > at) head.push({ ...s, t: s.t.slice(0, cut - at) })
+      const rest = s.t.slice(Math.max(0, cut + skip - at))
+      if (rest) tail.push({ ...s, t: rest })
+    }
+    at = end
+  }
+  return [head, tail]
+}
+
+// The one telemetry line under the cards. Every figure is measured; a figure not known yet is left out.
+export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line {
+  const parts: Line[] = []
+  if (ctxPercent !== null) parts.push([{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined, dim: ctxPercent < 70 }])
+  const done = t.requests.filter(r => r.endedAt > r.firstAt)
+  const out = done.reduce((a, r) => a + r.output, 0)
+  const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
+  if (out && gen) parts.push([{ t: `${Math.round(out / (gen / 1000))} tok/s`, dim: true }])
+  const last = t.requests[t.requests.length - 1]
+  const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
+  if (last && sent) parts.push([{ t: `cache ${Math.round((last.cacheRead / sent) * 100)}%`, dim: true }])
+  parts.push([{ t: `turn ${clock(now - t.startedAt)}`, dim: true }])
+  return parts.flatMap((p, i) => (i ? [{ t: ' · ', dim: true }, ...p] : p))
+}
+
+const clock = (ms: number) => {
+  const s = Math.floor(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
+
 const clip = (s: string, n: number) => {
   const one = s.replace(/\s+/g, ' ').trim()
   return one.length > n ? one.slice(0, n - 1) + '…' : one

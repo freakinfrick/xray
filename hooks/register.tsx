@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, lastTurn, leftCard, nowCard, taskCard, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry, type Card, type Line, type Mode } from './cards'
 import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
 const NARRATE_GAP_MS = 60_000
 const NARRATION_TTL_MS = 30_000
+const BODY_ROWS = 3 // card text rows; with the two borders and the telemetry line, 6 rows under the spinner
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
   '(TodoWrite, or TaskCreate/TaskUpdate): add the steps when you plan them and mark each one done as you finish it.'
@@ -140,6 +141,24 @@ export const register: Register = (on, options) => {
     return ran
   })
 
+  // Watches each model request pass, for the telemetry line. Every chunk goes on unchanged.
+  on('turn.step', async function* ($, e, next) {
+    const t = s.turn
+    if (!t || isOff(s) || e.agentId) return yield* next(e)
+    const startedAt = await $.clock.now()
+    let firstAt = 0
+    const stream = next(e)
+    for await (const c of stream) {
+      if (!firstAt && c.kind !== 'engine') firstAt = await $.clock.now()
+      yield c
+    }
+    const r = await stream.result
+    const u = r.usage
+    if (u) t.requests.push({ startedAt, firstAt: firstAt || startedAt, endedAt: await $.clock.now(), output: u.output_tokens, input: u.input_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens })
+
+    return r
+  })
+
   on('turn.complete', async ($, e, next) => {
     if (s.turn && !isOff(s) && !e.agentId) {
       const t = s.turn
@@ -171,6 +190,7 @@ export const register: Register = (on, options) => {
         {s.t}
       </Text>
     ))
+    const body = cards.map((c, i) => fitRows(c.lines, Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS))
     const row = (r: number) => (
       <Box key={`r${r}`} flexDirection="row">
         {cards.map((c, i) => {
@@ -189,7 +209,7 @@ export const register: Register = (on, options) => {
               </Text>
             )
           }
-          if (r === 3)
+          if (r === BODY_ROWS + 1)
             return (
               <Text key={`c${i}`} color={color} dimColor={dim}>
                 {'╰' + '─'.repeat(Math.max(0, w - 2)) + '╯'}
@@ -199,7 +219,7 @@ export const register: Register = (on, options) => {
             <Box key={`c${i}`} flexDirection="row" width={w}>
               <Text color={color} dimColor={dim}>{'│ '}</Text>
               <Box width={Math.max(1, w - 4)}>
-                <Text wrap="truncate-end">{segs(c.lines[r - 1] ?? [], `s${i}${r}`)}</Text>
+                <Text wrap="truncate-end">{segs(body[i]?.[r - 1] ?? [], `s${i}${r}`)}</Text>
               </Box>
               <Text color={color} dimColor={dim}>{' │'}</Text>
             </Box>
@@ -211,7 +231,10 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {line}
-        {[0, 1, 2, 3].map(row)}
+        {Array.from({ length: BODY_ROWS + 2 }, (_, r) => row(r))}
+        <Box paddingX={1} width={cols}>
+          <Text wrap="truncate-end">{segs(telemetry(s.turn, s.ctx, now), 'tm')}</Text>
+        </Box>
       </Box>
     )
   })

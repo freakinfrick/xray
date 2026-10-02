@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { lastTurn, leftCard, nowCard, taskCard } from './cards'
+import { fitRows, lastTurn, leftCard, nowCard, taskCard, telemetry } from './cards'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { carryTodos, endTurn, finishStep, newTurn, queueFromResponse, startStep } from './track'
 
@@ -80,6 +80,23 @@ test('a run cut off by the end of the turn reads as stopped, not running', async
   startStep(t, 'a', 'Bash', { command: 'pytest' }, 0)
   endTurn(t)
   expect(lastTurn(t, 10)).toEqual({ headline: 'tests · run 1: run stopped', tone: 'fail', owed: [] })
+})
+
+test('a long line takes the spare row instead of being cut, splitting at a space', async () => {
+  const rows = fitRows([[{ t: '◆ reading' }], [{ t: '» Rerunning the tests after fixing the rounding', dim: true }]], 20, 3)
+  expect(rows.map(text)).toEqual(['◆ reading', '» Rerunning the', '  tests after fixing the rounding'])
+  expect(rows[1]?.[0]?.dim).toBe(true)
+  expect(fitRows([[{ t: 'short' }], [{ t: '' }]], 20, 3).map(text)).toEqual(['short', '', ''])
+  const styled = fitRows([[{ t: 'next ▸ ', dim: true }, { t: 'updating all of the call sites' }]], 16, 3)
+  expect(styled.map(text)).toEqual(['next ▸ updating', '  all of the', '  call sites'])
+})
+
+test('the telemetry line shows only measured figures', async () => {
+  const t = newTurn('x', 0)
+  expect(text(telemetry(t, null, 5000))).toBe('turn 5s')
+  t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 3000, output: 80, input: 100, cacheRead: 800, cacheWrite: 100 })
+  expect(text(telemetry(t, 41.4, 72_000))).toBe('ctx 41% · 40 tok/s · cache 80% · turn 1m 12s')
+  expect(telemetry(t, 74, 0)[0]?.color).toBe('yellow')
 })
 
 test('five edited files make it a refactor; the card counts edited and checked', async () => {
@@ -180,6 +197,7 @@ test('after a prompt the cards draw under the spinner', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
   expect(await ui.find({ type: 'Text', text: /now/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /thinking/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /turn \d+s/ })).toBeDefined()
   await ui.unmount()
 })
 
