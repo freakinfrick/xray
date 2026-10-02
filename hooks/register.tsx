@@ -90,16 +90,16 @@ export const register: Register = (on, options) => {
       await $.store.set('isHidden', s.isHidden)
       $.ui.invalidate('ui.render')
 
-      return { text: s.isHidden ? 'xray-spinner off. /xray on brings it back.' : 'xray-spinner on.' }
+      return { text: s.isHidden ? 'cards off. /xray on brings them back.' : 'cards on.' }
     }
     if ((await $.ui.panes()).some(p => p.id === PANE)) {
       await $.ui.close({ id: PANE })
 
-      return { text: 'xray panel closed.' }
+      return { text: 'panel closed.' }
     }
     const opened = await $.ui.open({ id: PANE, title: 'xray', closeOnEscape: true, rows: 24 })
 
-    return { text: opened.isPlaced ? 'xray panel open. /xray or Esc closes it.' : 'xray panel waiting for a wider terminal.' }
+    return { text: opened.isPlaced ? 'panel open. /xray or Esc closes it.' : 'panel waits for a wider terminal.' }
   })
 
   on('prompt.compose', async ($, e, next) => {

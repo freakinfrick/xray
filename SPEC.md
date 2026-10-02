@@ -128,5 +128,14 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   line, Haiku narration, to-do nudge, `/xray on|off`, conductor off-switch. Live via
   `CLAUDE_CODE_PLUGIN_DIRS`. Checked: validate, tsc, 12 tests, live Haiku session fixing a
   failing test (tests card went running → 2/3 fail → all pass; idle line correct).
-- **v2 backlog:** custom recipes (gate above), `/xray` detail panel (timeline, token rate,
-  cache, budgets), agents + goal card, taste ledger.
+- **v2 built 2026-10-02** (round 4 picks): F fixes (uncounted runs say passed/failed, stopped
+  runs, narration retry, bun summaries, nudge only with a to-do tool), cards 6 rows (3 text rows
+  with wrap + telemetry line from `turn.step` usage), agents + goal card (`agent.spawn`, subagent
+  `tool.call`/`turn.complete`), `/xray` panel (requests timeline, steps, context + rate-limit
+  gauges, spend). Checked: tsc, validate, 25 tests; live Haiku session in tmux (agents card
+  start → step → done, tests 1/3 → all pass, telemetry, idle line, panel with 6 requests).
+- **Plugin dirs do not hot-reload:** `CLAUDE_CODE_PLUGIN_DIRS` loads at session start; a running
+  session keeps the old module. Live checks need a fresh session.
+- **Next:** custom recipes (C) wait on picks from
+  `~/claude/.explainers/2026-10-02-xray-custom.html` (4 mockups: batch k/N, bench, bisect, long
+  build; recipe writer 1a model / 1b fixed). Taste ledger (L) after C.

@@ -45,7 +45,7 @@ function requestRow(r: Request, n: number, longest: number): Line {
 
 function stepRow(s: Step, now: number): Line {
   const mark: Line[number] = s.endedAt === undefined ? { t: '◆ ', color: 'cyan' } : s.ok === false ? { t: '✗ ', color: 'red' } : { t: '✓ ', color: 'green' }
-  return [mark, { t: s.say.padEnd(36).slice(0, 36) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
+  return [mark, { t: (s.say.length > 36 ? s.say.slice(0, 35) + '…' : s.say).padEnd(36) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
 }
 
 export function panel(t: Turn | null, usage: Usage | null, now: number): Section[] {
