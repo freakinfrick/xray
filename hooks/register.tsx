@@ -345,7 +345,9 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const usage = await $.session.usage().catch(() => null)
-    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger)
+    // Text columns inside the paddingX={1} below; rows as the surface measured them.
+    const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
+    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows })
 
     return (
       <Box flexDirection="column" paddingX={1}>

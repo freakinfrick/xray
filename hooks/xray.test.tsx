@@ -583,3 +583,41 @@ test('the panel lists what is still owed, the one in progress marked', async () 
   t.todos = t.todos.map(x => ({ ...x, status: 'completed' as const }))
   expect(text(panel(t, null, 0).find(x => x.title.startsWith('still owed'))?.rows[0])).toBe('nothing ✓')
 })
+
+function busyTurn() {
+  const t = newTurn('x', 0)
+  for (let i = 0; i < 6; i++) t.requests.push({ startedAt: i * 4000, firstAt: i * 4000 + 1000, endedAt: i * 4000 + 3000, output: 12_000, input: 100, cacheRead: 800, cacheWrite: 100 })
+  for (let i = 0; i < 6; i++) {
+    startStep(t, `s${i}`, 'Bash', { command: 'make deploy', description: 'Deploy the whole integration build for the device mod' }, i * 100)
+    finishStep(t, `s${i}`, 'Bash', { command: 'make deploy' }, true, '', undefined, i * 100 + 50)
+  }
+  t.todos = Array.from({ length: 6 }, (_, i) => ({ id: `${i}`, text: `to-do number ${i}`, active: '', status: 'pending' as const, color: 'cyan' }))
+  return t
+}
+const USAGE = { context: { tokens: 214_000, window: 1_000_000, percent: 21 }, cost: { usd: 1.84 }, rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: '2026-10-02T23:00:00Z' }] }
+const rowCols = (l?: { t: string }[]) => text(l).length
+
+test('at 60 columns and wider the panel draws exactly as it always has', async () => {
+  const t = busyTurn()
+  expect(panel(t, USAGE, 30_000, [], { cols: 88, rows: 50 })).toEqual(panel(t, USAGE, 30_000))
+  expect(panel(t, USAGE, 30_000, [], { cols: 60 })).toEqual(panel(t, USAGE, 30_000))
+})
+
+test('on a phone (42 text columns) every panel row fits, the core of each kept', async () => {
+  const sections = panel(busyTurn(), USAGE, 30_000, [], { cols: 42 })
+  for (const sec of sections) for (const r of sec.rows) expect(rowCols(r)).toBeLessThanOrEqual(42)
+  const req = sections.find(x => x.title.startsWith('requests'))
+  expect(text(req?.rows[0])).toContain('12k out')
+  expect(text(req?.rows[0])).not.toContain('cache')
+  expect(text(sections.find(x => x.title.startsWith('steps'))?.rows[0])).toContain('…')
+  expect(text(sections.find(x => x.title === 'session')?.rows[0])).toBe('context   ██▌░░░░░░░░░ 21% · 214k of 1000k')
+  expect(text(panel(busyTurn(), USAGE, 30_000, [], { cols: 30 }).find(x => x.title === 'session')?.rows[0])).toBe('context   ██▌░░░░░░░░░ 21%')
+})
+
+test('with the keyboard up (few rows) the panel shows fewer of each', async () => {
+  const sections = panel(busyTurn(), USAGE, 30_000, [], { cols: 42, rows: 21 })
+  expect(sections.find(x => x.title.startsWith('requests'))?.rows.length).toBe(3)
+  expect(sections.find(x => x.title.startsWith('steps'))?.rows.length).toBe(3)
+  expect(sections.find(x => x.title.startsWith('still owed'))?.rows.length).toBe(4)
+  expect(panel(busyTurn(), USAGE, 30_000, [], { cols: 42, rows: 42 }).find(x => x.title.startsWith('requests'))?.rows.length).toBe(6)
+})
