@@ -376,7 +376,10 @@ export const register: Register = (on, options) => {
     // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
     const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
     // The device mod is optional: absent, the strip draws as it did.
-    const glyph = deviceGlyph(await deviceClass($))
+    const cls = await deviceClass($)
+    const glyph = deviceGlyph(cls)
+    // On a phone (47 cols) the tail was cut mid-word; the strip stops at the headline there.
+    const hasTail = cls !== 'mobile'
 
     return (
       <Box paddingX={1}>
@@ -385,8 +388,8 @@ export const register: Register = (on, options) => {
           <Text dimColor>last turn </Text>
           <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
           <Text color={color}>{` ${l.headline}`}</Text>
-          <Text dimColor>{'   still owed '}</Text>
-          {owed.length ? (
+          {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
+          {!hasTail ? null : owed.length ? (
             owed.map((x, i) => (
               <Text key={`o${i}`}>
                 {i ? ' ' : ''}

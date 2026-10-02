@@ -540,6 +540,22 @@ test('the idle strip leads with 📱 when the device mod says mobile', { plugins
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
   expect(await ui.find({ type: 'Text', text: /📱/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+const fakeDesktop = {
+  name: 'device',
+  register: (on: On) => {
+    on('engine.create', async (_$, e, next) => ({ ...(await next(e)), device: { class: async () => 'desktop' } }))
+  },
+}
+
+test('on a desktop the idle strip keeps its still-owed tail', { plugins: [fakeDesktop] }, async ($, on) => {
+  on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /🖥/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -548,5 +564,6 @@ test('without the device mod the idle strip draws as before, no glyph', async ($
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
   expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /📱|🖥|⌂/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeDefined()
   await ui.unmount()
 })

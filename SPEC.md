@@ -217,5 +217,6 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Mobile reference for later rounds: `~/claude/mods/mobile/README.md` (47×42 Termius capture).
 - Mobile strip tail (2026-10-02, user 1a, after a brief 1b): the idle strip's `still owed` tail
   was cut mid-word at 47 cols (capture 2, `mods/mobile/`). On `mobile` the strip drops that tail
-  (glyph + last turn + headline only); the owed list stays in the `/xray` panel. Other classes
-  unchanged.
+  (glyph + last turn + headline only). Other classes unchanged. Owed to-dos stay visible in the
+  to-do card while a turn runs; the `/xray` panel does NOT list them (the 1a option text
+  claimed it did; wrong).
