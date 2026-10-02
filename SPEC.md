@@ -198,3 +198,14 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   task" once a written recipe passed `checkRecipe` (no typed numbers in the title, every kept
   value present). A bisect step run as one combined command (`… && git bisect good || git bisect
   bad`) is read as its first verb.
+
+## Round 7 — device class (2026-10-02, user "do d5")
+
+- xray draws the session's device class from the `device` mod (`~/claude/mods/device`,
+  `$.device.class()`), whose own status line is off on this box so xray owns the drawing.
+- Placement (agent default, easy to undo): a leading glyph on the idle `AbovePrompt` strip,
+  `📱` mobile / `🖥` desktop / `⌂` local, nothing for unknown. No extra row (mobile has 42).
+- Read at render time, so the device mod's `session.start` has run. Guarded: with the device
+  mod absent, the strip draws as before.
+- Opsec: class only (the device mod never exposes more).
+- Mobile reference for later rounds: `~/claude/mods/mobile/README.md` (47×42 Termius capture).
