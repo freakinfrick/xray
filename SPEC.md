@@ -92,15 +92,21 @@ animated, but animated in its own way.
 
 ## Rendering
 
-`Raster` element: per-cell width-1 BMP glyph (blocks, box drawing, braille) with 24-bit fg/bg.
-Glyph sets from `~/ratatui/ratatui-core/src/symbols/`. Mockups use the same cell model so the
-picked style ports 1:1.
+v1 draws with `Box`/`Text` (Ink), not `Raster`: colors are ANSI names (`green`, `red`,
+`yellow`, `cyan`, `magenta`) so they follow the terminal palette (herdr forest and
+forest-light write matching Konsole schemes). Each card is four text rows so the title sits in
+the top border (Ink boxes cannot title a border). Under 72 columns only now + task show.
 
 ## Home
 
 Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 `~/.claude/settings.json`. Session dev-mods folder only for hot-reload while building.
 
-## Not yet authorized
+## Status
 
-Building the mod and the conductor edit wait for an explicit go after the style pick.
+- **v1 built 2026-10-02** on branch `feat/xray` (1a scope): cards, 4 templates, between-turns
+  line, Haiku narration, to-do nudge, `/xray on|off`, conductor off-switch. Live via
+  `CLAUDE_CODE_PLUGIN_DIRS`. Checked: validate, tsc, 12 tests, live Haiku session fixing a
+  failing test (tests card went running → 2/3 fail → all pass; idle line correct).
+- **v2 backlog:** custom recipes (gate above), `/xray` detail panel (timeline, token rate,
+  cache, budgets), agents + goal card, taste ledger.
