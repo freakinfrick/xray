@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
-import { DEFAULTS, WRITER, parseRecipe, writerPrompt } from './custom'
+import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { sayStep } from './parse'
@@ -87,7 +87,7 @@ async function writeRecipe($: EngineInterface, s: Live, t: Turn) {
   t.isRecipeAsked = true
   const prompt = writerPrompt(t, signal, await $.clock.now(), rules(s.ledger, signal))
   const r = await $.model.complete({ model: 'haiku', system: WRITER, prompt, maxTokens: 300, effort: 'low', timeoutMs: 10_000 }).catch(() => null)
-  const recipe = r?.isAnswered ? parseRecipe(r.text, signal) : null
+  const recipe = r?.isAnswered ? parseRecipe(r.text, signal, Object.keys(sources(t, signal, await $.clock.now()))) : null
   if (recipe && t.signal === signal && !isRefused(s.ledger, signal, recipe)) {
     t.recipe = recipe
     $.ui.invalidate('ui.render')

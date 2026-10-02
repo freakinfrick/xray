@@ -430,6 +430,9 @@ test('a written recipe is kept only within the kit; anything else falls back to 
   expect(checkRecipe(full, 'batch')).toEqual(full)
   expect(checkRecipe({ ...full, title: 'shards · 340 done' }, 'batch')).toBeNull()
   expect(checkRecipe({ ...full, rows: [[{ src: 'progress' }, { src: 'eta' }]] }, 'batch')).toBeNull()
+  const noTarget = { title: 'bench · run {runs}', rows: [[{ src: 'series' }, { src: 'trend' }, { src: 'change' }], [{ src: 'best', label: 'best' }]] }
+  expect(checkRecipe(noTarget, 'bench')).toBeNull()
+  expect(checkRecipe(noTarget, 'bench', ['series', 'trend', 'change', 'best', 'runs'])).toEqual(noTarget)
   expect(checkRecipe({ title: 'x', rows: [[{ src: 'tokens' }]] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: '{cost}', rows: [[{ src: 'eta' }]] }, 'batch')).toBeNull()
   expect(checkRecipe({ title: 'x', rows: [[], [], [], []] }, 'batch')).toBeNull()

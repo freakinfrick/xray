@@ -157,8 +157,9 @@ export const DEFAULTS: Record<Signal, Recipe> = {
 // ---- checking and drawing -------------------------------------------------------------------------
 
 // A written recipe is kept only if it is a recipe over this signal's sources, within the card's room,
-// with no number typed into its title (one would freeze there) and every value the kept layout shows.
-export function checkRecipe(raw: unknown, signal: Signal): Recipe | null {
+// with no number typed into its title (one would freeze there) and every value the kept layout shows
+// that is measured now (`measured`; all of them when not given).
+export function checkRecipe(raw: unknown, signal: Signal, measured?: readonly string[]): Recipe | null {
   const known = SOURCE_DOCS[signal]
   if (!raw || typeof raw !== 'object') return null
   const r = raw as { title?: unknown; rows?: unknown }
@@ -177,7 +178,7 @@ export function checkRecipe(raw: unknown, signal: Signal): Recipe | null {
   }
   if (/\d/.test(r.title.replace(/\{\w+\}/g, ''))) return null
   const used = new Set([...rows.flat().map(w => w.src), ...[...r.title.matchAll(/\{(\w+)\}/g)].map(m => m[1])])
-  if (DEFAULTS[signal].rows.flat().some(w => !used.has(w.src))) return null
+  if (DEFAULTS[signal].rows.flat().some(w => !used.has(w.src) && (!measured || measured.includes(w.src)))) return null
   return { title: r.title, rows }
 }
 
@@ -257,12 +258,12 @@ export function writerPrompt(t: Turn, signal: Signal, now: number, rules: string
 }
 
 // The first JSON object in a reply.
-export function parseRecipe(text: string, signal: Signal): Recipe | null {
+export function parseRecipe(text: string, signal: Signal, measured?: readonly string[]): Recipe | null {
   const a = text.indexOf('{')
   const b = text.lastIndexOf('}')
   if (a < 0 || b <= a) return null
   try {
-    return checkRecipe(JSON.parse(text.slice(a, b + 1)), signal)
+    return checkRecipe(JSON.parse(text.slice(a, b + 1)), signal, measured)
   } catch {
     return null
   }
