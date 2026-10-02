@@ -567,3 +567,19 @@ test('without the device mod the idle strip draws as before, no glyph', async ($
   expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('the panel lists what is still owed, the one in progress marked', async () => {
+  const t = newTurn('x', 0)
+  expect(panel(t, null, 0).find(x => x.title.startsWith('still owed'))).toBeUndefined()
+  t.todos = [
+    { id: '1', text: 'write spec', active: 'writing spec', status: 'completed', color: 'green' },
+    { id: '2', text: 'build it', active: 'building it', status: 'in_progress', color: 'cyan' },
+    { id: '3', text: 'run tests', active: 'running tests', status: 'pending', color: 'yellow' },
+  ]
+  const owed = panel(t, null, 0).find(x => x.title.startsWith('still owed'))
+  expect(owed?.title).toBe('still owed · 2')
+  expect(owed?.rows.map(r => text(r))).toEqual(['◆ build it', '· run tests'])
+  expect(owed?.rows[1]?.[0]?.color).toBe('yellow')
+  t.todos = t.todos.map(x => ({ ...x, status: 'completed' as const }))
+  expect(text(panel(t, null, 0).find(x => x.title.startsWith('still owed'))?.rows[0])).toBe('nothing ✓')
+})

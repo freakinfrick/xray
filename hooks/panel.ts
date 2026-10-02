@@ -3,13 +3,14 @@
 import type { Line } from './cards'
 import { bar, tile } from './glyphs'
 import type { Entry } from './ledger'
-import type { Request, Step, Turn } from './track'
+import { openTodos, type Request, type Step, type Turn } from './track'
 
 export type Usage = { context: { tokens?: number; window: number; percent?: number }; cost?: { usd: number }; rateLimits: { kind: string; percentUsed: number; resetsAt?: string }[] }
 export type Section = { title: string; rows: Line[] }
 
 const MAX_REQUESTS = 6
 const MAX_STEPS = 6
+const MAX_OWED = 8
 const BAR = 20
 const GAUGE = 12
 
@@ -61,6 +62,16 @@ export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: 
     const steps = [...t.done, ...[...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)].slice(-MAX_STEPS)
     const failed = t.done.filter(s => s.ok === false).length
     out.push({ title: `steps · ${t.done.length} done${failed ? ` · ${failed} failed` : ''}`, rows: steps.length ? steps.map(s => stepRow(s, now)) : [[{ t: 'no tool calls yet', dim: true }]] })
+    // The idle strip drops this on a phone, so the panel is where the owed list always is.
+    if (t.todos.length) {
+      const owed = openTodos(t)
+      out.push({
+        title: `still owed · ${owed.length}`,
+        rows: owed.length
+          ? owed.slice(0, MAX_OWED).map(x => [{ t: x.status === 'in_progress' ? '◆ ' : '· ', color: x.color ?? 'cyan' }, { t: x.text }])
+          : [[{ t: 'nothing ✓', color: 'green' }]],
+      })
+    }
   }
   if (usage) {
     const rows: Line[] = []
