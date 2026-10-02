@@ -2,9 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
+import { WRITER, parseRecipe, writerPrompt } from './custom'
 import { panel } from './panel'
 import { sayStep } from './parse'
-import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep, type Turn } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const COMMAND = 'xray'
@@ -30,6 +31,7 @@ type Live = {
   narratedAt: number
   ctx: number | null
   isTicking: boolean
+  isWriting: boolean // custom cards: a small model may lay out the task card
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -44,6 +46,12 @@ function tick($: EngineInterface, s: Live) {
       } catch {
         s.ctx = null
       }
+      const t = s.turn
+      if (t) {
+        await followJob($, t)
+        checkSignal(t, await $.clock.now())
+        void writeRecipe($, s, t)
+      }
       $.ui.invalidate('ui.render')
       await $.clock.sleep(1000)
     }
@@ -51,6 +59,37 @@ function tick($: EngineInterface, s: Live) {
   })().catch(() => {
     s.isTicking = false
   })
+}
+
+const JOB_READ_MAX = 4 * 1024 * 1024
+
+// A background job's output file, re-read only when it grew; the tail is all a card shows.
+async function followJob($: EngineInterface, t: Turn) {
+  const job = t.job
+  if (!job) return
+  try {
+    const st = await $.fs.stat(job.path)
+    if (st.size === job.size || st.size > JOB_READ_MAX) return
+    const text = await $.fs.read(job.path)
+    readJob(t, typeof text === 'string' ? text.slice(-4000) : '', st.size, await $.clock.now())
+  } catch {
+    // gone or unreadable: the card keeps what it last read
+  }
+}
+
+// Once per custom card per turn: a small model lays it out from the kit. Until it answers, or if its
+// recipe fails the check, the kept mockup recipe draws.
+async function writeRecipe($: EngineInterface, s: Live, t: Turn) {
+  const signal = t.signal
+  if (!s.isWriting || !signal || t.isRecipeAsked || isOff(s)) return
+  t.isRecipeAsked = true
+  const prompt = writerPrompt(t, signal, await $.clock.now(), [])
+  const r = await $.model.complete({ model: 'haiku', system: WRITER, prompt, maxTokens: 300, effort: 'low', timeoutMs: 10_000 }).catch(() => null)
+  const recipe = r?.isAnswered ? parseRecipe(r.text, signal) : null
+  if (recipe && t.signal === signal) {
+    t.recipe = recipe
+    $.ui.invalidate('ui.render')
+  }
 }
 
 // One sentence from a small model, at task start and on the first failure, at most once a minute.
@@ -72,7 +111,7 @@ async function narrate($: EngineInterface, s: Live) {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'

@@ -10,7 +10,17 @@
     "narration": {
       "type": "string",
       "title": "xray: narration line",
-      "description": "A one-sentence \u00bb line from a small model (Haiku) at task start and on the first failure, at most once a minute. Off = cards show measured state only, no extra model calls.",
+      "description": "A one-sentence » line from a small model (Haiku) at task start and on the first failure, at most once a minute. Off = cards show measured state only, no extra model calls.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "customCards": {
+      "type": "string",
+      "title": "xray: custom task cards",
+      "description": "When the work has a measured property no ready-made card shows (git bisect, a benchmark loop, a batch with k/N progress, a long rerun build), a small model (Haiku) lays out the task card from the widget kit, once per such turn. Off = the kept default layouts only, no extra model calls.",
       "default": "on",
       "options": [
         "on",

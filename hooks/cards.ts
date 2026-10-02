@@ -2,6 +2,7 @@
 // the terminal's own palette (herdr forest / forest-light); undefined = the terminal's default ink.
 
 import type { LastTurn } from '../types'
+import { DEFAULTS, customCard } from './custom'
 import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean }
@@ -74,6 +75,7 @@ export function todoCard(t: Turn, ctxPercent: number | null): Card {
 }
 
 export function taskCard(t: Turn, now: number): Card {
+  if (t.signal) return customCard(t, t.signal, t.recipe ?? DEFAULTS[t.signal], now)
   switch (t.template) {
     case 'tests':
       return testsCard(t, now)

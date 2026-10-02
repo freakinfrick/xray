@@ -1,5 +1,6 @@
 // What the current turn has done, is doing, and still owes. Pure: events in, state out.
 
+import { detect, lastLine, lastMeasure, lastPair, type Recipe, type Signal } from './custom'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
 
 export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string }
@@ -20,6 +21,13 @@ export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean;
 export type Template = 'default' | 'research' | 'agents' | 'tests' | 'refactor'
 // A subagent the main session started. Its own steps arrive on tool.call with its agentId.
 export type Agent = { toolUseId: string; agentId?: string; label: string; isBackground: boolean; startedAt: number; endedAt?: number; ok?: boolean; steps: number; doing?: string }
+// A shell command the main session ran, kept across turns: reruns are what bench and build compare.
+export type Cmd = { cmd: string; startedAt: number; endedAt?: number; ok?: boolean; text?: string; measure?: { v: number; unit: string } }
+// A command sent to the background, followed through its output file.
+export type Job = { path: string; startedAt: number; lastline?: string; size?: number }
+const BENCH_CMD = /\b(bench|hyperfine|perf|wrk|ab\s+-n|criterion|time)\b/
+const BENCH_ASK = /\b(bench\w*|faster|speed\w*|latency|perf\w*|throughput|slow\w*)\b/i
+const MAX_CMDS = 40
 // One model request: when it was sent, when its first piece arrived, what the API counted.
 export type Request = { startedAt: number; firstAt: number; endedAt: number; output: number; input: number; cacheRead: number; cacheWrite: number }
 
@@ -36,6 +44,12 @@ export type Turn = {
   failures: number
   requests: Request[]
   agents: Agent[]
+  cmds: Cmd[]
+  samples: { at: number; k: number; n: number }[]
+  job?: Job
+  signal?: Signal
+  recipe?: Recipe
+  isRecipeAsked?: boolean
   template: Template
 }
 
@@ -52,6 +66,8 @@ export const newTurn = (prompt: string, now: number): Turn => ({
   failures: 0,
   requests: [],
   agents: [],
+  cmds: [],
+  samples: [],
   template: 'default',
 })
 
@@ -60,6 +76,27 @@ export function carryTodos(prev: Turn | null, next: Turn) {
   if (!prev) return
   next.todos = prev.todos.filter(t => t.status !== 'completed')
   next.agents = prev.agents.filter(a => a.endedAt === undefined)
+  next.cmds = prev.cmds.slice(-MAX_CMDS)
+  if (prev.job) Object.assign(next, { job: prev.job, samples: prev.samples })
+}
+
+// Sticky within a turn, like the template: once a property no template shows is measured, the card is custom.
+export function checkSignal(t: Turn, now: number) {
+  t.signal ??= detect(t, now) ?? undefined
+}
+
+// Progress read from wherever it shows up: a job's output file, or a tool result that printed it.
+export function sample(t: Turn, text: string, now: number) {
+  const p = lastPair(text)
+  const last = t.samples[t.samples.length - 1]
+  if (p && (!last || last.k !== p.k || last.n !== p.n)) t.samples.push({ at: now, ...p })
+}
+
+export function readJob(t: Turn, text: string, size: number, now: number) {
+  if (!t.job) return
+  t.job.size = size
+  t.job.lastline = lastLine(text).slice(0, 120) || t.job.lastline
+  sample(t, text, now)
 }
 
 export function spawnAgent(t: Turn, a: Omit<Agent, 'steps'>) {
@@ -105,6 +142,7 @@ export function queueFromResponse(t: Turn, content: unknown) {
 export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number) {
   t.queued.delete(id)
   t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now })
+  if (tool === 'Bash') t.cmds.push({ cmd: String(input.command ?? '').trim(), startedAt: now })
   if (tool === 'Bash' && isTestCommand(String(input.command ?? ''))) t.runs.push({ pass: 0, fail: 0, total: 0, failing: [], running: true, startedAt: now })
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
     // A rewrite of the list keeps each surviving to-do's hue, matched by its text.
@@ -134,6 +172,14 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
   t.done.push(step)
   if (!ok) t.failures += 1
   const cmd = String(input.command ?? '')
+  if (tool === 'Bash') {
+    const c = t.cmds.findLast(x => x.cmd === cmd.trim() && x.endedAt === undefined)
+    if (c) Object.assign(c, { endedAt: now, ok, text: text.slice(-4000) })
+    if (c && !isTestCommand(cmd) && (BENCH_CMD.test(cmd) || BENCH_ASK.test(t.prompt))) c.measure = lastMeasure(text) ?? undefined
+    const out = text.match(/Output is being written to: (\S+\.output)/)
+    if (input.run_in_background && out?.[1]) t.job = { path: out[1], startedAt: now }
+  }
+  if (ok && text && !isTestCommand(cmd)) sample(t, text, now)
   if (tool === 'Bash' && isTestCommand(cmd)) {
     const run = t.runs.findLast(r => r.running)
     const counts = parseTestOutput(text)
@@ -153,6 +199,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
     colorTodos(t)
   }
   pickTemplate(t)
+  checkSignal(t, now)
 }
 
 // A run still going when the turn ends was cut off, not finished.

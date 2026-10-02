@@ -2,9 +2,10 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 import { fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { agentStep, carryTodos, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, spawnAgent, startStep } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, newTurn, queueFromResponse, readJob, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
@@ -346,4 +347,93 @@ test('no to-do nudge when the session has no to-do tool', async ($, on) => {
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   const r = await $.prompt.compose({ ...compose, tools: ['Bash'] })
   expect(r.sections.some(x => x.id === 'xray-todos')).toBe(false)
+})
+
+const bash = (t: ReturnType<typeof newTurn>, id: string, command: string, out: string, at: number, took = 10, extra: Record<string, unknown> = {}) => {
+  startStep(t, id, 'Bash', { command, ...extra }, at)
+  finishStep(t, id, 'Bash', { command, ...extra }, true, out, undefined, at + took)
+}
+
+test('progress pairs and last lines are read the way a person would', async () => {
+  expect(lastPair('done 3/40 · then 340/1200 shards')).toEqual({ k: 340, n: 1200 })
+  expect(lastPair('2/3 pass on 10/02')).toBeNull()
+  expect(lastLine('a\nprogress 10%\rprogress 40%\n\n')).toBe('progress 40%')
+})
+
+test('git bisect makes a bisect card: marks per step, commits left, commit under test', async () => {
+  const t = newTurn('find the parse regression', 0)
+  bash(t, 'a', 'git bisect start HEAD v1.2', 'Bisecting: 28 revisions left to test after this (roughly 5 steps)\n[a3f9c21bb] parse: inline the reader', 0)
+  expect(t.signal).toBe('bisect')
+  bash(t, 'b', 'git bisect bad', 'Bisecting: 14 revisions left to test after this (roughly 4 steps)\n[b7e01aa9] parse: split tokens', 100)
+  bash(t, 'c', 'git bisect good', 'Bisecting: 6 revisions left to test after this (roughly 3 steps)\n[c1d2e3f4] lexer: utf8', 200)
+  const card = taskCard(t, 300)
+  expect(card.title).toBe('bisect · step 2')
+  expect(text(card.lines[0])).toBe('✗● 6 commits · ~3 steps')
+  expect(text(card.lines[1])).toBe('testing c1d2e3f · "lexer: utf8"')
+  bash(t, 'd', 'git bisect bad', 'c1d2e3f4aa is the first bad commit', 400)
+  expect(taskCard(t, 500).tone).toBe('ok')
+  expect(text(taskCard(t, 500).lines[2])).toBe('first bad: c1d2e3f ✓')
+})
+
+test('a benchmark rerun three times makes a bench card; a plain command repeated does not', async () => {
+  const plain = newTurn('tidy the logs', 0)
+  for (let i = 0; i < 3; i++) bash(plain, `p${i}`, 'ls -la', 'took 0.4s', i * 100)
+  expect(plain.signal).toBeUndefined()
+  const t = newTurn('make the pool faster, under 300ms', 0)
+  for (const [i, ms] of [412, 350, 287].entries()) bash(t, `b${i}`, './bench.sh', `p50 ${ms - 20}ms\np99 ${ms}ms`, i * 100)
+  expect(t.signal).toBe('bench')
+  const card = taskCard(t, 400)
+  expect(card.title).toBe('bench · run 3')
+  expect(text(card.lines[0])).toBe('█▅▁ 412ms → 287ms · −30%')
+  expect(card.lines[0]?.at(-1)?.color).toBe('green')
+  expect(text(card.lines[2])).toBe('your target: under 300ms ✓')
+})
+
+test('a background job followed through its output file makes a batch card with rate and ETA', async () => {
+  const t = newTurn('convert the shards', 0)
+  bash(t, 'j', 'python3 -u convert.py', 'Command running in background with ID: x1. Output is being written to: /tmp/t/x1.output', 0, 5, { run_in_background: true })
+  expect(t.job?.path).toBe('/tmp/t/x1.output')
+  readJob(t, 'start\n100/1200 shards\n', 30, 60_000)
+  checkSignal(t, 60_000)
+  expect(t.signal).toBe('batch')
+  readJob(t, 'start\n100/1200 shards\n340/1200 wrote shard_0340.parquet\n', 90, 360_000)
+  const card = taskCard(t, 360_000)
+  expect(card.title).toBe('batch · 340 of 1200')
+  expect(text(card.lines[0])).toBe('███········· 28% · ETA 17m 55s')
+  expect(text(card.lines[1])).toBe('48/min · started 6m 00s')
+  expect(text(card.lines[2])).toBe('last: 340/1200 wrote shard_0340.parquet')
+})
+
+test('a rerun command past a minute makes a build card measured against the last run', async () => {
+  const t = newTurn('ship the release build', 0)
+  bash(t, 'a', 'cargo build --release', 'Finished', 0, 230_000)
+  startStep(t, 'b', 'Bash', { command: 'cargo build --release' }, 300_000)
+  checkSignal(t, 330_000)
+  expect(t.signal).toBeUndefined()
+  checkSignal(t, 461_000)
+  expect(t.signal).toBe('build')
+  const card = taskCard(t, 461_000)
+  expect(card.title).toBe('build · cargo build --release')
+  expect(text(card.lines[0])).toBe('████████···· 2m 41s of ~3m 50s')
+})
+
+test('a written recipe is kept only within the kit; anything else falls back to the kept layout', async () => {
+  expect(checkRecipe({ title: 'shards · {done}/{total}', rows: [[{ src: 'progress' }, { src: 'eta', label: 'left' }]] }, 'batch')).toEqual({ title: 'shards · {done}/{total}', rows: [[{ src: 'progress' }, { src: 'eta', label: 'left' }]] })
+  expect(checkRecipe({ title: 'x', rows: [[{ src: 'tokens' }]] }, 'batch')).toBeNull()
+  expect(checkRecipe({ title: '{cost}', rows: [[{ src: 'eta' }]] }, 'batch')).toBeNull()
+  expect(checkRecipe({ title: 'x', rows: [[], [], [], []] }, 'batch')).toBeNull()
+  expect(checkRecipe({ title: 'x', rows: [[{ src: 'eta', label: 'a label far too long' }]] }, 'batch')).toBeNull()
+  expect(parseRecipe('Here: {"title":"bisect","rows":[[{"src":"marks"}]]} done', 'bisect')?.rows[0]?.[0]?.src).toBe('marks')
+  expect(parseRecipe('no json', 'bisect')).toBeNull()
+  for (const [sig, r] of Object.entries(DEFAULTS)) expect(checkRecipe(r, sig as keyof typeof DEFAULTS)).toEqual(r)
+})
+
+test('the recipe writer is told the task, the sources with their values, and the rules', async () => {
+  const t = newTurn('convert the shards', 0)
+  t.samples.push({ at: 0, k: 3, n: 30 })
+  const p = writerPrompt(t, 'batch', 0, ['at most 3 widgets per row'])
+  expect(p).toContain('The person asked: convert the shards')
+  expect(p).toContain('- progress: bar: items done of total (now: 10%)')
+  expect(p).toContain('- eta: time left at the current rate (now: not measured yet)')
+  expect(p).toContain('- at most 3 widgets per row')
 })
