@@ -9,7 +9,7 @@ import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep } from './parse'
-import { recall, record, storeKey, type Event } from './memory'
+import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
@@ -251,7 +251,7 @@ export const register: Register = (on, options) => {
     s.health = await health($, s.home)
     s.isMobile = (await deviceClass($)) === 'mobile'
     const past = await $.store.get(storeKey(s.cwd))
-    s.history = Array.isArray(past) ? (past as Event[]) : []
+    s.history = clean(past)
     const saved = s.prev ? null : await read($, keptTurn)
     if (saved) s.prev = loadTurn(saved)
     s.isCacheOff = (await $.store.get('isCacheOff')) === true

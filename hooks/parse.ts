@@ -2,11 +2,33 @@
 
 export type TestRun = { pass: number; fail: number; total: number; failing: string[] }
 
-const TEST_CMD = /\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|\b(pytest|jest|vitest|mocha|ava|tap)\b|\bcargo\s+(nextest|test)\b|\bgo\s+test\b|\bclaude\s+plugin\s+test\b|\bunittest\b|\bctest\b|\bnode\s+--test\b/
-const CHECK_CMD = /\b(tsc|mypy|pyright|cargo\s+(check|clippy)|go\s+vet|eslint|ruff|flake8|py_compile)\b/
+const TEST_CMD = /^(?:(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|(pytest|jest|vitest|mocha|ava|tap)\b|cargo\s+(nextest|test)\b|go\s+test\b|claude\s+plugin\s+test\b|unittest\b|ctest\b|node\s+--test\b)/
+const CHECK_CMD = /^(?:tsc|mypy|pyright|cargo\s+(check|clippy)|go\s+vet|eslint|ruff|flake8|py_compile)\b/
+// What may stand in front of the program itself: VAR=x, a runner, a path ("./node_modules/.bin/", ".venv/bin/").
+const LEAD = /^(?:\w+=\S*\s+|(?:timeout\s+\S+|time|env|nice|exec|npx|bunx|uv\s+run|poetry\s+run|pipenv\s+run|python3?\s+-m|\S*\/)\s*)/
 
-export const isTestCommand = (cmd: string) => TEST_CMD.test(cmd)
-export const isCheckCommand = (cmd: string) => !isTestCommand(cmd) && CHECK_CMD.test(cmd)
+// The programs a shell line actually runs: heredoc bodies and quoted text dropped (a script that merely
+// mentions pytest is not a test run: the history store held sed and heredoc edits as passing runs), split
+// at && || ; | and newlines, each with its leading VAR=x, runner and path stripped.
+export function heads(cmd: string): string[] {
+  const bare = cmd
+    .replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g, '')
+    .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
+  return bare.split(/&&|\|\||[;|\n]/).map(seg => {
+    let h = seg.trim()
+    for (let m = h.match(LEAD); m?.[0]; m = h.match(LEAD)) h = h.slice(m[0].length)
+    return h
+  }).filter(Boolean)
+}
+
+// The test command itself, without what came before or after it ("cd x && node --test 2>&1" → "node --test"),
+// so reruns written differently still compare as the same suite.
+export function testHead(cmd: string): string | undefined {
+  const h = heads(cmd).find(x => TEST_CMD.test(x))
+  return h?.replace(/\s*\d?>&?\s*\S+/g, '').trim()
+}
+export const isTestCommand = (cmd: string) => testHead(cmd) !== undefined
+export const isCheckCommand = (cmd: string) => !isTestCommand(cmd) && heads(cmd).some(x => CHECK_CMD.test(x))
 
 const num = (re: RegExp, s: string) => {
   const m = s.match(re)

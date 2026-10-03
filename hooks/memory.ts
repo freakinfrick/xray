@@ -2,10 +2,16 @@
 // test run, the last MAX kept per project in the plugin store. It stays on this machine. Pure: the
 // register reads and writes the store; this file only turns turns into events and events into words.
 
+import { isTestCommand, testHead } from './parse'
 import type { Turn } from './track'
 
 export type Event = { at: number; cmd: string; ms: number; failing: string[]; ok: boolean }
 export const MAX = 50
+// The suite a command ran, so "node --test" and "cd x && node --test 2>&1" compare as one.
+const suite = (cmd: string) => testHead(cmd) ?? cmd
+// History as stored, minus events a too-loose matcher once recorded (heredoc and sed edits that
+// mentioned pytest were kept as passing runs before 2026-10-03).
+export const clean = (v: unknown): Event[] => (Array.isArray(v) ? (v as Event[]).filter(e => typeof e?.cmd === 'string' && isTestCommand(e.cmd)) : [])
 export const storeKey = (cwd: string) => `history:${cwd}`
 
 // The finished, counted test runs of a turn as events, appended and capped.
@@ -32,7 +38,7 @@ export function recall(h: Event[], t: Turn): string[] {
   const now = record([], t)
   const last = now[now.length - 1]
   if (last) {
-    const same = before.filter(e => e.cmd === last.cmd).map(e => e.ms)
+    const same = before.filter(e => suite(e.cmd) === suite(last.cmd)).map(e => e.ms)
     if (same.length >= 2) out.push(`suite ${secs(last.ms)}, usual ${secs(median(same))}`)
   }
   const failing = new Set(now.flatMap(e => e.failing))

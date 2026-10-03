@@ -7,8 +7,8 @@ import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerP
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
-import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { recall, record } from './memory'
+import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
+import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
@@ -23,6 +23,19 @@ test('test commands and check commands are told apart', async () => {
   expect(isTestCommand('ls -la')).toBe(false)
   expect(isCheckCommand('npx tsc -p .')).toBe(true)
   expect(isCheckCommand('npm test')).toBe(false)
+})
+
+// The history store held heredoc and sed edits as passing runs: the old matcher searched the whole line.
+test('a command only counts as a test run when a test program is what it runs', async () => {
+  expect(isTestCommand('.venv/bin/pytest -q tests/x.py 2>&1 | grep -E "^E" | head -4')).toBe(true)
+  expect(isTestCommand('FOO=1 timeout 60 npx vitest run')).toBe(true)
+  expect(isTestCommand("sed -i 's|pytest|x|' f")).toBe(false)
+  expect(isTestCommand("cat > t.py <<'EOF'\nimport pytest\nEOF")).toBe(false)
+  expect(isTestCommand('git commit -m "fix the npm test run"')).toBe(false)
+  expect(isTestCommand('echo npm test')).toBe(false)
+  expect(isCheckCommand("sed 's/tsc/x/' f")).toBe(false)
+  expect(testHead('cd x && node --test 2>&1 | tail -3')).toBe('node --test')
+  expect(clean([{ at: 1, cmd: "python3 - <<'EOF'\nimport pytest\nEOF", ms: 1, failing: [], ok: true }, { at: 2, cmd: 'node --test', ms: 1, failing: [], ok: true }, null]).map(e => e.at)).toEqual([2])
 })
 
 test('test output counts come out of jest, pytest, cargo and go summaries', async () => {
