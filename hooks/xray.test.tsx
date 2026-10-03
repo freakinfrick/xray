@@ -12,7 +12,7 @@ import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { nameOf } from './names'
 import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
-import { MOMENT_BG, celebrations, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
+import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -1421,4 +1421,35 @@ test('20d: a turn is named from its shape, first rule wins, and the names vary',
   finishStep(t, 'r2', 'Read', { file_path: '/a/x.ts' }, true, '', undefined, 3)
   bash(t, 'b', 'npm test', 'Tests: 1 failed, 1 total', 4)
   expect([filesRead(t), countedRuns(t)]).toEqual([1, [false]])
+})
+
+test('20c: a record speaks only when it falls: fewest steps to green after 3 fixes, streak milestones, fastest suite after 5 runs', async () => {
+  const fix = (steps: number, at: number) => {
+    const t = newTurn('x', at)
+    bash(t, `r${at}`, 'npm test', 'Tests: 1 failed, 2 passed, 3 total', at + 1)
+    for (let i = 0; i < steps - 1; i++) {
+      startStep(t, `e${at}${i}`, 'Edit', { file_path: 'a.ts' }, at + 10 + i)
+      finishStep(t, `e${at}${i}`, 'Edit', { file_path: 'a.ts' }, true, '', undefined, at + 10 + i)
+    }
+    bash(t, `g${at}`, 'npm test', 'Tests: 3 passed, 3 total', at + 100)
+    return t
+  }
+  let r: Records | undefined
+  const said: string[] = []
+  for (const [n, at] of [[6, 1000], [5, 2000], [7, 3000], [4, 4000]] as const) {
+    const out = records(fix(n, at), r, testHead, at)
+    r = out.records
+    said.push(...out.moments.map(m => m.text))
+  }
+  expect(said).toEqual(['red → green in 4 steps']) // the first three only set the bar
+  expect(r?.fix).toMatchObject({ best: 4, n: 4 })
+  expect(r?.streak).toMatchObject({ cur: 1, best: 1 })
+  let s: Records = { streak: { cur: 4, best: 4, at: 0 } }
+  const green = newTurn('y', 0)
+  bash(green, 'g', 'npm test', 'Tests: 3 passed, 3 total', 1)
+  const five = records(green, s, testHead, 10)
+  expect(five.moments).toEqual([{ kind: 'record', text: 'green streak 5', fact: 'best here' }])
+  s = { fastest: { 'npm test': { ms: 50, at: 0, n: 5 } } }
+  expect(records(green, s, testHead, 10).moments).toEqual([{ kind: 'record', text: 'fastest npm test', fact: '0.01 s, was 0.05 s' }])
+  expect(recordRows(r).map(l => text(l))[0]).toMatch(/^red → green {3}fewest 4 steps · /)
 })

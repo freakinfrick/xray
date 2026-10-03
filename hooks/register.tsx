@@ -8,12 +8,12 @@ import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
-import { checkVoice, narrationOf, sayStep } from './parse'
+import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import { nameOf } from './names'
 import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
-import { MARK_GLYPH, MOMENT_BG, celebrations, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
+import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -63,6 +63,7 @@ type Live = {
   cache: Cache // round 18: the prompt cache's countdown
   isCacheOff: boolean // /xray cache off: no countdown, toast or table
   idleGen: number // the between-turns clock running now; a newer one retires it
+  records?: Records // round 20c: this folder's bests (records:<cwd>), for the panel
   rec: SessionRec // round 19-20: this session's turns as step letters, names, marks, files (session.ts)
   genomeId: string // the session those belong to; /resume or /clear swaps it
 }
@@ -286,6 +287,7 @@ export const register: Register = (on, options) => {
     s.isMobile = (await deviceClass($)) === 'mobile'
     const past = await $.store.get(storeKey(s.cwd))
     s.history = clean(past)
+    s.records = (await $.store.get(`records:${s.cwd}`)) as Records | undefined
     const saved = s.prev ? null : await read($, keptTurn)
     if (saved) s.prev = loadTurn(saved)
     s.isCacheOff = (await $.store.get('isCacheOff')) === true
@@ -449,7 +451,11 @@ export const register: Register = (on, options) => {
       const letters = genome.code(t)
       await loadGenome($, s)
       const lm = landmarks(t, s.rec, s.ctx)
-      const moments = [...celebrations(t), ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
+      const keyR = `records:${s.cwd}`
+      const rec20 = records(t, (await $.store.get(keyR).catch(() => undefined)) as Records | undefined, testHead, now)
+      if (s.cwd) await $.store.set(keyR, rec20.records)
+      s.records = rec20.records
+      const moments = [...celebrations(t), ...rec20.moments, ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
       const name = nameOf(letters, countedRuns(t), filesRead(t))
       await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests })
       const memo = recall(s.history, t)
@@ -574,6 +580,8 @@ export const register: Register = (on, options) => {
     // Round 19: the whole genome, nothing folded (cap 40 rows, newest kept).
     const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
     if (dna.length) sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: dna })
+    const best = recordRows(s.records)
+    if (best.length) sections.push({ title: 'records · this folder', rows: best })
     // Round 20d: each turn by name, newest first (10 at most: the pane is 32 rows).
     const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse()
     if (named.length) {

@@ -139,3 +139,70 @@ export function landmarkMoment(marks: readonly Omit<Mark, 'turn'>[]): Moment | u
   const m = marks[marks.length - 1]
   return m && m.kind !== 'commit' ? { kind: 'landmark', text: m.text } : undefined
 }
+
+// Round 20c: this folder's bests, kept in the store as `records:<cwd>` (counted from the day this shipped).
+// A record speaks only when it actually falls, by the demo's thresholds: red → green needs 3 earlier
+// fixes and strictly fewer steps; a streak speaks at 5, 10, 25, 50 and when one of 10+ ends; a suite's
+// fastest run needs 5 earlier runs of that suite and a strictly lower time.
+export type Records = { fix?: { best: number; at: number; n: number }; streak?: { cur: number; best: number; at: number }; fastest?: Record<string, { ms: number; at: number; n: number }> }
+const STREAK_AT = [5, 10, 25, 50]
+const FIX_AFTER = 3
+const FAST_AFTER = 5
+const MAX_SUITES = 12
+const secs = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 0)} s`
+const short = (at: number) => new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+export function records(t: Turn, was: Records | undefined, suiteOf: (cmd: string) => string | undefined, now: number): { records: Records; moments: Moment[] } {
+  const r: Records = { ...was, fastest: { ...was?.fastest } }
+  const out: Moment[] = []
+  const steps = t.done.filter(x => x.kind !== 'todo')
+  const runs = t.runs.filter(x => !x.running && !x.isStopped && (x.total > 0 || x.ok !== undefined))
+  const isRed = (x: Run) => (x.total ? x.fail > 0 : x.ok === false)
+  // Fewest steps from the turn's first failing run to the run that passed after it.
+  const red = runs.find(isRed)
+  const green = red ? runs.find(x => x.startedAt > red.startedAt && !isRed(x)) : undefined
+  if (red && green) {
+    const from = steps.findIndex(x => x.startedAt === red.startedAt)
+    const to = steps.findIndex(x => x.startedAt === green.startedAt)
+    const n = to - from
+    if (from >= 0 && n > 0) {
+      const f = r.fix
+      if (f && f.n >= FIX_AFTER && n < f.best) out.push({ kind: 'record', text: `red → green in ${n} steps`, fact: `best here, was ${f.best} on ${short(f.at)}` })
+      r.fix = !f ? { best: n, at: now, n: 1 } : n < f.best ? { best: n, at: now, n: f.n + 1 } : { ...f, n: f.n + 1 }
+    }
+  }
+  // The fastest run of each suite.
+  for (const x of runs) {
+    const c = t.cmds.find(y => y.startedAt === x.startedAt && y.endedAt !== undefined)
+    const suite = c ? suiteOf(c.cmd) : undefined
+    if (!c || c.endedAt === undefined || !suite || isRed(x)) continue
+    const ms = c.endedAt - c.startedAt
+    const p = r.fastest?.[suite]
+    if (p && p.n >= FAST_AFTER && ms < p.ms) out.push({ kind: 'record', text: `fastest ${suite}`, fact: `${secs(ms)}, was ${secs(p.ms)}` })
+    r.fastest = Object.fromEntries(Object.entries({ ...r.fastest, [suite]: !p ? { ms, at: now, n: 1 } : ms < p.ms ? { ms, at: now, n: p.n + 1 } : { ...p, n: p.n + 1 } }).sort((a, b) => b[1].at - a[1].at).slice(0, MAX_SUITES))
+  }
+  // Passing runs in a row, across turns and sessions.
+  let s = r.streak ?? { cur: 0, best: 0, at: now }
+  for (const x of runs) {
+    if (isRed(x)) {
+      if (s.cur >= 10) out.push({ kind: 'record', text: `streak of ${s.cur} ends`, fact: `best ${s.best}` })
+      s = { ...s, cur: 0 }
+      continue
+    }
+    const cur = s.cur + 1
+    s = { cur, best: Math.max(s.best, cur), at: cur > s.best ? now : s.at }
+    if (STREAK_AT.includes(cur)) out.push({ kind: 'record', text: `green streak ${cur}`, fact: cur >= s.best ? 'best here' : `best ${s.best}` })
+  }
+  r.streak = s
+  return { records: r, moments: out.slice(0, 1) }
+}
+
+// The /xray panel's records section (round 20c, c3): what stands, newest first.
+export function recordRows(r: Records | undefined): Line[] {
+  if (!r) return []
+  const rows: Line[] = []
+  if (r.fix) rows.push([{ t: 'red → green   ', dim: true }, { t: `fewest ${r.fix.best} steps` }, { t: ` · ${short(r.fix.at)} · ${r.fix.n} fixes`, dim: true }])
+  if (r.streak && r.streak.best) rows.push([{ t: 'green streak  ', dim: true }, { t: `${r.streak.cur} now` }, { t: ` · best ${r.streak.best}`, dim: true }])
+  for (const [suite, x] of Object.entries(r.fastest ?? {}).slice(0, 3)) rows.push([{ t: 'fastest       ', dim: true }, { t: `${suite} ${secs(x.ms)}` }, { t: ` · ${short(x.at)} · ${x.n} runs`, dim: true }])
+  return rows
+}
