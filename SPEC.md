@@ -592,3 +592,7 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
 - **Picks (2026-10-03):** "1a; 2a": genome grows down to 3 rows, then the oldest turns fold into
   `+N turns`; saved per session on this machine (survives /resume). Defaults: shown working + idle,
   step colours keep the filmstrip legend (CTX numeral white), mockup before build.
+- **Round 19c verdict (2026-10-03):** "i actually ONLY like the genome idea right now; the rest is not
+  as nice as what we have already." Flow screen, big numerals, line-art celebrations dropped; current
+  cards (round 16-18) stay as they are. Scope = the session genome alone, picks 1a (3 rows, then fold
+  oldest whole turns) + 2a (saved per session, survives /resume) still hold.
