@@ -187,14 +187,17 @@ export function ideal(c: Card, tray: Line[] = []): number {
 // Round 17: with to-do cells beside it (`cellsAt` their card's index, `cap` the most they use) the prose
 // card keeps room for three rows instead, and the spare width goes to the cells first.
 export const cellsCap = (c: Card) => (c.tiles?.length ? c.tiles.length * (CELL_MAX + 1) - 1 + 4 : 0)
-export function allot(ideals: number[], cols: number, cellsAt?: number, cap = Infinity): number[] {
+// The width that shows every cell at its narrowest: the prose card gives way down to its floor for it.
+export const cellsNeed = (c: Card) => (c.tiles?.length ? c.tiles.length * (CELL_MIN + 1) - 1 + 4 : 0)
+export function allot(ideals: number[], cols: number, cellsAt?: number, cap = Infinity, need = 0): number[] {
   const avail = cols - GUTTER * (ideals.length - 1)
   const want = ideals.map(w => Math.max(MIN_W, w))
   if (cellsAt) {
     // Cells beside the prose: the other cards keep what they ask, the prose card three rows' worth,
     // the cells everything else up to their cap; whatever the cap leaves goes back to the prose.
-    const keepNow = Math.max(NOW_TODO, Math.min(Math.ceil(((ideals[0] ?? 0) - 4) / 3) + 12, Math.floor(avail * PROSE))) // + borders, indent, word breaks
     const others = want.reduce((a, w, i) => (i === 0 || i === cellsAt ? a : a + w), 0)
+    const roomy = Math.max(NOW_TODO, Math.min(Math.ceil(((ideals[0] ?? 0) - 4) / 3) + 12, Math.floor(avail * PROSE))) // + borders, indent, word breaks
+    const keepNow = Math.max(NOW_TODO, Math.min(roomy, avail - others - need))
     const cellsW = Math.min(Math.max(cap, want[cellsAt] ?? 0), avail - keepNow - others)
     if (cellsW >= MIN_W) {
       const out = want.map((w, i) => (i === cellsAt ? cellsW : w))
@@ -314,7 +317,7 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
     return { ...c, walk, fade }
   })
   const at = cards.findIndex(c => !!c.tiles?.length)
-  const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined)
+  const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined, at > 0 ? cellsNeed(cards[at] as Card) : 0)
   const top = band(head.lines[0] ?? [], t.running.size > 0)
   const bodies = cards.map((c, i) => body(c, (ws[i] ?? MIN_W) - 4, rows))
   const join = (f: (c: Card, i: number) => Line): Line => cards.flatMap((c, i) => (i ? [{ t: ' '.repeat(GUTTER) }, ...f(c, i)] : f(c, i)))

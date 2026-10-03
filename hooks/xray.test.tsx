@@ -869,6 +869,7 @@ test('round 16: three cards from 140 columns with a gap between them; below, the
   const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
   expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
   expect(mid[0]).toContain('╭─ to-do · 3 of 5') // the to-dos keep their card
+  expect(mid[1]).toMatch(/■ 1 .*◆ 4 .*□ 5/) // all five cells: the now card gives way to its floor for them
   expect(mid.some(r => /│ tests · run 2  .*pass/.test(r))).toBe(true) // the task card's first row is the now card's fact
 })
 
