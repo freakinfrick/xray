@@ -508,3 +508,35 @@ What is known (agent, 2026-10-03):
   The turn-start moment (green before any step) is pinned by the test "a carried list at 4 of 5
   opens the next turn green before any step runs" (phone compact card, tone ok); the phone shot
   covers the rendering. Phone check closed.
+
+## Round 18 — prompt-cache countdown (2026-10-03, spec, not built)
+
+User asked to fold in the idea of `prompt-cache-control` (claude-code-templates
+`--mod observability/prompt-cache-control`: a cache band + toasts so the cache stays warm).
+Upstream reference copy: README in session scratch only; source at
+github.com/davila7/claude-code-templates `cli-tool/components/mods/observability/prompt-cache-control`.
+
+Facts (agent, 2026-10-03):
+- This box runs mostly on the **1 h** cache, not 5 min: last 7 days of transcripts carry 62k
+  `ephemeral_1h` writes vs 7k `ephemeral_5m` (5m mostly subagents/forks; overage also drops to 5m).
+  So the lifetime must be read per request, never assumed or taken from env at session start.
+- Probe (scratch mod, CC 2.1.287, haiku): `turn.step` `result.usage` = `input_tokens, output_tokens,
+  cache_read_input_tokens, cache_creation_input_tokens, model`. **No 5m/1h split.** The session
+  transcript `~/.claude/projects/<cwd with / → ->/<$.session.id()>.jsonl` has it
+  (`usage.cache_creation.ephemeral_{5m,1h}_input_tokens`). Read it after the step, tail only
+  (sessions run to tens of MB); when no write happened, the TTL of the last write carries.
+- Lifetime starts at the request's `startedAt` (docs: counted from request start), refreshed by
+  every main-loop read or write. Subagents (`e.agentId`) have their own prefix: ignored.
+
+Picks (AskUserQuestion, 2026-10-03):
+1. **Placement: between turns + panel.** Countdown in the AbovePrompt idle strip (desktop and the
+   narrow phone card), e.g. `cache 1h · 47:12 left` → yellow under the warning → red
+   `cache lapsed · next message rewrites 151k`. `/xray` panel: per-turn table read / wrote / new,
+   and a miss with its cause (lapsed, model changed, prefix changed). No tray gauge while working.
+2. **Warnings: one in-terminal toast** (`$.ui.toast`) per cache entry, at 5 min left (1 h) or 60 s
+   left (5 m), only when the prompt is ≥ 20k tokens. Never anything off the box (rule: no phone alerts).
+3. **Keep-warm: never.** xray sends nothing on its own.
+
+Standing rules applied: no `/compact` advice ever (user never compacts); lapsed state states the cost only.
+Open for build: exact strip wording + phone fit → mockup via `tools/mockup.py` (190/120/44 cols),
+then go → build → `mods/check.sh xray` → live tmux check → commit.
