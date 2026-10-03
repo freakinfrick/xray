@@ -390,3 +390,6 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Decided defaults listed on the page (filmstrip kinds, mood rules, voice contract, 50-event memory,
   motion triggers, 500 ms burst revising round 6, glyph-collision fix, "Step k/N" to-dos).
 - Build order on go: layout engine → tokens → filmstrip → character → motion + transitions.
+- **Pick (2026-10-03, from the page):** "xray r16: go; B" — build all five with the layout rules,
+  height B (6 rows when the terminal has ≥ 40 rows, else 5). Order: layout engine → tokens →
+  filmstrip → character → motion + transitions.
