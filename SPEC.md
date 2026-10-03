@@ -376,3 +376,17 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - **Picks (2026-10-03, sent from the page):** "everything; need to maximize whitespace, text
   wrapping and smart use of horizontal vs vertical space and subcolumns / rows". All five
   directions kept; the layout requirement is new and gets its own mockup (round 16) before any code.
+
+## Round 16 — all five, laid out (2026-10-03, offered)
+
+- Mockup: `~/claude/.explainers/2026-10-03-xray-round16.html`; drawn by a measuring script
+  (`.explainers/xray-r16-src/gen16.py`, exact widths), live-check content, 190 / 120 / 44 cols.
+- Layout rules proposed: (1) widths follow content, empty cards fold; (2) 1-col gutter + inner
+  padding, a spare row becomes a blank between groups; (3) prose wraps at words, chips flow to the
+  next row, `…` only on narration when rows run out; (4) subcolumns for glyph groups, full-width
+  rows for prose; (5) 190 → 3 cards, 120 → 2 (to-dos fold into the task card), < 60 → 1 card with
+  steps | to-dos on one row; (6) one tray bottom edge kept (round 13), each card's telemetry under it.
+- Open question: height B (6 rows when ≥ 40 rows, else 5; recommended) vs A (always 5).
+- Decided defaults listed on the page (filmstrip kinds, mood rules, voice contract, 50-event memory,
+  motion triggers, 500 ms burst revising round 6, glyph-collision fix, "Step k/N" to-dos).
+- Build order on go: layout engine → tokens → filmstrip → character → motion + transitions.
