@@ -589,3 +589,6 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   seperators between sesison replys". So: 1a Flow screen + round-17 to-do cells kept + a session-long
   filmstrip ("genome") row, `│` between turns. Today the filmstrip is per turn (`cards.ts:128`) and only
   the last turn survives (`xray.prev`); the genome needs a per-session step log. Open: overflow, persistence.
+- **Picks (2026-10-03):** "1a; 2a": genome grows down to 3 rows, then the oldest turns fold into
+  `+N turns`; saved per session on this machine (survives /resume). Defaults: shown working + idle,
+  step colours keep the filmstrip legend (CTX numeral white), mockup before build.
