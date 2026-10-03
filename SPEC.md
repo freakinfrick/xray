@@ -373,3 +373,6 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   measured mood (exploring / focused / stuck / closing / thinking), narration and `last:` share the
   body, 5 glyph grammar as tokens (today ● = done and high effort, ◉ = in progress and xhigh).
 - Suggested build order if several are picked: 5 → 1 → 4 → 2 → 3.
+- **Picks (2026-10-03, sent from the page):** "everything; need to maximize whitespace, text
+  wrapping and smart use of horizontal vs vertical space and subcolumns / rows". All five
+  directions kept; the layout requirement is new and gets its own mockup (round 16) before any code.
