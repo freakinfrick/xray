@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, deviceGlyph, lastTurn, type Line, type Mode } from './cards'
-import { TALL, spinnerRows } from './layout'
+import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
@@ -15,6 +15,8 @@ const keptTurn = atom({ plugin: 'xray', key: 'prev' } as const, null) // the las
 const COMMAND = 'xray'
 const PANE = 'xray'
 const NARRATE_GAP_MS = 60_000
+const BURST_MS = 500 // one burst per event: a step landing, a to-do done, a tone changing
+const BURST_FRAME_MS = 160
 const NARRATION_TTL_MS = 30_000
 const NARROW = 60 // columns: below this the cards give way to the compact rows (round 8)
 const SHORT = 30 // rows: below this (phone keyboard up) the compact rows fold to the ticker
@@ -45,6 +47,9 @@ type Live = {
   ledger: Entry[] // the taste ledger, from the store
   cwd: string
   history: Event[] // this project's finished test runs, from the store (round 16 memory)
+  isBursting: boolean // round 16 transitions: a short ~6 fps redraw after an event is under way
+  isMobile: boolean // a phone keeps the 1 Hz tick: no bursts over SSH
+  memo: Memo // each card's last tone, for the one-time fade
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -129,6 +134,22 @@ async function narrate($: EngineInterface, s: Live) {
   } else if (s.narratedAt === now) s.narratedAt = before // no sentence came back: the next trigger may try again
 }
 
+// One-time transitions (round 16, direction 3): a few quick redraws right after an event so a landing
+// cell or a flash plays out, then back to the 1 Hz tick. Its own loop, not the tick's: the tick may be
+// mid-sleep. A phone keeps 1 Hz.
+async function burst($: EngineInterface, s: Live) {
+  if (s.isMobile || s.isBursting || isOff(s)) return
+  s.isBursting = true
+  try {
+    for (let i = 0; i < Math.ceil(BURST_MS / BURST_FRAME_MS); i++) {
+      await $.clock.sleep(BURST_FRAME_MS)
+      $.ui.invalidate('ui.render')
+    }
+  } finally {
+    s.isBursting = false
+  }
+}
+
 // The device mod (~/claude/mods/device) is optional, so it is not a declared dependency: one
 // would stop xray loading wherever it is absent. Its noun is typed here and, when absent, the call
 // throws and the strip draws without a glyph.
@@ -143,13 +164,14 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', history: [] }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', history: [], isBursting: false, isMobile: false, memo: { tones: {} } }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
     s.cwd = e.cwd ?? ''
+    s.isMobile = (await deviceClass($)) === 'mobile'
     const past = await $.store.get(storeKey(s.cwd))
     s.history = Array.isArray(past) ? (past as Event[]) : []
     const saved = s.prev ? null : await read($, keptTurn)
@@ -252,6 +274,7 @@ export const register: Register = (on, options) => {
       const ok = ran !== undefined && ran.deny === undefined && !ran.isError
       const failedBefore = t.failures
       finishStep(t, id, e.tool, input, ok, ran?.text ?? '', ran?.result, await $.clock.now())
+      void burst($, s)
       if (failedBefore === 0 && t.failures > 0) void narrate($, s)
       $.ui.invalidate('ui.render')
     }
@@ -367,7 +390,7 @@ export const register: Register = (on, options) => {
     }
     // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
     const cols = Math.max(NARROW, (e.viewport?.columns ?? 100) - 2)
-    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS)
+    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo)
 
     return (
       <Box flexDirection="column">

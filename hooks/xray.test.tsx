@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -226,8 +226,8 @@ test('the now card names the running step, and time only past 5 seconds', async 
   const t = newTurn('x', 0)
   expect(text(nowCard(t, 'thinking', null, 1000).lines[0])).toBe('◇ thinking')
   startStep(t, 'a', 'Bash', { command: 'npm test' }, 1000)
-  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe(' ◆  running the tests ▂')
-  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s ▄')
+  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe(' ◆  running the tests ▄')
+  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s █')
   expect(nowCard(t, 'tool-use', null, 9000).lines[0]?.[0]?.inv).toBe(true)
   expect(nowCard(t, 'tool-use', null, 9000).spare).toBeUndefined() // the steps live in the progress card (round 13)
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[1])).toBe('» Running the suite.')
@@ -772,7 +772,7 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
 test('step text is kept to 72 chars and the now card shows it whole, last: included', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
-  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▄')
+  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device █')
   finishStep(t, 'a', 'Bash', { command: 'make' }, true, '', undefined, 500)
   expect(text(nowCard(t, undefined, null, 1000).lines[1])).toBe('last: rebuild the whole integration bundle for every device')
 })
@@ -835,7 +835,7 @@ test('round 16: three cards from 140 columns with a gap between them; below, the
   expect(wide[0]?.match(/╮ ╭/g)?.length).toBe(2) // three cards, one blank column between each
   expect(wide[0]).toContain('╭─ to-do · 3 of 5')
   expect(wide.some(r => r.includes('▸ fixing mul in sum.js'))).toBe(true)
-  expect(wide.at(-1)).toMatch(/^╰─ turn 9s .*┴─┴─ ctx .*┴─┴─*╯$/) // the tray: each card's figures under it
+  expect(wide.at(-1)).toMatch(/^╰─ turn 9s .*┴─┴─ ctx .*┴─┴[─╌]*╯$/) // the tray: each card's figures under it
   const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
   expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
   expect(mid.join('\n').replace(/\u00a0/g, ' ')).toContain('fix mul') // the chips came along into the task card
@@ -957,4 +957,50 @@ test('a plan written as text ("Step 3/5: fix mul") fills the to-dos; a tool list
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'real one', status: 'pending' }] }, 1)
   queueFromResponse(t, [{ type: 'text', text: 'Step 1/2: nope' }])
   expect(t.todos.map(x => x.text)).toEqual(['real one'])
+})
+
+test('motion budget: calm cards hold still; only a failing card walks its border, one frame to the next', async () => {
+  const calm = newTurn('read', 0)
+  startStep(calm, 'r', 'Read', { file_path: 'a.ts' }, 0)
+  finishStep(calm, 'r', 'Read', { file_path: 'a.ts' }, true, '', undefined, 10)
+  const still = (n: number) => spinnerRows(calm, 'tool-use', null, 10, n, 188, 3).map(l => text(l))
+  expect(still(5_000)[0]).toBe(still(6_000)[0])
+  expect(still(5_000).at(-1)?.replace(/\d+s/, '')).toBe(still(6_000).at(-1)?.replace(/\d+s/, '')) // only the clock's figure changes
+  expect(still(5_000).join('')).not.toContain('╌')
+  const f = midFix() // the tests card is failing
+  const a = spinnerRows(f, 'tool-use', null, 10, 9_000, 188, 3).map(l => text(l))
+  const b = spinnerRows(f, 'tool-use', null, 10, 10_000, 188, 3).map(l => text(l))
+  expect(a.at(-1)).not.toBe(b.at(-1))
+  const nowPart = (r?: string) => r?.slice(0, 40).replace(/turn \d+s ─?/, '')
+  expect(nowPart(a.at(-1))).not.toContain('╌') // the now card does not walk
+  expect(nowPart(b.at(-1))).not.toContain('╌')
+})
+
+test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flashes once, a tone change fades through dim', async () => {
+  const t = midFix()
+  const lastCell = (now: number) => filmstrip(t, 24, now, false).at(-1)?.t
+  expect(lastCell(4_510)).toBe('▁')
+  expect(lastCell(4_850)).toBe('▅')
+  expect(lastCell(5_200)).toBe('█')
+  startStep(t, 'u', 'TodoWrite', { todos: [{ content: 'run tests', status: 'completed' }, { content: 'fix sum', status: 'completed' }, { content: 're-run tests', status: 'completed' }, { content: 'fix mul', status: 'completed' }, { content: 're-run tests to verify', status: 'in_progress' }] }, 6_000)
+  expect(t.todos[3]?.doneAt).toBe(6_000)
+  expect(t.todos[0]?.doneAt).toBeUndefined() // done before, never flashes again
+  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]?.color).toBe('whiteBright')
+  expect(todoCard(t, 10, 7_000).chips?.[3]?.[0]?.color).toBe(t.todos[3]?.color)
+  const memo = { tones: {} }
+  const borderOf = (rows: ReturnType<typeof spinnerRows>, i: number) => rows[0]?.filter(s => s.t.includes('╭'))[i]
+  spinnerRows(t, undefined, null, 10, 6_000, 188, 3, memo)
+  const tests = newTurn('x', 0) // a fresh turn's task card goes quiet → its tone changes
+  Object.assign(t, { runs: tests.runs, template: 'default' })
+  const fading = spinnerRows(t, undefined, null, 10, 6_100, 188, 3, memo)
+  const settled = spinnerRows(t, undefined, null, 10, 7_000, 188, 3, memo)
+  expect(borderOf(fading, 2)?.dim).toBe(true)
+  expect(borderOf(settled, 2)?.color).toBe(TONE_COLOR[taskCard(t, 7_000).tone])
+})
+
+test('context past 85% walks its gauge at the tick; below, it holds', async () => {
+  const t = newTurn('x', 0)
+  const ctx = (pct: number, now: number) => text(teleParts(t, pct, now).ctx)
+  expect(ctx(90, 1_000)).not.toBe(ctx(90, 2_000))
+  expect(ctx(60, 1_000)).toBe(ctx(60, 2_000))
 })

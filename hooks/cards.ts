@@ -56,7 +56,11 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   if (m) tone = m.tone
   const head: Line = m ? [{ t: `${m.glyph} ${m.word} · ` }, { t: what }] : live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
-  if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
+  // Round 16 motion budget: the only thing that moves when all is well is the live step's own cell.
+  if (first) {
+    const k = KIND[first.kind ?? 'other']
+    head.push({ t: ' ' + (f % 2 ? k.t : '▄'), color: k.color ?? 'cyan' })
+  }
   // Narration shown: the last step still gets its own row on the wide cards (round 16; the live check
   // saw a minute-old narration hide every step of a 20 s turn).
   return { title: 'now', tone, lines: [head, sub], foot: narration ? lastLine : undefined }
@@ -115,6 +119,8 @@ const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
   todo: { t: '▌', dim: true },
   other: { t: '▌', dim: true },
 }
+const LAND_MS = 480
+const LAND = '▁▃▅'
 export function filmstrip(t: Turn, n: number, now: number, track = true): Line {
   const steps = [...t.done, ...[...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)].filter(x => x.kind !== 'todo')
   const fold = !track && steps.length > n ? steps.length - (n - 3) : 0
@@ -122,7 +128,10 @@ export function filmstrip(t: Turn, n: number, now: number, track = true): Line {
   const cells: Line = shown.map(x => {
     const k = KIND[x.kind ?? 'other']
     if (x.endedAt === undefined) return { t: frame(now) % 2 ? k.t : '▄', color: k.color ?? 'cyan' }
-    return x.ok === false ? { t: '█', color: 'red' } : { ...k }
+    const done = x.ok === false ? { t: '█', color: 'red' } : { ...k }
+    // A step that just finished lands once, ▁▃▅ then its cell (round 16, direction 3).
+    const el = now - x.endedAt
+    return el >= 0 && el < LAND_MS ? { ...done, t: LAND[Math.floor(el / (LAND_MS / LAND.length))] ?? done.t } : done
   })
   const lead: Line = fold ? [{ t: `+${fold} `, dim: true }] : []
   return track && cells.length < n ? [...cells, { t: '░'.repeat(n - cells.length), dim: true }] : [...lead, ...cells]
@@ -139,8 +148,11 @@ const NBSP = '\u00a0' // keeps a chip whole when its row wraps
 
 // One patch per to-do: a grey patch while pending, ◆ and its name in its own color in progress, and a
 // solid patch in that color when done.
-function chip(x: Todo): Line {
+const FLASH_MS = 320
+function chip(x: Todo, now = Infinity): Line {
   const name = clip(x.text, 48).replace(/ /g, NBSP)
+  // Just done: one bright flash before it settles into its hue (round 16, direction 3).
+  if (x.status === 'completed' && x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < FLASH_MS) return [{ t: `${NBSP}${name}${NBSP}`, color: 'whiteBright', inv: true, bold: true }]
   if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
   if (x.status === 'in_progress') return [{ t: `${MARK.live} `, color: x.color }, { t: name, color: x.color, bold: true }]
   return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
@@ -148,7 +160,7 @@ function chip(x: Todo): Line {
 
 // The to-do list as chips; what else is on the plate (queued calls, agents out, a filling context)
 // rides in the top border.
-export function todoCard(t: Turn, ctxPercent: number | null): Card {
+export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Card {
   const done = t.todos.filter(x => x.status === 'completed').length
   const q = t.queued.size
   const bg = runningAgents(t).length
@@ -161,7 +173,7 @@ export function todoCard(t: Turn, ctxPercent: number | null): Card {
     tone: warn ? 'warn' : t.todos.length && done === t.todos.length ? 'ok' : 'quiet',
     note: note.length ? note : undefined,
     lines: t.todos.length ? [] : [[{ t: 'no to-do list yet', dim: true }]],
-    chips: t.todos.length ? t.todos.map(chip) : undefined,
+    chips: t.todos.length ? t.todos.map(x => chip(x, now)) : undefined,
     foot: cur ? [{ t: '▸ ', dim: true }, { t: cur.active }] : undefined,
   }
 }
@@ -356,7 +368,9 @@ export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line
 // Each figure on its own, so the tray can set each under the card it belongs to (round 16).
 export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } {
   const parts: { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } = { turn: [{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }] }
-  if (ctxPercent !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  // Past 85% the gauge walks (its last cell blinks at the tick): the one figure that needs you moves.
+  const shown = ctxPercent !== null && ctxPercent >= 85 && frame(now) % 2 ? Math.max(0, ctxPercent - 100 / GAUGE) : ctxPercent
+  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)

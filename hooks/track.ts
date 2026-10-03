@@ -3,7 +3,8 @@
 import { detect, lastLine, lastMeasure, lastPair, type Recipe, type Signal } from './custom'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
 
-export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string }
+// doneAt: when it turned completed, for the one-time flash (round 16, direction 3).
+export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string; doneAt?: number }
 // One hue per to-do, kept for its life. Red is left out: on these cards it means failing.
 export const TODO_COLORS = ['green', 'cyan', 'yellow', 'magenta', 'blue', 'greenBright', 'cyanBright', 'yellowBright', 'magentaBright', 'blueBright']
 
@@ -193,14 +194,22 @@ export function startStep(t: Turn, id: string, tool: string, input: Record<strin
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
     // A rewrite of the list keeps each surviving to-do's hue, matched by its text.
     const hue = new Map(t.todos.map(x => [x.text, x.color]))
-    t.todos = (input.todos as { content: string; activeForm?: string; status: Todo['status'] }[]).map((x, i) => ({ id: `w${i}`, text: x.content, active: x.activeForm ?? x.content, status: x.status, color: hue.get(x.content) }))
+    const was = new Map(t.todos.map(x => [x.text, x]))
+    t.todos = (input.todos as { content: string; activeForm?: string; status: Todo['status'] }[]).map((x, i) => {
+      const prev = was.get(x.content)
+      const doneAt = x.status !== 'completed' ? undefined : prev?.status === 'completed' ? prev.doneAt : prev ? now : undefined
+      return { id: `w${i}`, text: x.content, active: x.activeForm ?? x.content, status: x.status, color: hue.get(x.content), doneAt }
+    })
     colorTodos(t)
   }
   if (tool === 'TaskUpdate') {
     const todo = t.todos.find(x => x.id === String(input.taskId))
     if (todo) {
       if (input.status === 'deleted') t.todos = t.todos.filter(x => x !== todo)
-      else if (input.status) todo.status = input.status as Todo['status']
+      else if (input.status) {
+        if (input.status === 'completed' && todo.status !== 'completed') todo.doneAt = now
+        todo.status = input.status as Todo['status']
+      }
       if (input.subject) todo.text = String(input.subject)
       if (input.activeForm) todo.active = String(input.activeForm)
     }
