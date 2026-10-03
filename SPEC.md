@@ -489,3 +489,4 @@ What is known (agent, 2026-10-03):
   re-read `workspace.current_dir`; memory stays keyed to the start folder. Worker pane (mods off) checked
   live: the old status line draws in full. Open: grey pending patch contrast by eye. Under an ANSI theme
   it is palette color 8 (#6a7058 forest, #827664 forest-light) under near-black text, about 3:1.
+- Grey pending patch seen by the user on the cells page (both palettes, real spinnerRows output): "looks great" (2026-10-03). Kept #a39e8e.
