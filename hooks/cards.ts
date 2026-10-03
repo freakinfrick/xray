@@ -152,6 +152,7 @@ export function stepCounts(t: Turn): Line {
 // grey patch, done ones struck through in their hue. Patches are an explicit background with black ink,
 // never inverse (Termius drew inverse + color wrong). Just done, the name pops bold before the strike.
 const FLASH_MS = 320
+export const PENDING_BG = '#a39e8e'
 export function tileOf(x: Todo, n: number, now = Infinity): Tile {
   const base = { n, text: x.text, status: x.status }
   if (x.status === 'completed') {
@@ -159,7 +160,8 @@ export function tileOf(x: Todo, n: number, now = Infinity): Tile {
     return { ...base, mark: MARK.done, look: flash ? { color: x.color, bold: true } : { color: x.color, strike: true }, fill: false }
   }
   if (x.status === 'in_progress') return { ...base, mark: MARK.live, look: { color: 'black', bg: x.color, bold: true }, fill: true }
-  return { ...base, mark: MARK.pending, look: { color: 'black', bg: 'gray' }, fill: true }
+  // A fixed light grey, not the palette's bright black: that was #6a7058 on forest, too dark under black ink.
+  return { ...base, mark: MARK.pending, look: { color: 'black', bg: PENDING_BG }, fill: true }
 }
 
 // The to-do list as cells; what else is on the plate (queued calls, agents out, a filling context)

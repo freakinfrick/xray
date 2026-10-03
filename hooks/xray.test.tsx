@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
 import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -190,7 +190,7 @@ test('the to-do card: one cell per to-do, live a patch in its hue, pending grey,
   expect((card.tiles ?? []).map(x => `${x.n} ${x.mark} ${x.text}`)).toEqual(['1 ■ read spec', '2 ◆ draw cards', '3 □ commit'])
   expect(card.tiles?.[0]).toMatchObject({ fill: false, look: { strike: true } }) // done: struck through in its hue
   expect(card.tiles?.[1]).toMatchObject({ fill: true, look: { color: 'black', bg: t.todos[1]?.color } }) // live: a solid patch, never inverse
-  expect(card.tiles?.[2]).toMatchObject({ fill: true, look: { color: 'black', bg: 'gray' } }) // pending: a grey patch
+  expect(card.tiles?.[2]).toMatchObject({ fill: true, look: { color: 'black', bg: PENDING_BG } }) // pending: a light grey patch, the same on every palette
   expect(text(card.foot)).toBe('▸ ' + t.todos[1]?.active) // the one in progress, as the card's fact row
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
   expect(t.todos.some(x => x.color === 'red')).toBe(false)
