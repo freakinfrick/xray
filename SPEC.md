@@ -558,3 +558,21 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   AFTER `turn.complete`, so the read waits 1 s and retries up to 4×; then ` ⏱60m` shows on turn 1.
   `/xray cache off|on` and the panel table (`cache · 1h · 60m left`, row #1 18k read 61%) seen live.
 - Unseen live: the toast itself (needs ~55 idle min) and the desktop words form (unit-tested only).
+
+## Round 19 — character: a live factory, OP-1 ethos (2026-10-03, offered)
+
+- User, verbatim: "honestly x ray feels boring and light - it should have more character and whimsy".
+  Third whimsy ask (round 6, round 15 "character development", now).
+- Diagnosis: the earlier rounds' own rules strip character: ledger SEED "Structural and informational,
+  never cartoony or decorative" (`hooks/ledger.ts`), the "dry flight engineer" narrator held to facts
+  (`register.tsx` NARRATOR, `checkVoice`, blank `-` for 60 s), round 16 "calm = still" (motion only
+  on trouble), mood as a tiny glyph + label.
+- Interview picks: **celebrations + flourishes**, plus, verbatim: "it should feel architectural, like
+  a live factory doing things, but should be based on real data and telemetry and provide leveraged
+  information useful to the user while having quirky character. Think the teenage engineering OP-1
+  digital interface design ethos, ect". Narrator: not a concern now (user hasn't used it much).
+  Card rule: **soften** SEED to "information first, decoration welcome around it".
+- Still binding: round 1 (never less information), alignment, whitespace, wrap-not-cut, subcolumns,
+  phone fit (< 60 cols one card), Termius colour rule (explicit bg + black fg), circles = effort only.
+- Next: mockup page (`tools/mockup19.py`), wide / 120 / phone, both themes, with motion frames. No
+  code before go.
