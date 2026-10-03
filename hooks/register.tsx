@@ -244,6 +244,7 @@ export const register: Register = (on, options) => {
   on('turn.step', async function* ($, e, next) {
     const t = s.turn
     if (!t || isOff(s) || e.agentId) return yield* next(e)
+    t.effort = e.effort
     const startedAt = await $.clock.now()
     let firstAt = 0
     const stream = next(e)

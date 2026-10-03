@@ -316,3 +316,14 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   text render at 44 cols eyeballed. Not yet seen on the phone.
 - Capture 7: inverse + magenta drew as black on green in Termius. The band is now an explicit
   `backgroundColor` (tone color; quiet = gray) with `color: black`; test asserts it.
+- Capture 8: the background-color band renders right on the phone.
+
+## Round 12 — effort in shorthand (2026-10-03)
+
+- User, verbatim: "Can we also add the "effort" in shorthand somewhere to both mobile and desktop xray?"
+- Source: `turn.step`'s `e.effort` (main agent only), kept on the turn as the last request's.
+- Shorthand after Claude Code's own `◐ medium`: `○ low` `◐ med` `● high` `◉ xhigh` `◉ max`; a
+  numeric budget reads `◐ <n>`; no effort (model without one) draws nothing. Dim.
+- Where (agent call, easy to move): desktop = last part of the telemetry row; phone = bottom edge
+  after t/s (drops before the turn clock and cache when short); keyboard up = end of the folded row.
+- Checked: validate, tsc, 56 tests. Not yet seen live.

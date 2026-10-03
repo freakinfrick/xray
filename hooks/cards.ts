@@ -257,6 +257,11 @@ function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
 
 const GAUGE = 8
 
+// Effort in shorthand, the glyph after Claude Code's own `◐ medium`: ○ low · ◐ med · ● high · ◉ xhigh/max.
+// A numeric budget reads as itself; no effort sent (a model without one) draws nothing.
+const EFFORT: Record<string, string> = { low: '○ low', medium: '◐ med', high: '● high', xhigh: '◉ xhigh', max: '◉ max' }
+export const effortTag = (e: string | number | undefined): string | undefined => (e === undefined ? undefined : typeof e === 'number' ? `◐ ${e}` : (EFFORT[e] ?? e))
+
 // The one telemetry line under the cards. Every figure is measured; a figure not known yet is left out.
 export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line {
   const parts: Line[] = []
@@ -270,6 +275,8 @@ export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line
   const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
   if (last && sent) parts.push([{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, 'cyan'), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }])
   parts.push([{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }])
+  const eff = effortTag(t.effort)
+  if (eff) parts.push([{ t: eff, dim: true }])
   return parts.flatMap((p, i) => (i ? [{ t: '   ' }, ...p] : p))
 }
 
@@ -301,6 +308,8 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const squares: Line | undefined = t.todos.length ? [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }] : undefined
   const rate = tokRate(t)
   const tok: Line | undefined = rate === null ? undefined : [{ t: `${rate} t/s` }]
+  const eff = effortTag(t.effort)
+  const effort: Line | undefined = eff ? [{ t: eff, dim: true }] : undefined
   // The card grows at most one row so status texts are not cut: the status's overflow takes it first,
   // else the narration's (rounds 9–10).
   // The band is one tone, so the status goes in as plain text: the live tile and dim timer fold into it.
@@ -313,7 +322,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
     const counts: Line = [...steps(6), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
-    return { tone, status, more, pulse, body: [fitParts([counts, squares, ctx, tok], inner, ' · ')], bottom: [] }
+    return { tone, status, more, pulse, body: [fitParts([counts, squares, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
   const isTask = !!t.signal || t.template !== 'default'
   const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [{ t: LABEL, dim: true }, ...steps(GAUGE), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
@@ -327,7 +336,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     more,
     pulse,
     body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, squares], inner, '  ')],
-    bottom: fitParts([gauge, tok, turn, cache], edge, '  '),
+    bottom: fitParts([gauge, tok, effort, turn, cache], edge, '  '),
   }
 }
 

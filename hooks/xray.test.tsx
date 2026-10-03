@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { compact, deviceGlyph, effortTag, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
@@ -746,4 +746,14 @@ test('step text is kept to 72 chars; the wide now card still shows 40', async ()
   startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
   expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle fo… ▄')
   expect(text(nowCard(t, 'tool-use', null, 1000, 72).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▄')
+})
+
+test('effort shows in shorthand: desktop telemetry, phone bottom edge, keyboard-up row; nothing when absent', async () => {
+  expect([effortTag('low'), effortTag('medium'), effortTag('high'), effortTag('xhigh'), effortTag('max'), effortTag(undefined)]).toEqual(['○ low', '◐ med', '● high', '◉ xhigh', '◉ max', undefined])
+  const t = newTurn('x', 0)
+  expect(text(telemetry(t, null, 5000))).toBe('turn 5s')
+  t.effort = 'medium'
+  expect(text(telemetry(t, null, 5000))).toBe('turn 5s   ◐ med')
+  expect(text(compact(t, undefined, null, 22, 2000, 44, false).bottom)).toBe('ctx  ██░░░░░░ 22%  ◐ med  2s')
+  expect(text(compact(t, undefined, null, 22, 2000, 44, true).body[0])).toBe('░░░░░░ 0 · ctx 22% · ◐ med')
 })

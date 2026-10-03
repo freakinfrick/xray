@@ -53,6 +53,7 @@ export type Turn = {
   recipe?: Recipe
   isRecipeAsked?: boolean
   template: Template
+  effort?: string | number // the last main-agent request's effort, as sent
 }
 
 export const newTurn = (prompt: string, now: number): Turn => ({
