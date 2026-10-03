@@ -346,3 +346,11 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Shared with the phone card: `band()`, `stepGauge()`, `squares()`; the phone's progress row is now
   always the task card's row 1.
 - Checked: validate, tsc, 58 tests. Not yet seen live.
+
+## Round 14 — the now card shows step text whole (2026-10-03)
+
+- User, verbatim: "the status card now has more room and last: ... doesnt need to get truncated".
+- The 40-char cut on the wide cards dates from the one-row now card. Step text (kept to 72 chars at
+  the source) now goes in whole on every surface: the band clips the head to its width, the body
+  wraps `last:` over its three rows. `nowCard`'s `sayMax` parameter is gone.
+- Checked: `mods/check.sh xray` (validate, tsc, 58 tests). Not yet seen live.

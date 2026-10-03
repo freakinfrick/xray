@@ -19,8 +19,9 @@ export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, 
 const secs = (ms: number) => Math.floor(ms / 1000)
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
 
-// sayMax: step text is kept up to 72 chars; the wide cards show 40 as they always have, the narrow card all of it.
-export function nowCard(t: Turn, mode: Mode, narration: string | null, now: number, sayMax = 40): Card {
+// Step text is kept up to 72 chars and shown whole: the band clips the head to its width, the
+// body wraps `last:` over its rows (round 14).
+export function nowCard(t: Turn, mode: Mode, narration: string | null, now: number): Card {
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)
   let what: string
   let tone: Tone
@@ -28,7 +29,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   let since = done?.endedAt ?? t.startedAt // idle time counts from the last finished step
   const first = live[0]
   if (first) {
-    what = clip(first.say, sayMax) + (live.length > 1 ? ` +${live.length - 1}` : '')
+    what = first.say + (live.length > 1 ? ` +${live.length - 1}` : '')
     tone = 'live'
     since = first.startedAt
   } else if (mode === 'thinking') {
@@ -46,7 +47,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   }
   const el = secs(now - since)
   const last = t.done[t.done.length - 1]
-  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${clip(last.say, sayMax)}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
+  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${last.say}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
@@ -308,7 +309,7 @@ export type Compact = { tone: Tone; status: string; more?: string; pulse?: Seg; 
 const LABEL = 'steps ' // so both gauges start in one column: '│ ' + 6 cells = '╰─ ' + 'ctx  '
 
 export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercent: number | null, now: number, width: number, isTicker: boolean): Compact {
-  const card = nowCard(t, mode, narration, now, 72)
+  const card = nowCard(t, mode, narration, now)
   const [head = [], sub = []] = card.lines
   const live = t.running.size > 0
   const last = t.done[t.done.length - 1]

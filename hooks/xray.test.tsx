@@ -763,11 +763,12 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
   expect(compact(newTurn('x', 0), undefined, null, 20, 1000, 44, true).body.length).toBe(1)
 })
 
-test('step text is kept to 72 chars; the wide now card still shows 40', async () => {
+test('step text is kept to 72 chars and the now card shows it whole, last: included', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
-  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle fo… ▄')
-  expect(text(nowCard(t, 'tool-use', null, 1000, 72).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▄')
+  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▄')
+  finishStep(t, 'a', 'Bash', { command: 'make' }, true, '', undefined, 500)
+  expect(text(nowCard(t, undefined, null, 1000).lines[1])).toBe('last: rebuild the whole integration bundle for every device')
 })
 
 test('effort shows in shorthand: desktop telemetry, phone bottom edge, keyboard-up row; nothing when absent', async () => {
