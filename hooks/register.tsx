@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, band, clip as clipTo, compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, lastTurn, type Line, type Mode } from './cards'
+import { TALL, spinnerRows } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
@@ -16,7 +17,7 @@ const NARRATE_GAP_MS = 60_000
 const NARRATION_TTL_MS = 30_000
 const NARROW = 60 // columns: below this the cards give way to the compact rows (round 8)
 const SHORT = 30 // rows: below this (phone keyboard up) the compact rows fold to the ticker
-const BODY_ROWS = 3 // card text rows; with the two borders and the telemetry line, 6 rows under the spinner
+const BODY_ROWS = 3 // card text rows between the top edges and the tray; one more on a tall terminal (round 16)
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
   '(TodoWrite, or TaskCreate/TaskUpdate): add the steps when you plan them and mark each one done as you finish it.'
@@ -346,74 +347,22 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2)
-    const cards = cols >= 72 ? [nowCard(s.turn, s.mode, said, now), todoCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, said, now), taskCard(s.turn, now)]
-    const widths = cards.length === 3 ? [Math.floor(cols * 0.38), Math.floor(cols * 0.3)] : [Math.floor(cols * 0.55)]
-    widths.push(cols - widths.reduce((a, b) => a + b, 0))
-
-    const segs = (l: Line, k: string) => l.map((s, i) => (
-      <Text key={`${k}${i}`} color={s.color} backgroundColor={s.bg} dimColor={s.dim} bold={s.bold} inverse={s.inv}>
-        {s.t}
-      </Text>
-    ))
-    // Round 13, the phone card's look on the wide cards: the now card's head is its top edge's band, so
-    // its body is the narration alone; one telemetry edge closes all the cards.
-    const top = band(cards[0]?.lines[0] ?? [], s.turn.running.size > 0)
-    const tele = telemetry(s.turn, s.ctx, now)
-    const lines = (c: Card, i: number) => (i ? c.lines : c.lines.slice(1))
-    const body = cards.map((c, i) => fitRows(lines(c, i), Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS, c.spare))
-    const row = (r: number) => (
-      <Box key={`r${r}`} flexDirection="row">
-        {cards.map((c, i) => {
-          const w = widths[i] ?? 20
-          const color = TONE_COLOR[c.tone]
-          const dim = c.tone === 'quiet'
-          if (r === 0 && i === 0) {
-            const pulse = top.pulse ? ` ${top.pulse.t}` : ''
-            const status = clipTo(top.status, Math.max(1, w - 6 - pulse.length))
-            return (
-              <Text key={`c${i}`} wrap="truncate-end">
-                <Text color={color} dimColor={dim}>{'╭'}</Text>
-                <Text backgroundColor={color ?? 'gray'} color="black">{` ${status} `}</Text>
-                {top.pulse ? <Text color={top.pulse.color}>{pulse}</Text> : null}
-                <Text color={color} dimColor={dim}>{' ' + '─'.repeat(Math.max(1, w - 5 - status.length - pulse.length)) + '╮'}</Text>
-              </Text>
-            )
-          }
-          if (r === 0) {
-            const head = `╭─ ${c.title} `
-            const note = c.note ? c.note.map(x => x.t).join('') : ''
-            const fill = Math.max(0, w - head.length - (note ? note.length + 2 : 0) - 2)
-            return (
-              <Text key={`c${i}`} wrap="truncate-end">
-                <Text color={color} dimColor={dim}>{head + '─'.repeat(fill)}</Text>
-                {c.note ? <Text>{[<Text key="a"> </Text>, ...segs(c.note, `n${i}`), <Text key="z"> </Text>]}</Text> : null}
-                <Text color={color} dimColor={dim}>{'─╮'}</Text>
-              </Text>
-            )
-          }
-          return (
-            <Box key={`c${i}`} flexDirection="row" width={w}>
-              <Text color={color} dimColor={dim}>{'│ '}</Text>
-              <Box width={Math.max(1, w - 4)}>
-                <Text wrap="truncate-end">{segs(body[i]?.[r - 1] ?? [], `s${i}${r}`)}</Text>
-              </Box>
-              <Text color={color} dimColor={dim}>{' │'}</Text>
-            </Box>
-          )
-        })}
-      </Box>
-    )
+    // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
+    const cols = Math.max(NARROW, (e.viewport?.columns ?? 100) - 2)
+    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS)
 
     return (
       <Box flexDirection="column">
         {line}
-        {Array.from({ length: BODY_ROWS + 1 }, (_, r) => row(r))}
-        <Text wrap="truncate-end">
-          <Text dimColor>{'╰─ '}</Text>
-          {segs(tele, 'tm')}
-          <Text dimColor>{' ' + '─'.repeat(Math.max(1, cols - 5 - tele.reduce((a, g) => a + g.t.length, 0))) + '╯'}</Text>
-        </Text>
+        {rows.map((l, r) => (
+          <Text key={`w${r}`} wrap="truncate-end">
+            {l.map((g, i) => (
+              <Text key={`w${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+                {g.t}
+              </Text>
+            ))}
+          </Text>
+        ))}
       </Box>
     )
   })

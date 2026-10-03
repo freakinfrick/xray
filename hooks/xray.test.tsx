@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 import { compact, deviceGlyph, effortTag, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
@@ -182,14 +183,15 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress' }, { content: 'commit', status: 'pending' }] }, 0)
   const card = todoCard(t, 50)
   expect(card.title).toBe('to-do · 1 of 3')
-  expect(text(card.lines[0]).replace(/\u00a0/g, ' ')).toBe(' read spec  ▐◉▌draw cards  commit ')
-  expect(card.lines[0]?.[0]?.inv).toBe(true) // done: a solid patch in its hue
-  expect(card.lines[0]?.at(-1)?.inv).toBe(true) // pending: a grey patch
+  expect((card.chips ?? []).map(c => text(c).replace(/\u00a0/g, ' '))).toEqual([' read spec ', '▐◉▌draw cards', ' commit '])
+  expect(card.chips?.[0]?.[0]?.inv).toBe(true) // done: a solid patch in its hue
+  expect(card.chips?.at(-1)?.at(-1)?.inv).toBe(true) // pending: a grey patch
+  expect(text(card.foot)).toBe('▸ ' + t.todos[1]?.active) // the one in progress, as the card's fact row
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
   expect(t.todos.some(x => x.color === 'red')).toBe(false)
-  const done = card.lines[0]?.[0]
+  const done = card.chips?.[0]?.[0]
   expect(done?.color).toBe(t.todos[0]?.color)
-  expect(card.lines[0]?.at(-1)?.dim).toBe(true)
+  expect(card.chips?.at(-1)?.at(-1)?.dim).toBe(true)
   expect(card.note).toBeUndefined()
   expect(text(todoCard(t, 72).note)).toBe('⚠ context 72%')
   // a rewrite keeps each surviving to-do's hue
@@ -197,9 +199,11 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'draw cards', status: 'completed' }, { content: 'commit', status: 'in_progress' }, { content: 'push', status: 'pending' }] }, 1)
   expect(t.todos[0]?.color).toBe(hue)
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
-  // chips wrap whole: a row breaks between chips, never inside one
-  const rows = fitRows(todoCard(t, 10).lines, 26, 3).map(l => text(l).replace(/\u00a0/g, ' '))
-  expect(rows.every(r => (r.match(/\[/g) ?? []).length === (r.match(/\]/g) ?? []).length)).toBe(true)
+  // chips flow whole: a row breaks between chips, never inside one
+  const chips = todoCard(t, 10).chips ?? []
+  const rows = pack(chips, 26).map(l => text(l))
+  expect(rows.join('  ').replace(/ {2,}/g, '|')).toBe(chips.map(c => text(c)).join('|').replace(/ {2,}/g, '|'))
+  expect(rows.every(r => r.length <= 26)).toBe(true)
   const next = newTurn('y', 10)
   carryTodos(t, next)
   expect(next.todos.map(x => x.text)).toEqual(['commit', 'push'])
@@ -692,7 +696,8 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
   const wband = await wide.find({ type: 'Text', text: /^ ◇ thinking $/ })
   expect((wband as { props?: Record<string, unknown> } | undefined)?.props?.backgroundColor).toBe('magenta')
-  expect(await wide.find({ type: 'Text', text: /╭─ to-do/ })).toBeDefined()
+  // Round 16: under 140 columns, and with no to-dos at all, the to-do card folds away; the tray closes the cards.
+  expect(await wide.find({ type: 'Text', text: /╭─ to-do/ })).toBeUndefined()
   expect(await wide.find({ type: 'Text', text: /^╰─ $/ })).toBeDefined()
   await wide.unmount()
 })
@@ -795,4 +800,88 @@ test('a finished turn survives the trip through $.state that a hot reload makes'
   carryTodos(back, next)
   expect(next.todos.map(x => x.text)).toEqual(['ship'])
   expect(loadTurn('{not json')).toBe(null)
+})
+
+// Round 16 layout: a mid-fix turn with a to-do list, two edits and failing runs.
+function midFix() {
+  const t = newTurn('fix the bugs in sum.js one at a time', 0)
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'run tests', status: 'completed' }, { content: 'fix sum', status: 'completed' }, { content: 're-run tests', status: 'completed' }, { content: 'fix mul', status: 'in_progress', activeForm: 'fixing mul in sum.js' }, { content: 're-run tests to verify', status: 'pending' }] }, 0)
+  finishStep(t, 'w', 'TodoWrite', {}, true, '', undefined, 10)
+  startStep(t, 'b1', 'Bash', { command: 'npm test' }, 1_000)
+  finishStep(t, 'b1', 'Bash', { command: 'npm test' }, false, 'Tests: 2 failed, 1 passed, 3 total', undefined, 1_500)
+  startStep(t, 'e', 'Edit', { file_path: 'sum.js' }, 3_000)
+  finishStep(t, 'e', 'Edit', { file_path: 'sum.js' }, true, '', undefined, 3_500)
+  startStep(t, 'b2', 'Bash', { command: 'npm test' }, 4_000)
+  finishStep(t, 'b2', 'Bash', { command: 'npm test' }, false, 'Tests: 1 failed, 2 passed, 3 total', undefined, 4_500)
+  return t
+}
+const NARR = "sum's clean after one edit. mul next, same file, one line down; the assert wants 6 and it returns 5."
+
+test('round 16: every row is exactly as wide as asked, at 190, 120 and 60 columns, 3 or 4 body rows', async () => {
+  const t = midFix()
+  for (const cols of [188, 118, 60]) {
+    for (const rows of [3, 4]) {
+      const out = spinnerRows(t, undefined, NARR, 17, 9_000, cols, rows)
+      expect(out.length).toBe(rows + 2)
+      expect(out.map(l => text(l).length)).toEqual(Array(rows + 2).fill(cols))
+    }
+  }
+})
+
+test('round 16: three cards from 140 columns with a gap between them; below, the to-dos ride in the task card', async () => {
+  const t = midFix()
+  const wide = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
+  expect(wide[0]?.match(/╮ ╭/g)?.length).toBe(2) // three cards, one blank column between each
+  expect(wide[0]).toContain('╭─ to-do · 3 of 5')
+  expect(wide.some(r => r.includes('▸ fixing mul in sum.js'))).toBe(true)
+  expect(wide.at(-1)).toMatch(/^╰─ turn 9s .*┴─┴─ ctx .*┴─┴─*╯$/) // the tray: each card's figures under it
+  const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
+  expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
+  expect(mid.join('\n').replace(/\u00a0/g, ' ')).toContain('fix mul') // the chips came along into the task card
+  expect(mid.join('\n')).not.toContain('╭─ to-do')
+})
+
+test('round 16: narration wraps whole and the last step keeps its own row, set off by a blank one', async () => {
+  const t = midFix()
+  const out = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
+  const nowCol = (r: string) => r.slice(0, r.indexOf('│', 1) + 1)
+  const rows = out.slice(1, 5).map(nowCol).map(r => r.slice(2, -2).trimEnd())
+  expect(rows.join(' ').replace(/\s+/g, ' ')).toContain('the assert wants 6 and it returns 5.')
+  const at = rows.findIndex(r => r.startsWith('last: '))
+  expect(at).toBeGreaterThan(0)
+  expect(rows[at - 1]).toBe('') // a blank row between the story and the fact
+  // at 3 rows the blank goes first; the fact row stays
+  const three = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 3).map(l => text(l)).slice(1, 4).map(nowCol)
+  expect(three[2]).toMatch(/last: /)
+})
+
+test('round 16: a card asks for its content width; the prose card takes what is left', async () => {
+  expect(allot([100, 40, 50], 188)).toEqual([188 - 2 - 40 - 50, 40, 50])
+  expect(allot([100, 10, 10], 100)).toEqual([100 - 2 - 24 - 24, 24, 24]) // never under the minimum
+  const ws = allot([100, 200, 200], 100)
+  expect(ws[0]).toBeGreaterThanOrEqual(36) // the now card keeps room to read
+  expect(ws.reduce((a, b) => a + b, 0)).toBe(98)
+  expect(ideal({ title: 'x', tone: 'quiet', lines: [[{ t: 'ab' }]], side: [[{ t: 'cdef' }]] })).toBe(2 + 3 + 4 + 4)
+})
+
+test('round 16: wrap breaks at words, pack keeps chips whole, body ends in … only when rows run out', async () => {
+  expect(wrap([{ t: 'one two three four' }], 9).map(l => text(l))).toEqual(['one two', '  three', '  four'])
+  expect(pack([[{ t: 'aaa' }], [{ t: 'bbb' }], [{ t: 'ccc' }]], 8).map(l => text(l))).toEqual(['aaa  bbb', 'ccc'])
+  const long = body({ title: 'now', tone: 'quiet', lines: [[{ t: 'word '.repeat(30).trim() }]], foot: [{ t: 'last: x' }] }, 20, 3).map(l => text(l))
+  expect(long[1]?.endsWith('…')).toBe(true)
+  expect(long[2]).toBe('last: x')
+})
+
+test('round 16: the spinner takes one more body row on a tall terminal', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const at = async (rows: number) => {
+    const m = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps, viewport: { columns: 120, rows } })
+    const n = (await m.findAll({ type: 'Text', text: /^│ $/ })).length
+    await m.unmount()
+    return n
+  }
+  expect(await at(50)).toBe(2 * 4) // two cards × 4 body rows
+  expect(await at(35)).toBe(2 * 3)
 })

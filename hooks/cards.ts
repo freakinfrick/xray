@@ -11,7 +11,9 @@ export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; in
 export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think'
 // spare: a row drawn only when the lines leave one free after wrapping.
-export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line }
+// side: a second subcolumn beside `lines` when the card is wide enough (else under them); chips: whole
+// tokens flowed into rows; foot: the card's fact row, set off by a blank row when one is spare (round 16).
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; foot?: Line }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
 export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta' }
@@ -47,12 +49,15 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   }
   const el = secs(now - since)
   const last = t.done[t.done.length - 1]
-  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${last.say}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
+  const lastLine: Line | undefined = last ? [{ t: 'last: ', dim: true }, { t: last.say + (last.ok === false ? ' ✗' : ''), dim: true }] : undefined
+  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : lastLine ? [{ t: lastLine.map(x => x.t).join(''), dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
   if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
-  return { title: 'now', tone, lines: [head, sub] }
+  // Narration shown: the last step still gets its own row on the wide cards (round 16; the live check
+  // saw a minute-old narration hide every step of a 20 s turn).
+  return { title: 'now', tone, lines: [head, sub], foot: narration ? lastLine : undefined }
 }
 
 // The now card's head as the top edge's band (rounds 11, 13): the band is one tone, so the live tile
@@ -76,7 +81,7 @@ const NBSP = '\u00a0' // keeps a chip whole when its row wraps
 // One patch per to-do: a grey patch while pending, its own color in progress (mark and name) and a
 // solid patch in that color when done.
 function chip(x: Todo): Line {
-  const name = clip(x.text, 18).replace(/ /g, NBSP)
+  const name = clip(x.text, 48).replace(/ /g, NBSP)
   if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
   if (x.status === 'in_progress') return [{ t: '▐◉▌', color: x.color }, { t: name, color: x.color }]
   return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
@@ -91,12 +96,14 @@ export function todoCard(t: Turn, ctxPercent: number | null): Card {
   const warn = ctxPercent !== null && ctxPercent >= 70
   const tags: Line = [...(q ? [{ t: `${q} queued`, dim: true }] : []), ...(bg ? [{ t: plural(bg, 'agent'), dim: true }] : []), ...(warn ? [{ t: `⚠ context ${Math.round(ctxPercent)}%`, color: 'yellow' }] : [])]
   const note = tags.flatMap((s, i) => (i ? [{ t: ' · ', dim: true }, s] : [s]))
-  const chips = t.todos.flatMap((x, i) => (i ? [{ t: ' ' }, ...chip(x)] : chip(x)))
+  const cur = t.todos.find(x => x.status === 'in_progress')
   return {
     title: t.todos.length ? `to-do · ${done} of ${t.todos.length}` : 'to-do',
     tone: warn ? 'warn' : t.todos.length && done === t.todos.length ? 'ok' : 'quiet',
     note: note.length ? note : undefined,
-    lines: t.todos.length ? [chips] : [[{ t: 'no to-do list yet', dim: true }]],
+    lines: t.todos.length ? [] : [[{ t: 'no to-do list yet', dim: true }]],
+    chips: t.todos.length ? t.todos.map(chip) : undefined,
+    foot: cur ? [{ t: '▸ ', dim: true }, { t: cur.active }] : undefined,
   }
 }
 
@@ -256,7 +263,7 @@ export function fitRows(lines: Line[], width: number, rows: number, spare?: Line
   return out.slice(0, rows)
 }
 
-function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
+export function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
   const head: Line = []
   const tail: Line = []
   let at = 0
@@ -283,20 +290,25 @@ export const effortTag = (e: string | number | undefined): string | undefined =>
 
 // The one telemetry line under the cards. Every figure is measured; a figure not known yet is left out.
 export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line {
-  const parts: Line[] = []
-  if (ctxPercent !== null) parts.push([{ t: 'ctx ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }])
+  const p = teleParts(t, ctxPercent, now)
+  return [p.ctx, p.tok, p.cache, p.turn, p.effort].filter((x): x is Line => !!x).flatMap((x, i) => (i ? [{ t: '   ' }, ...x] : x))
+}
+
+// Each figure on its own, so the tray can set each under the card it belongs to (round 16).
+export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } {
+  const parts: { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } = { turn: [{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }] }
+  if (ctxPercent !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
   const rates = done.slice(-8).map(r => r.output / ((r.endedAt - r.firstAt) / 1000))
-  if (out && gen) parts.push([{ t: 'tok/s ', dim: true }, ...(rates.length > 1 ? [spark(rates), { t: ' ' }] : []), { t: String(Math.round(out / (gen / 1000))) }])
+  if (out && gen) parts.tok = [{ t: 'tok/s ', dim: true }, ...(rates.length > 1 ? [spark(rates), { t: ' ' }] : []), { t: String(Math.round(out / (gen / 1000))) }]
   const last = t.requests[t.requests.length - 1]
   const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
-  if (last && sent) parts.push([{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, 'cyan'), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }])
-  parts.push([{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }])
+  if (last && sent) parts.cache = [{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, 'cyan'), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }]
   const eff = effortTag(t.effort)
-  if (eff) parts.push([{ t: eff, dim: true }])
-  return parts.flatMap((p, i) => (i ? [{ t: '   ' }, ...p] : p))
+  if (eff) parts.effort = [{ t: eff, dim: true }]
+  return parts
 }
 
 // Under 60 columns (a phone, a narrow pane), rounds 8–9: one card `width` cells wide. Top edge = what
@@ -370,10 +382,10 @@ const lastSent = (t: Turn): number => {
   return last && sent ? last.cacheRead / sent : 0
 }
 
-const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)
+export const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)
 
 // Whole parts, left to right, while they fit: the rightmost go first, nothing is cut mid-part.
-function fitParts(parts: (Line | undefined)[], width: number, sep: string): Line {
+export function fitParts(parts: (Line | undefined)[], width: number, sep: string): Line {
   const out: Line = []
   for (const p of parts) {
     if (!p) continue
@@ -396,7 +408,7 @@ function wrapOnce(l: Line, first: number, rest: number): [Line, Line | undefined
 }
 
 // A line cut at the last word that fits, with an ellipsis; a line that fits is kept as is.
-function clipLine(l: Line, width: number): Line {
+export function clipLine(l: Line, width: number): Line {
   if (cells(l) <= width) return l
   const all = l.map(s => s.t).join('')
   const space = all.lastIndexOf(' ', width - 1)
