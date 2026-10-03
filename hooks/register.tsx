@@ -320,10 +320,13 @@ export const register: Register = (on, options) => {
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
-      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined }))
+      // The turn is over before the strip is told: a redraw while s.turn still stood drew the cards' slot
+      // (nothing) and the strip stayed away until something else redrew (round 17 live check).
       s.prev = t
       s.turn = null
+      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined }))
       await update($, keptTurn, () => saveTurn(t))
+      $.ui.invalidate('ui.render')
     }
 
     return next(e)

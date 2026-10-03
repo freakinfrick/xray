@@ -1078,3 +1078,16 @@ test('round 17: between turns the strip carries folder and context, health only 
   expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined() // the cards hide, the status figures stay
   await ui.unmount()
 })
+
+test('round 17: after a turn the strip leads with the folder, then how the turn ended', async ($, on) => {
+  engine(on, { HOME: '/h' })
+  on('fs.exists', () => ({ value: true }) as never)
+  on('fs.read', () => ({ value: 'caveman compression' }) as never)
+  on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
+  await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /missing/ })).toBeUndefined()
+  await ui.unmount()
+})
