@@ -490,3 +490,10 @@ What is known (agent, 2026-10-03):
   live: the old status line draws in full. Open: grey pending patch contrast by eye. Under an ANSI theme
   it is palette color 8 (#6a7058 forest, #827664 forest-light) under near-black text, about 3:1.
 - Grey pending patch seen by the user on the cells page (both palettes, real spinnerRows output): "looks great" (2026-10-03). Kept #a39e8e.
+- Loose ends closed (2026-10-03): narrator never writes about itself (`337cae7`: prompt offers `-`,
+  `checkVoice` drops I/you/facts/context lines, `narrationOf()`); at 120 the now card narrows to its 40
+  floor so every cell fits (`7223e72`); herdr forest and forest-light sidebar sub-lines readable
+  (dotfiles d9a0ef5, 9cb3865); herdr-theme sets Claude Code's theme with the palette (d572c41).
+- Still open: the phone (Termius) unseen for round 16–17; a name past two rows at a cell's width ends in
+  … (cells could take 3 name rows when tall, ~10 min); a carried list ≥ 80% done opens in the green
+  "closing" mood before any step runs (per the round-16 rule).
