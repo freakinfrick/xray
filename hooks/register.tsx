@@ -74,7 +74,7 @@ async function loadGenome($: EngineInterface, s: Live) {
 }
 async function saveGenome($: EngineInterface, s: Live, turn: string) {
   await loadGenome($, s)
-  if (!s.genomeId || !turn) return
+  if (!s.genomeId) return
   s.genome = genome.append(s.genome, turn)
   await $.store.set(genome.keyOf(s.genomeId), s.genome)
   for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
@@ -567,6 +567,10 @@ export const register: Register = (on, options) => {
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
     const folder = where(await here($, s), s.home, !hasTail)
     const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
+    const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
+    // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
+    const ownRow = s.isHidden ? null : genomeRows(genome.rows(s.genome, width, { maxRows: 1 }), 'ig', Text)
+    const cacheSegs = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, await $.clock.now(), !hasTail)
     const lead = (
       <Text>
         {glyph ? <Text>{`${glyph} `}</Text> : null}
@@ -576,7 +580,7 @@ export const register: Register = (on, options) => {
             {g.t}
           </Text>
         ))}
-        {(s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, await $.clock.now(), !hasTail)).map((g, i) => (
+        {cacheSegs.map((g, i) => (
           <Text key={`k${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim}>
             {g.t}
           </Text>
@@ -586,19 +590,42 @@ export const register: Register = (on, options) => {
         ))}
       </Text>
     )
-    const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
-    const dna = s.isHidden ? null : genomeRows(genome.rows(s.genome, width, hasTail ? { label: GENOME_LABEL } : { maxRows: 1 }), 'ig', Text)
+    // The strip's own width in cells, to know the room left for the genome on its line (glyph = 2 cells).
+    const leadCells = (glyph ? 3 : 0) + (folder ? folder.length + 2 : 0) + gauge.reduce((a, g) => a + g.t.length, 0) + cacheSegs.reduce((a, g) => a + g.t.length, 0) + s.health.reduce((a, x) => a + x.length + 4, 0)
+    const right = (used: number) => {
+      if (s.isHidden || !hasTail) return null
+      const room = width - used - 3 - EDGE_MARK
+      const segs = genome.tail(s.genome, room)
+      if (!segs.length) return null
+      const n = segs.reduce((a, g) => a + g.t.length, 0)
+      return [
+        <Text key="gtpad">{' '.repeat(Math.max(1, width - used - n - EDGE_MARK))}</Text>,
+        ...segs.map((g, i) => (
+          <Text key={`gt${i}`} color={g.color} dimColor={g.dim}>
+            {g.t}
+          </Text>
+        )),
+      ]
+    }
     if (!l) {
+      const onLine = right(leadCells)
       return (
         <Box paddingX={1} flexDirection="column">
-          <Text wrap="truncate-end">{lead}</Text>
-          {dna}
+          <Text wrap="truncate-end">
+            {lead}
+            {onLine}
+          </Text>
+          {onLine ? null : ownRow}
         </Box>
       )
     }
     const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
     // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
     const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
+    const memoText = hasTail && l.memo?.length ? `  ·  ${l.memo.join('  ·  ')}` : ''
+    const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
+    const used = leadCells + 13 + (l.title ?? 'turn').length + 2 + 1 + l.headline.length + memoText.length + owedCells
+    const onLine = right(used)
 
     return (
       <Box paddingX={1} flexDirection="column">
@@ -607,7 +634,7 @@ export const register: Register = (on, options) => {
           <Text dimColor>{'   last turn '}</Text>
           <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
           <Text color={color}>{` ${l.headline}`}</Text>
-          {hasTail && l.memo?.length ? <Text dimColor>{`  ·  ${l.memo.join('  ·  ')}`}</Text> : null}
+          {memoText ? <Text dimColor>{memoText}</Text> : null}
           {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
           {!hasTail ? null : owed.length ? (
             owed.map((x, i) => (
@@ -619,8 +646,9 @@ export const register: Register = (on, options) => {
           ) : (
             <Text color="green">nothing ✓</Text>
           )}
+          {onLine}
         </Text>
-        {dna}
+        {onLine ? null : ownRow}
       </Box>
     )
   })
@@ -628,6 +656,7 @@ export const register: Register = (on, options) => {
 
 // Round 19: the genome's rows, one Text each (exact widths from genome.ts).
 const GENOME_LABEL = 'genome '
+const EDGE_MARK = 5 // Claude Code draws its own `[-]` at the strip line's right end (live check); the genome stops short of it
 function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
   return rows.map((l, r) => (
     <Text key={`${key}${r}`} wrap="truncate-end">

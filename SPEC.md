@@ -596,3 +596,22 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   as nice as what we have already." Flow screen, big numerals, line-art celebrations dropped; current
   cards (round 16-18) stay as they are. Scope = the session genome alone, picks 1a (3 rows, then fold
   oldest whole turns) + 2a (saved per session, survives /resume) still hold.
+
+### Round 19 — built (2026-10-03, 793872a → this commit)
+- User picks during the build: genome = own row under the cards (1a); bottom-edge figures packed from
+  the left, in one order (folder, turn, effort, ctx, tok/s, cache), not under each card ("so user
+  doesnt have to search for the info"); gauges at rest in the terminal's own ink so nothing near the
+  genome wears a step colour (ctx ≥ 70 % keeps yellow/red); to-do cells: name starts on the number's
+  row and wraps over all 3 rows, wrapped rows in line with its first word (agent default, easy to flip).
+  Between turns: "right justify the text 'genome' and have the genome move inline with the 'still owed'
+  nothing but right justified in that line, and grows right" → flush right on the strip line, label
+  last, newest cells at the right, oldest whole turns fold to `+N turns`; no room (narrow desktop) → its
+  own row under the strip; phone → own row.
+- `hooks/genome.ts` (pure): letters per turn (r e c t a o, x = failed), '' for a reply with no steps
+  (its │ still shows), store key `genome:<session id>`, 400 turns/session, 40 sessions kept.
+  Working view: `genome ` label left, up to 3 rows. `/xray` panel: unfolded (40 rows).
+- Checked: `mods/check.sh xray` (validate, tsc, 89 tests). Live (tmux, haiku, xray only): working row
+  `genome █`, idle `█▌▌████│▌ genome` flush right at 190 cols clear of Claude Code's `[-]` mark
+  (EDGE_MARK = 5), own row at 47 cols. Unseen live: /resume restoring it, 3-row fold, the panel section.
+- Live-check trap: a long prompt sent with `tmux send-keys "…" Enter` stayed in the input box twice
+  (looks like paste detection); send the text, wait 1 s, then Enter.

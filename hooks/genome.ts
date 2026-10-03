@@ -25,7 +25,8 @@ export function code(t: Turn): string {
     .join('')
 }
 
-export const append = (g: readonly string[], turn: string): string[] => (turn ? [...g, turn] : [...g]).slice(-MAX_TURNS)
+// A reply with no steps still counts (its │ shows the person spoke): stored as ''.
+export const append = (g: readonly string[], turn: string): string[] => [...g, turn].slice(-MAX_TURNS)
 
 // Stored value → turns, ignoring anything that isn't a list of strings.
 export const load = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
@@ -57,7 +58,7 @@ function liveCells(t: Turn, now: number): Seg[] {
 export function rows(turns: readonly string[], width: number, opts: { live?: Turn; now?: number; maxRows?: number; label?: string } = {}): Line[] {
   const { live, now = 0, maxRows = MAX_ROWS, label = '' } = opts
   const liveSegs = live ? liveCells(live, now) : []
-  if (!turns.length && !liveSegs.length) return []
+  if (!turns.some(x => x) && !liveSegs.length) return []
   const room = Math.max(8, width - label.length)
   const lay = (fold: number): Seg[][] => {
     const segs: Seg[] = fold ? [{ t: `+${fold} turn${fold > 1 ? 's' : ''} `, dim: true }] : []
@@ -97,6 +98,14 @@ function merge(segs: Seg[]): Line {
     else out.push({ ...s })
   }
   return out
+}
+
+// Round 19 (user): between turns the genome rides the strip's line, flush right, label last, newest cells
+// at the right end; past `room` the oldest whole turns fold. Empty when even one turn won't fit.
+export function tail(turns: readonly string[], room: number, label = ' genome'): Line {
+  const r = rows(turns, room - label.length, { maxRows: 1 })[0]
+  if (!r || room < 12) return []
+  return [...r, { t: label, dim: true }]
 }
 
 export const summary = (turns: readonly string[]) => `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${turns.reduce((a, x) => a + x.length, 0)} steps`

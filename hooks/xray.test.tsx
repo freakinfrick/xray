@@ -1232,7 +1232,13 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   startStep(t, 'b', 'Bash', { command: 'false' }, 6)
   finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 7)
   expect(genome.code(t)).toBe('rex')
-  expect(genome.append(['re'], '')).toEqual(['re'])
+  expect(genome.append(['re'], '')).toEqual(['re', '']) // a reply with no steps still gets its │
+  expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('▌█││█')
+  expect(genome.rows(['', ''], 40)).toEqual([])
+  // between turns: flush right on the strip's line, label last; too little room, nothing
+  expect(text(genome.tail(['re', 'c'], 30))).toBe('▌█│█ genome')
+  expect(genome.tail(['re'], 10)).toEqual([])
+  expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^\+\d+ turns .*▌▌▌▌ genome$/)
   expect(genome.load(['a', 3, null, 'b'])).toEqual(['a', 'b'])
   expect(genome.load('nope')).toEqual([])
 })
