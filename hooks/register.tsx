@@ -6,7 +6,8 @@ import { TALL, spinnerRows } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
-import { sayStep } from './parse'
+import { checkVoice, sayStep } from './parse'
+import { recall, record, storeKey, type Event } from './memory'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -21,9 +22,13 @@ const BODY_ROWS = 3 // card text rows between the top edges and the tray; one mo
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
   '(TodoWrite, or TaskCreate/TaskUpdate): add the steps when you plan them and mark each one done as you finish it.'
+// Round 16, direction 4: one voice. checkVoice drops any line that strays from the facts it was given.
 const NARRATOR =
-  "You narrate a coding agent's work for the person watching it. Reply with one plain sentence of at most 12 words " +
-  'saying what the agent is doing right now and why. Be concrete. Never invent results. No preamble, no quotes.'
+  'You narrate a coding session for the person watching it, in the voice of a dry flight engineer. Reply with one ' +
+  'sentence of at most 14 words, present tense: what is happening now and the one thing that matters next. Never ' +
+  'say "the agent" or "Claude"; leave the subject out ("Taking sum first."). Use only the facts given: every number ' +
+  'and name you write must appear in them. When the history line bears on what is happening, you may point back to ' +
+  'it once ("broke here Oct 1 too"). No preamble, no quotes.'
 
 type Live = {
   isNarrating: boolean
@@ -38,6 +43,8 @@ type Live = {
   isTicking: boolean
   isWriting: boolean // custom cards: a small model may lay out the task card
   ledger: Entry[] // the taste ledger, from the store
+  cwd: string
+  history: Event[] // this project's finished test runs, from the store (round 16 memory)
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -109,10 +116,15 @@ async function narrate($: EngineInterface, s: Live) {
   s.narratedAt = now // claims the slot now so a second trigger can't race this call
   const steps = t.done.slice(-8).map(x => `- ${x.say}${x.ok === false ? ' (failed)' : ''}`)
   const live = [...t.running.values()].map(x => x.say)
-  const prompt = `Task from the user: ${t.prompt.replace(/\s+/g, ' ').slice(0, 400)}\nSteps so far:\n${steps.join('\n') || '- none yet'}\nRunning now: ${live.join(', ') || 'thinking'}`
+  const run = t.runs.filter(x => !x.running).pop()
+  const tests = run ? `\nLatest test run: ${run.total ? `${run.pass} of ${run.total} pass` : run.ok ? 'passed' : 'failed'}${run.failing.length ? `, failing: ${run.failing.slice(0, 3).join(', ')}` : ''}` : ''
+  const past = recall(s.history, t)
+  const history = past.length ? `\nHistory in this project: ${past.join('; ')}` : ''
+  const prompt = `Task from the user: ${t.prompt.replace(/\s+/g, ' ').slice(0, 400)}\nSteps so far:\n${steps.join('\n') || '- none yet'}\nRunning now: ${live.join(', ') || 'thinking'}${tests}${history}`
   const r = await $.model.complete({ model: 'haiku', system: NARRATOR, prompt, maxTokens: 60, effort: 'low', timeoutMs: 8000 }).catch(() => null)
-  if (r?.isAnswered && s.turn === t) {
-    s.narration = r.text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120)
+  const said = r?.isAnswered ? r.text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120) : ''
+  if (said && s.turn === t && checkVoice(said, prompt)) {
+    s.narration = said
     $.ui.invalidate('ui.render')
   } else if (s.narratedAt === now) s.narratedAt = before // no sentence came back: the next trigger may try again
 }
@@ -131,12 +143,15 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', history: [] }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
+    s.cwd = e.cwd ?? ''
+    const past = await $.store.get(storeKey(s.cwd))
+    s.history = Array.isArray(past) ? (past as Event[]) : []
     const saved = s.prev ? null : await read($, keptTurn)
     if (saved) s.prev = loadTurn(saved)
     const kept = await $.store.get('ledger')
@@ -274,7 +289,10 @@ export const register: Register = (on, options) => {
       const t = s.turn
       const now = await $.clock.now()
       endTurn(t)
-      await update($, last, () => lastTurn(t, now))
+      const memo = recall(s.history, t)
+      s.history = record(s.history, t)
+      if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
+      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined }))
       s.prev = t
       s.turn = null
       await update($, keptTurn, () => saveTurn(t))
@@ -415,6 +433,7 @@ export const register: Register = (on, options) => {
           <Text dimColor>last turn </Text>
           <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
           <Text color={color}>{` ${l.headline}`}</Text>
+          {hasTail && l.memo?.length ? <Text dimColor>{`  ·  ${l.memo.join('  ·  ')}`}</Text> : null}
           {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
           {!hasTail ? null : owed.length ? (
             owed.map((x, i) => (

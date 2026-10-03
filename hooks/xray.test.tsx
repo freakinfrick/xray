@@ -1,12 +1,13 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { compact, deviceGlyph, effortTag, filmstrip, stepCounts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
-import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
+import { checkVoice, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
+import { recall, record } from './memory'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -899,4 +900,61 @@ test('the filmstrip colors each step by its kind, failures red, the live one bli
   expect(long[0]?.t).toMatch(/^\+\d+ $/) // older steps fold into a count
   expect(long.slice(1).length).toBe(9)
   expect(text(stepCounts(t))).toBe('33 done · 2 ✕')
+})
+
+test('mood comes from measured steps: exploring, focused, stuck, closing, thinking', async () => {
+  const t = newTurn('look around', 0)
+  expect(mood(t, undefined, 0)).toBeUndefined()
+  for (const f of ['a.ts', 'b.ts', 'c.ts']) {
+    startStep(t, f, 'Read', { file_path: f }, 10)
+    finishStep(t, f, 'Read', { file_path: f }, true, '', undefined, 20)
+  }
+  expect(mood(t, undefined, 30)?.word).toBe('exploring')
+  expect(mood(t, 'thinking', 20_000)?.word).toBe('thinking')
+  const f = midFix() // two failing runs with an edit between, the second one better
+  expect(mood(f, undefined, 9_000)?.word).toBe('focused')
+  startStep(f, 'b3', 'Bash', { command: 'npm test' }, 9_000)
+  finishStep(f, 'b3', 'Bash', { command: 'npm test' }, false, 'Tests: 3 failed, 0 passed, 3 total', undefined, 9_500)
+  expect(mood(f, undefined, 10_000)?.word).toBe('stuck')
+  expect(text(nowCard(f, undefined, null, 10_000).lines[0])).toMatch(/^✕ stuck · /)
+  expect(nowCard(f, undefined, null, 10_000).tone).toBe('fail')
+  startStep(f, 'b4', 'Bash', { command: 'npm test' }, 11_000)
+  finishStep(f, 'b4', 'Bash', { command: 'npm test' }, true, 'Tests: 3 passed, 3 total', undefined, 11_500)
+  expect(mood(f, undefined, 12_000)?.word).toBe('closing')
+})
+
+test('the narrator line is kept only when its numbers and names are in the facts', async () => {
+  const facts = 'Steps so far:\n- editing sum.js\nLatest test run: 2 of 3 pass, failing: mul'
+  expect(checkVoice('Two red on the board. Taking sum first.', facts)).toBe(true)
+  expect(checkVoice('2 of 3 pass; mul next in sum.js.', facts)).toBe(true)
+  expect(checkVoice('4 tests failing in cost.ts.', facts)).toBe(false) // made-up number and file
+  expect(checkVoice('The agent is planning the task.', facts)).toBe(false)
+})
+
+test('memory: finished runs become events per project; a recurring failure and the usual suite time are recalled', async () => {
+  const day1 = Date.UTC(2026, 9, 1)
+  const a = newTurn('fix', day1)
+  bash(a, 'r1', 'npm test', 'Tests: 3 passed, 3 total', day1 + 1_000, 400)
+  bash(a, 'r2', 'npm test', 'Tests: 3 passed, 3 total', day1 + 5_000, 400)
+  let h = record([], a)
+  expect(h.length).toBe(2)
+  const b = newTurn('fix again', day1 + 86_400_000)
+  startStep(b, 'r3', 'Bash', { command: 'npm test' }, day1 + 86_401_000)
+  finishStep(b, 'r3', 'Bash', { command: 'npm test' }, false, '● mul\nTests: 1 failed, 2 passed, 3 total', undefined, day1 + 86_401_500)
+  h = [...h.slice(0, 1), { ...h[1]!, failing: ['mul'] }]
+  expect(recall(h, b)).toEqual(['suite 0.5 s, usual 0.4 s', 'mul failed here before, Oct 1'])
+  expect(record(Array(60).fill(h[0]), b).length).toBe(50) // capped
+})
+
+test('a plan written as text ("Step 3/5: fix mul") fills the to-dos; a tool list always wins', async () => {
+  const t = newTurn('x', 0)
+  queueFromResponse(t, [{ type: 'text', text: 'Tests show 2 failures. **Step 3/5:** fix mul.' }])
+  expect(t.todos.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress', 'pending', 'pending'])
+  expect(t.todos[2]?.text).toBe('fix mul')
+  queueFromResponse(t, [{ type: 'text', text: 'Step 4/5: re-run tests' }])
+  expect(t.todos[2]?.text).toBe('fix mul') // a finished step keeps its name
+  expect(t.todos[3]?.status).toBe('in_progress')
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'real one', status: 'pending' }] }, 1)
+  queueFromResponse(t, [{ type: 'text', text: 'Step 1/2: nope' }])
+  expect(t.todos.map(x => x.text)).toEqual(['real one'])
 })

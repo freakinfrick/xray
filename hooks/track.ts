@@ -154,13 +154,35 @@ export function finishAgent(t: Turn, key: { agentId?: string; toolUseId?: string
   a.doing = undefined
 }
 
-type Block = { type: string; id?: string; name?: string; input?: Record<string, unknown> }
+type Block = { type: string; id?: string; name?: string; input?: Record<string, unknown>; text?: string }
 
 export function queueFromResponse(t: Turn, content: unknown) {
   if (!Array.isArray(content)) return
   for (const b of content as Block[]) {
     if (b.type === 'tool_use' && b.id && b.name && !t.running.has(b.id) && !t.done.some(s => s.id === b.id)) t.queued.set(b.id, sayStep(b.name, b.input ?? {}))
+    if (b.type === 'text' && b.text) planFromText(t, b.text)
   }
+}
+
+// A model that writes its plan as text ("Step 3/5: fix mul") instead of calling a to-do tool still
+// fills the to-do card (round 16; the live check's Haiku did exactly this). Tool to-dos always win:
+// text never touches a list a tool wrote.
+export function planFromText(t: Turn, text: string) {
+  if (t.todos.some(x => !x.id.startsWith('k'))) return
+  const m = [...text.matchAll(/\bStep (\d+)\s*(?:\/|of)\s*(\d+)\b[:.]?[ \t]*([^\n]*)/gi)].pop()
+  if (!m) return
+  const k = Number(m[1])
+  const n = Math.min(Number(m[2]), 20)
+  if (!(k >= 1 && k <= n)) return
+  const said = (m[3] ?? '').replace(/[*_`]/g, '').trim().replace(/\.$/, '').slice(0, 60)
+  const old = new Map(t.todos.map(x => [x.id, x]))
+  t.todos = Array.from({ length: n }, (_, i) => {
+    const id = `k${i + 1}`
+    const prev = old.get(id)
+    const text = i + 1 === k && said ? said : (prev?.text ?? `step ${i + 1}`)
+    return { id, text, active: text, status: i + 1 < k ? 'completed' : i + 1 === k ? 'in_progress' : 'pending', color: prev?.color } as Todo
+  })
+  colorTodos(t)
 }
 
 export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number) {

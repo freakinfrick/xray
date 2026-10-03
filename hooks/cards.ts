@@ -9,14 +9,14 @@ import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn
 // inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string }
 export type Line = Seg[]
-export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think'
+export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explore'
 // spare: a row drawn only when the lines leave one free after wrapping.
 // side: a second subcolumn beside `lines` when the card is wide enough (else under them); chips: whole
 // tokens flowed into rows; foot: the card's fact row, set off by a blank row when one is spare (round 16).
 export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; foot?: Line }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
-export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta' }
+export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta', explore: 'blue' }
 
 const secs = (ms: number) => Math.floor(ms / 1000)
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
@@ -52,12 +52,45 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   const lastLine: Line | undefined = last ? [{ t: 'last: ', dim: true }, { t: last.say + (last.ok === false ? ` ${MARK.fail}` : ''), dim: true }] : undefined
   const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : lastLine ? [{ t: lastLine.map(x => x.t).join(''), dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
-  const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
+  const m = mood(t, mode, now)
+  if (m) tone = m.tone
+  const head: Line = m ? [{ t: `${m.glyph} ${m.word} · ` }, { t: what }] : live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
   if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
   // Narration shown: the last step still gets its own row on the wide cards (round 16; the live check
   // saw a minute-old narration hide every step of a 20 s turn).
   return { title: 'now', tone, lines: [head, sub], foot: narration ? lastLine : undefined }
+}
+
+// The session's mood (round 16, direction 4), worked out from measured steps, never guessed. First
+// match wins: stuck (the last 3 test runs failed, or the last 3 steps did), closing (a run passed after
+// a failing one, or 80%+ of the to-dos are done), thinking (the model alone for 15 s+), exploring
+// (3+ reads, no edit yet), focused (editing, and the last run no worse than the one before).
+// Glyphs keep to the shape tokens: no circles, those belong to effort.
+export type Mood = { glyph: string; word: string; tone: Tone }
+const MOODS = {
+  stuck: { glyph: MARK.fail, word: 'stuck', tone: 'fail' },
+  closing: { glyph: MARK.ok, word: 'closing', tone: 'ok' },
+  thinking: { glyph: '…', word: 'thinking', tone: 'think' },
+  exploring: { glyph: '◇', word: 'exploring', tone: 'explore' },
+  focused: { glyph: MARK.live, word: 'focused', tone: 'live' },
+} as const satisfies Record<string, Mood>
+export function mood(t: Turn, mode: Mode, now: number): Mood | undefined {
+  const steps = t.done.filter(x => x.kind !== 'todo')
+  const runs = t.runs.filter(r => !r.running && !r.isStopped)
+  const tail = runs.slice(-3)
+  if ((tail.length === 3 && tail.every(isFailed)) || (steps.length >= 3 && steps.slice(-3).every(x => x.ok === false))) return MOODS.stuck
+  const last = runs[runs.length - 1]
+  const done = t.todos.filter(x => x.status === 'completed').length
+  if ((last && !isFailed(last) && runs.slice(0, -1).some(isFailed)) || (t.todos.length >= 2 && done / t.todos.length >= 0.8)) return MOODS.closing
+  const quiet = now - (steps[steps.length - 1]?.endedAt ?? t.startedAt)
+  if (!t.running.size && mode === 'thinking' && quiet >= 15_000) return MOODS.thinking
+  const edits = steps.filter(x => x.kind === 'edit').length
+  if (!edits && steps.filter(x => x.kind === 'read').length >= 3) return MOODS.exploring
+  const prev = runs[runs.length - 2]
+  const worse = last && prev && last.total && prev.total && last.pass < prev.pass
+  if (edits && !worse) return MOODS.focused
+  return undefined
 }
 
 // The now card's head as the top edge's band (rounds 11, 13): the band is one tone, so the live tile
