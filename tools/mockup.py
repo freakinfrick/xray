@@ -155,7 +155,8 @@ def today(cols=188):
     lines.append(edge + [('─' * (cols - 1 - W(edge)), 'd'), ('╯', 'd')])
     return check(lines, 'today')
 
-out = {
+if __name__ == '__main__':
+  out = {
     'today': to_html(today()),
     'wideA': to_html(wide(3)), 'wideB': to_html(wide(4)),
     'midA': to_html(mid(3)), 'midB': to_html(mid(4)),
@@ -163,5 +164,5 @@ out = {
     'fail0': to_html(wide(4, fail_frame=0)), 'fail1': to_html(wide(4, fail_frame=1)),
     'idleW': to_html(idle(188)), 'idleP': to_html(idle(44)),
 }
-json.dump(out, open(sys.argv[1], 'w'))
-print('ok', {k: v.count('\n') + 1 for k, v in out.items()})
+  json.dump(out, open(sys.argv[1], 'w'))
+  print('ok', {k: v.count('\n') + 1 for k, v in out.items()})
