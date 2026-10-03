@@ -393,3 +393,18 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - **Pick (2026-10-03, from the page):** "xray r16: go; B" — build all five with the layout rules,
   height B (6 rows when the terminal has ≥ 40 rows, else 5). Order: layout engine → tokens →
   filmstrip → character → motion + transitions.
+- **Built 2026-10-03** (`feat/mods`, 804b53d → 4137ca1, one commit per step): `hooks/layout.ts` draws
+  the wide cards as exact-width rows (rules 1–6; Ink flex boxes gone from the wide path); `MARK`/`EMPH`
+  tokens in `glyphs.ts`; `Step.kind` + `filmstrip()`; `mood()`, narrator voice + `checkVoice()`,
+  `hooks/memory.ts` (store key `history:<cwd>`, 50 events), `planFromText()` for "Step k/N";
+  walking border / ctx gauge, landing cells, chip flash (`Todo.doneAt`), tone fade (`Memo`), `burst()`.
+- Differences from the page, each forced by an earlier rule: mood glyphs ◇ exploring and … thinking
+  (the page drew ◎ ◌, but circles belong to effort); in-progress chips are `◆ name` while done/pending
+  keep their round-5 patches; the band's pulse is now the live step's own cell (the only calm motion);
+  "stuck" is 3 failing runs or 3 failed steps (the page's "3 edits to one file between failures" left
+  out); the 140-column split and the 55% prose hold-back are agent defaults.
+- Checked: `mods/check.sh xray` (validate, tsc, 72 tests). Live in tmux (Haiku, 190×50 and 120×50):
+  tray, gaps, filmstrip with landing cells, failing card walking, mood focused → closing, to-dos
+  folded into the task card at 120. A live check found the now card hoarding width at 120; fixed in
+  4137ca1. Not yet seen: the phone (Termius), forest-light, a recalled memory line (needs a second
+  session in one project), the chip flash and tone fade by eye (unit-tested only).
