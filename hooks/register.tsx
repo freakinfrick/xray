@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, deviceGlyph, lastTurn, where, type Line, type Mode } from './cards'
 import { bar } from './glyphs'
-import { cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
+import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
@@ -11,6 +11,8 @@ import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
+import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
+import { MOMENT_BG, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -60,24 +62,55 @@ type Live = {
   cache: Cache // round 18: the prompt cache's countdown
   isCacheOff: boolean // /xray cache off: no countdown, toast or table
   idleGen: number // the between-turns clock running now; a newer one retires it
-  genome: string[] // round 19: this session's finished turns as step letters (genome.ts)
+  rec: SessionRec // round 19-20: this session's turns as step letters, names, marks, files (session.ts)
   genomeId: string // the session those belong to; /resume or /clear swaps it
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
 // Round 19: the session genome lives in the store per session id; read again whenever the id changes.
+// Round 20: the stored value is the whole session record (a round-19 list still reads, as its turns).
 async function loadGenome($: EngineInterface, s: Live) {
   const id = await $.session.id().catch(() => '')
   if (!id || id === s.genomeId) return
   s.genomeId = id
-  s.genome = genome.load(await $.store.get(genome.keyOf(id)))
+  s.rec = loadRec(await $.store.get(genome.keyOf(id)))
+  s.rec.startedAt ??= await $.clock.now()
 }
-async function saveGenome($: EngineInterface, s: Live, turn: string) {
+async function saveGenome($: EngineInterface, s: Live, letters: string, extra: Parameters<typeof addTurn>[2] = {}) {
   await loadGenome($, s)
   if (!s.genomeId) return
-  s.genome = genome.append(s.genome, turn)
-  await $.store.set(genome.keyOf(s.genomeId), s.genome)
+  s.rec = addTurn(s.rec, letters, extra)
+  await $.store.set(genome.keyOf(s.genomeId), s.rec)
   for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
+}
+
+// Round 20f: a finished turn's milestones, with the folder's step count and its day of test runs kept
+// in the store (counted from the day this shipped; nothing is backfilled).
+type Count = { n: number; since: number }
+async function turnMoments($: EngineInterface, s: Live, t: Turn, letters: string, now: number): Promise<Moment[]> {
+  const sessionBefore = s.rec.turns.reduce((a, x) => a + x.length, 0)
+  const keyN = `steps:${s.cwd}`
+  const kept = (await $.store.get(keyN)) as Count | undefined
+  const count: Count = typeof kept?.n === 'number' ? kept : { n: 0, since: now }
+  if (s.cwd) await $.store.set(keyN, { ...count, n: count.n + letters.length })
+  const keyD = `day:${s.cwd}`
+  const runs = t.runs.filter(r => !r.running && !r.isStopped && (r.total > 0 || r.ok !== undefined)).map(r => (r.total ? r.fail === 0 : r.ok === true))
+  const day = noteRuns((await $.store.get(keyD)) as Day | undefined, runs, now)
+  if (s.cwd && runs.length) await $.store.set(keyD, day.day)
+  return milestones({
+    steps: letters.length,
+    sessionBefore,
+    folderBefore: count.n,
+    folderSince: count.since,
+    turnMs: now - t.startedAt,
+    awayMs: t.awayMs,
+    isAwayCold: t.isAwayCold,
+    prevEndedAt: s.prev?.endedAt,
+    sessionStartedAt: s.rec.startedAt,
+    isFirstGreenToday: day.isFirstGreen,
+    redsToday: day.reds,
+    now,
+  })
 }
 
 // Round 18: between turns, the cache countdown's own clock. It wakes only when the strip's text changes
@@ -240,7 +273,7 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, genome: [], genomeId: '' }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '' }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
@@ -319,7 +352,9 @@ export const register: Register = (on, options) => {
     if (isOff(s) || (e.origin.kind !== 'composer' && s.turn)) return next(e)
     await loadGenome($, s)
     s.prev = s.turn ?? s.prev
-    s.turn = newTurn(e.text, await $.clock.now())
+    const at = await $.clock.now()
+    s.turn = newTurn(e.text, at)
+    if (s.prev?.endedAt !== undefined) Object.assign(s.turn, { awayMs: at - s.prev.endedAt, isAwayCold: cacheLeft(s.cache, at) === 0 })
     carryTodos(s.prev, s.turn)
     s.narration = null
     s.mode = undefined
@@ -409,7 +444,10 @@ export const register: Register = (on, options) => {
       const t = s.turn
       const now = await $.clock.now()
       endTurn(t)
-      await saveGenome($, s, genome.code(t))
+      t.endedAt = now
+      const letters = genome.code(t)
+      const moments = await turnMoments($, s, t, letters, now).catch(() => [])
+      await saveGenome($, s, letters)
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -417,7 +455,7 @@ export const register: Register = (on, options) => {
       // (nothing) and the strip stayed away until something else redrew (round 17 live check).
       s.prev = t
       s.turn = null
-      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined }))
+      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined, moment: pick(moments) }))
       await update($, keptTurn, () => saveTurn(t))
       $.ui.invalidate('ui.render')
       void idle($, s)
@@ -498,7 +536,7 @@ export const register: Register = (on, options) => {
             </Text>
           ))}
           {edge(k.bottom, '╰', '╯', 'kz')}
-          {(e.viewport?.rows ?? Infinity) < SHORT ? null : genomeRows(genome.rows(s.genome, w, { live: s.turn ?? undefined, now, maxRows: 1 }), 'kg', Text)}
+          {(e.viewport?.rows ?? Infinity) < SHORT ? null : genomeRows(genome.rows(s.rec.turns, w, { live: s.turn ?? undefined, now, maxRows: 1 }), 'kg', Text)}
         </Box>
       )
     }
@@ -518,7 +556,7 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         ))}
-        {genomeRows(genome.rows(s.genome, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
+        {genomeRows(genome.rows(s.rec.turns, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
       </Box>
     )
   })
@@ -530,8 +568,8 @@ export const register: Register = (on, options) => {
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
     const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
     // Round 19: the whole genome, nothing folded (cap 40 rows, newest kept).
-    const dna = genome.rows(s.genome, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
-    if (dna.length) sections.push({ title: `genome · ${genome.summary(s.genome)}`, rows: dna })
+    const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
+    if (dna.length) sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: dna })
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -570,90 +608,78 @@ export const register: Register = (on, options) => {
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
-    const own = s.isHidden ? [] : genome.tail(s.genome, width)
+    const own = s.isHidden ? [] : genome.tail(s.rec.turns, width)
     const ownRow = own.length ? genomeRows([[{ t: ' '.repeat(Math.max(0, width - own.reduce((a, g) => a + g.t.length, 0))) }, ...own]], 'ig', Text) : null
-    const cacheSegs = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, await $.clock.now(), !hasTail)
-    const lead = (
-      <Text>
-        {glyph ? <Text>{`${glyph} `}</Text> : null}
-        {folder ? <Text>{`${folder}  `}</Text> : null}
-        {gauge.map((g, i) => (
-          <Text key={`c${i}`} color={g.color} dimColor={g.dim}>
-            {g.t}
-          </Text>
-        ))}
-        {cacheSegs.map((g, i) => (
-          <Text key={`k${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim}>
-            {g.t}
-          </Text>
-        ))}
-        {s.health.map((x, i) => (
-          <Text key={`h${i}`} color="red">{`  ${MARK_WARN} ${x}`}</Text>
-        ))}
-      </Text>
-    )
-    // The strip's own width in cells, to know the room left for the genome on its line (glyph = 2 cells).
-    const leadCells = (glyph ? 3 : 0) + (folder ? folder.length + 2 : 0) + gauge.reduce((a, g) => a + g.t.length, 0) + cacheSegs.reduce((a, g) => a + g.t.length, 0) + s.health.reduce((a, x) => a + x.length + 4, 0)
+    // Only read the clock when a figure needs it (the cache, the session's age).
+    const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
+    const color = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
+    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
+    const owed = (l?.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
+    const memoText = hasTail && l?.memo?.length ? `  ·  ${l.memo.join('  ·  ')}` : ''
+    // Round 20: the one tile slot sits where the memo does; on a phone it takes its own row.
+    const moment: Line = l?.moment && hasTail ? [{ t: '  ' }, ...tile(l.moment)] : []
+    const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
+    const turnCells = l ? 13 + (l.title ?? 'turn').length + 2 + 1 + l.headline.length + cells(moment) + memoText.length + owedCells : 0
+    // Round 20f: the cache bar and the session's age are extras: they draw only while the genome on this
+    // line still shows three turns (or all of them), since the genome is what the line is for.
+    const age: Line = hasTail && s.rec.startedAt !== undefined ? [{ t: `  ${span(now - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }] : []
+    const cacheOf = (isBar: boolean) => (s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, isBar))
+    const leadOf = (isExtra: boolean): Line => [...(glyph ? [{ t: `${glyph} ` }] : []), ...(folder ? [{ t: `${folder}  ` }] : []), ...gauge, ...cacheOf(isExtra), ...(isExtra ? age : []), ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
+    // The strip's width in cells, to know the room left for the genome on its line (glyph = 2 cells).
+    const usedOf = (lead: Line) => cells(lead) + (glyph ? 1 : 0) + turnCells
+    const roomOf = (lead: Line) => width - usedOf(lead) - 3 - EDGE_MARK
+    const extra = leadOf(true)
+    const isExtra = hasTail && !s.isHidden && genome.shown(s.rec.turns, roomOf(extra)) >= Math.min(3, s.rec.turns.length)
+    const lead = isExtra ? extra : leadOf(false)
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
-      const room = width - used - 3 - EDGE_MARK
-      const segs = genome.tail(s.genome, room)
+      const segs = genome.tail(s.rec.turns, width - used - 3 - EDGE_MARK)
       if (!segs.length) return null
-      const n = segs.reduce((a, g) => a + g.t.length, 0)
-      return [
-        <Text key="gtpad">{' '.repeat(Math.max(1, width - used - n - EDGE_MARK))}</Text>,
-        ...segs.map((g, i) => (
-          <Text key={`gt${i}`} color={g.color} dimColor={g.dim}>
-            {g.t}
-          </Text>
-        )),
-      ]
+      return [<Text key="gtpad">{' '.repeat(Math.max(1, width - used - cells(segs) - EDGE_MARK))}</Text>, ...ink(segs, 'gt', Text)]
     }
-    if (!l) {
-      const onLine = right(leadCells)
-      return (
-        <Box paddingX={1} flexDirection="column">
-          <Text wrap="truncate-end">
-            {lead}
-            {onLine}
-          </Text>
-          {onLine ? null : ownRow}
-        </Box>
-      )
-    }
-    const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
-    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
-    const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
-    const memoText = hasTail && l.memo?.length ? `  ·  ${l.memo.join('  ·  ')}` : ''
-    const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
-    const used = leadCells + 13 + (l.title ?? 'turn').length + 2 + 1 + l.headline.length + memoText.length + owedCells
-    const onLine = right(used)
+    const onLine = right(usedOf(lead))
+    const phoneMoment = l?.moment && !hasTail && !s.isHidden ? genomeRows([tile(l.moment, false)], 'im', Text) : null
 
     return (
       <Box paddingX={1} flexDirection="column">
         <Text wrap="truncate-end">
-          {lead}
-          <Text dimColor>{'   last turn '}</Text>
-          <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
-          <Text color={color}>{` ${l.headline}`}</Text>
-          {memoText ? <Text dimColor>{memoText}</Text> : null}
-          {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
-          {!hasTail ? null : owed.length ? (
-            owed.map((x, i) => (
-              <Text key={`o${i}`}>
-                {i ? ' ' : ''}
-                <Text color={x.color ?? 'cyan'} inverse>{` ${x.t} `}</Text>
-              </Text>
-            ))
-          ) : (
-            <Text color="green">nothing ✓</Text>
-          )}
+          {ink(lead, 'ld', Text)}
+          {l ? (
+            <Text>
+              <Text dimColor>{'   last turn '}</Text>
+              <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
+              <Text color={color}>{` ${l.headline}`}</Text>
+              {ink(moment, 'mo', Text)}
+              {memoText ? <Text dimColor>{memoText}</Text> : null}
+              {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
+              {!hasTail ? null : owed.length ? (
+                owed.map((x, i) => (
+                  <Text key={`o${i}`}>
+                    {i ? ' ' : ''}
+                    <Text color={x.color ?? 'cyan'} inverse>{` ${x.t} `}</Text>
+                  </Text>
+                ))
+              ) : (
+                <Text color="green">nothing ✓</Text>
+              )}
+            </Text>
+          ) : null}
           {onLine}
         </Text>
+        {phoneMoment}
         {onLine ? null : ownRow}
       </Box>
     )
   })
+}
+
+const cells = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
+function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
+  return l.map((g, i) => (
+    <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold}>
+      {g.t}
+    </Text>
+  ))
 }
 
 // Round 19: the genome's rows, one Text each (exact widths from genome.ts).
@@ -663,7 +689,7 @@ function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface[
   return rows.map((l, r) => (
     <Text key={`${key}${r}`} wrap="truncate-end">
       {l.map((g, i) => (
-        <Text key={`${key}${r}s${i}`} color={g.color} dimColor={g.dim}>
+        <Text key={`${key}${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold}>
           {g.t}
         </Text>
       ))}

@@ -10,6 +10,8 @@ import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, n
 import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
+import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
+import { MOMENT_BG, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -1282,4 +1284,57 @@ test('genome: the live turn blinks its running step at the end; the store keeps 
   expect(gone).toEqual(['genome:s0', 'genome:s1', 'genome:s2', 'genome:s3', 'genome:s4']) // 45 → 40 kept
   expect(gone).not.toContain('isHidden')
   expect(genome.summary(['ab', 'c'])).toBe('2 turns · 3 steps')
+})
+
+// Round 20: one stored record per session; the one tile slot; 20f milestones and strip extras.
+test('session record: a round-19 list still reads as its turns; the oldest turns take their names and marks along', async () => {
+  expect(loadRec(['re', 3, 'c'])).toEqual({ turns: ['re', 'c'], names: [], marks: [], files: [] })
+  expect(loadRec('nope').turns).toEqual([])
+  let rec = emptyRec()
+  for (let i = 0; i < genome.MAX_TURNS + 2; i++) rec = addTurn(rec, 'r', { name: `n${i}`, marks: i === 1 || i === 3 ? [{ at: 0, kind: 'commit', text: `c${i}` }] : [] })
+  expect(rec.turns.length).toBe(genome.MAX_TURNS)
+  expect(rec.names[0]).toBe('n2')
+  expect(rec.marks).toEqual([{ turn: 1, at: 0, kind: 'commit', text: 'c3' }]) // c1 went with its turn; c3 shifted down
+  const files = mergeFiles([{ f: 'a.ts', cells: 'r', at: 1 }], [{ f: 'b.ts', cells: 'e', at: 3 }, { f: 'a.ts', cells: 'e', at: 2 }])
+  expect(files).toEqual([{ f: 'b.ts', cells: 'e', at: 3 }, { f: 'a.ts', cells: 're', at: 2 }])
+})
+
+test('moments: the slot takes celebration over record over milestone over landmark; the tile is peach with black text', async () => {
+  const m = pick([{ kind: 'landmark', text: 'l' }, { kind: 'milestone', text: 'm' }, { kind: 'record', text: 'r' }])
+  expect(m?.text).toBe('r')
+  expect(tile({ kind: 'milestone', text: 'long haul', fact: '12m turn' })).toEqual([{ t: ' ✦ long haul ', bg: MOMENT_BG, color: 'black' }, { t: ' 12m turn', dim: true }])
+  expect(pick([])).toBe(undefined)
+})
+
+test('20f: milestones fire once, on the turn that crosses them', async () => {
+  const base = { steps: 10, sessionBefore: 0, folderBefore: 0, turnMs: 60_000, now: Date.UTC(2026, 9, 3, 15) }
+  expect(milestones(base)).toEqual([])
+  expect(milestones({ ...base, sessionBefore: 95 }).map(x => x.text)).toEqual(['100th step'])
+  expect(milestones({ ...base, sessionBefore: 100 })).toEqual([]) // already past it
+  expect(milestones({ ...base, folderBefore: 995, folderSince: Date.UTC(2026, 9, 1, 12) })[0]).toMatchObject({ text: '1000th step here' })
+  expect(milestones({ ...base, turnMs: 12 * 60_000 })[0]).toEqual({ kind: 'milestone', text: 'long haul', fact: '12m turn' })
+  expect(milestones({ ...base, awayMs: 72 * 60_000, isAwayCold: true })[0]).toEqual({ kind: 'milestone', text: 'back after 1h12', fact: 'cache was cold' })
+  expect(milestones({ ...base, awayMs: 59 * 60_000 })).toEqual([])
+  expect(milestones({ ...base, prevEndedAt: base.now - 2 * 86_400_000 })[0]?.text).toBe('past midnight')
+})
+
+test('20f: first green today only after a red run the same day', async () => {
+  const now = Date.UTC(2026, 9, 3, 15)
+  const a = noteRuns(undefined, [true], now)
+  expect(a.isFirstGreen).toBe(false) // green with no red before it: every morning would fire
+  const b = noteRuns(undefined, [false, false], now)
+  const c = noteRuns(b.day, [true, true], now + 1000)
+  expect([c.isFirstGreen, c.reds]).toEqual([true, 2])
+  expect(noteRuns(c.day, [false, true], now + 2000).isFirstGreen).toBe(false) // once a day
+  expect(noteRuns(c.day, [false], now + 86_400_000).day.reds).toBe(1) // a new day starts over
+})
+
+test('20f: the cache figure gains an 8-cell draining bar; the genome counts the turns its tail shows', async () => {
+  const c = warm('1h')
+  expect(text(cacheStrip(c, 30 * 60_000, false, true))).toMatch(/^  cache [█▉▊▋▌▍▎▏░ ]{8} 30m left$/)
+  expect(text(cacheStrip(c, 30 * 60_000, false))).toBe('  cache 30m left') // without the bar, as before
+  const turns = Array.from({ length: 20 }, () => 'rrrr')
+  expect(genome.shown(turns, 200)).toBe(20)
+  expect(genome.shown(turns, 30)).toBeLessThan(20)
+  expect(genome.shown(turns, 5)).toBe(0)
 })

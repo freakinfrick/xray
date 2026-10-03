@@ -78,7 +78,7 @@ function remaining(ms: number): string {
 
 // The strip's figure (pick 1b, words; pick 2b, the phone always shows it). Lapsed = a red tile drawn as an
 // explicit background with black text: Termius misdraws reverse video (capture 7).
-export function cacheStrip(c: Cache, now: number, isPhone: boolean): Line {
+export function cacheStrip(c: Cache, now: number, isPhone: boolean, isBar = false): Line {
   const left = cacheLeft(c, now)
   if (left === null || !c.ttl) return []
   if (left === 0)
@@ -88,7 +88,11 @@ export function cacheStrip(c: Cache, now: number, isPhone: boolean): Line {
   const isWarn = left <= WARN_MS[c.ttl]
   const color = isWarn ? 'yellow' : undefined
   if (isPhone) return [{ t: ` ⏱${remaining(left)}`, color, dim: !isWarn }]
-  return [{ t: '  cache ', dim: true }, { t: `${remaining(left)} left`, color }, ...(c.ttl === '5m' ? [{ t: ' (5 min)', dim: true }] : [])]
+  // Round 20f: an 8-cell draining bar, drawn from the figure shown (whole minutes above five), so it
+  // moves only on a tick where the number moves. At rest in the terminal's own ink, yellow when warning.
+  const shown = left >= SECONDS_UNDER ? Math.ceil(left / 60_000) * 60_000 : left
+  const gauge: Line = isBar ? [...bar(Math.min(1, shown / TTL_MS[c.ttl]), 8, color), { t: ' ' }] : []
+  return [{ t: '  cache ', dim: true }, ...gauge, { t: `${remaining(left)} left`, color }, ...(c.ttl === '5m' ? [{ t: ' (5 min)', dim: true }] : [])]
 }
 
 // When the strip's text next changes: each minute boundary, every second in the last five minutes,

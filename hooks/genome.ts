@@ -110,3 +110,12 @@ export function tail(turns: readonly string[], room: number, label = 'genome '):
 }
 
 export const summary = (turns: readonly string[]) => `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${turns.reduce((a, x) => a + x.length, 0)} steps`
+
+// How many turns `tail` shows in `room` cells (round 20f: the strip's extras give way before the genome
+// drops under three turns).
+export function shown(turns: readonly string[], room: number, label = 'genome '): number {
+  const r = tail(turns, room, label)
+  if (!r.length) return 0
+  const fold = r.find(g => g.t.startsWith('+'))
+  return turns.length - (fold ? Number(fold.t.slice(1).split(' ')[0]) : 0)
+}

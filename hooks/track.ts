@@ -68,6 +68,9 @@ export type Turn = {
   isRecipeAsked?: boolean
   template: Template
   effort?: string | number // the last main-agent request's effort, as sent
+  endedAt?: number // round 20: when turn.complete came
+  awayMs?: number // round 20f: the gap between the previous turn's end and this prompt
+  isAwayCold?: boolean // the prompt cache had lapsed by then
 }
 
 export const newTurn = (prompt: string, now: number): Turn => ({
