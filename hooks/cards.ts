@@ -19,7 +19,8 @@ export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, 
 const secs = (ms: number) => Math.floor(ms / 1000)
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
 
-export function nowCard(t: Turn, mode: Mode, narration: string | null, now: number): Card {
+// sayMax: step text is kept up to 72 chars; the wide cards show 40 as they always have, the narrow card all of it.
+export function nowCard(t: Turn, mode: Mode, narration: string | null, now: number, sayMax = 40): Card {
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)
   let what: string
   let tone: Tone
@@ -27,7 +28,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   let since = done?.endedAt ?? t.startedAt // idle time counts from the last finished step
   const first = live[0]
   if (first) {
-    what = first.say + (live.length > 1 ? ` +${live.length - 1}` : '')
+    what = clip(first.say, sayMax) + (live.length > 1 ? ` +${live.length - 1}` : '')
     tone = 'live'
     since = first.startedAt
   } else if (mode === 'thinking') {
@@ -45,7 +46,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   }
   const el = secs(now - since)
   const last = t.done[t.done.length - 1]
-  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${last.say}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
+  const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${clip(last.say, sayMax)}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
@@ -280,7 +281,7 @@ export type Compact = { tone: Tone; top: Line; body: Line[]; bottom: Line }
 const LABEL = 'steps ' // so both gauges start in one column: '│ ' + 6 cells = '╰─ ' + 'ctx  '
 
 export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercent: number | null, now: number, width: number, isTicker: boolean): Compact {
-  const card = nowCard(t, mode, narration, now)
+  const card = nowCard(t, mode, narration, now, 72)
   const [head = [], sub = []] = card.lines
   const live = t.running.size > 0
   const last = t.done[t.done.length - 1]
@@ -297,11 +298,13 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const squares: Line | undefined = t.todos.length ? [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }] : undefined
   const rate = tokRate(t)
   const tok: Line | undefined = rate === null ? undefined : [{ t: `${rate} t/s` }]
-  const top = clipLine(head, edge)
+  // The card grows at most one row so status texts are not cut: the status's overflow takes it first,
+  // else the narration's (rounds 9–10).
+  const [top, more] = wrapOnce(head, edge, inner)
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
     const counts: Line = [...steps(6), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
-    return { tone, top, body: [fitParts([counts, squares, ctx, tok], inner, ' · ')], bottom: [] }
+    return { tone, top, body: [...(more ? [more] : []), fitParts([counts, squares, ctx, tok], inner, ' · ')], bottom: [] }
   }
   const isTask = !!t.signal || t.template !== 'default'
   const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [{ t: LABEL, dim: true }, ...steps(GAUGE), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
@@ -312,7 +315,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   return {
     tone,
     top,
-    body: [clipLine(sub, inner), fitParts([progress, squares], inner, '  ')],
+    body: [...(more ? [more, clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, squares], inner, '  ')],
     bottom: fitParts([gauge, tok, turn, cache], edge, '  '),
   }
 }
@@ -350,6 +353,17 @@ function fitParts(parts: (Line | undefined)[], width: number, sep: string): Line
     out.push(...next)
   }
   return out
+}
+
+// A line that fits `first` cells as is; else cut at the last word that fits, the rest one more row
+// (indented 2, cut with an ellipsis when it too runs past `rest`).
+function wrapOnce(l: Line, first: number, rest: number): [Line, Line | undefined] {
+  if (cells(l) <= first) return [l, undefined]
+  const all = l.map(s => s.t).join('')
+  const space = all.lastIndexOf(' ', first)
+  const cut = space > first / 3 ? space : first
+  const [head, tail] = splitLine(l, cut, all[cut] === ' ' ? 1 : 0)
+  return [head, clipLine([{ t: '  ' }, ...tail], rest)]
 }
 
 // A line cut at the last word that fits, with an ellipsis; a line that fits is kept as is.

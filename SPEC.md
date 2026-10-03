@@ -285,3 +285,19 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   one cell at any use (Termius drew the `▎` eighth near-blank, capture 6); step and test-run
   elapsed past a minute read `2m 01s` like the turn clock; so do `/xray` panel request and step
   times (tenths kept under 10 s). 53 tests.
+
+## Round 10 — the card grows one row (2026-10-03)
+
+- User, verbatim: "lets adjust the card so it can grow an extra row to avoid truncation of the
+  status texts both with leyboard up and down".
+- The narrow card may grow by **one** body row (5 rows keyboard down, 4 up). The status (top edge)
+  takes it first: cut at a word, the rest on the spare row indented 2; else the narration wraps
+  into it. When the status took it, the narration is cut with `…` as before. Anything still past
+  the spare row ends in `…`.
+- Step text: `sayStep` now keeps a Bash description up to 72 chars (was 40). `nowCard(…, sayMax)`
+  shows 40 by default, so the wide cards are unchanged; the narrow card passes 72.
+- Reload notice (asked the same turn): `xray: reloaded (N hooks: …)` is printed by Claude Code
+  whenever the mod's files change; there is no setting to silence it. It shows only on turns
+  that edit the mod.
+- Checked: validate, tsc, 55 tests (status wrap keyboard up/down, narration wrap, one-row cap,
+  40/72 step text); text render at 44 cols eyeballed.

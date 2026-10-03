@@ -623,18 +623,20 @@ test('with the keyboard up (few rows) the panel shows fewer of each', async () =
 })
 
 // Rounds 8–9: under 60 columns one framed card, `width` cells wide: edges hold ≤ width − 6, body rows ≤ width − 4.
-test('on a phone the card is 4 rows, each within the frame, nothing cut mid-word', async () => {
+test('on a phone the card grows one row for a long narration, each row within the frame', async () => {
   const t = busyTurn()
-  startStep(t, 'live', 'Bash', { command: 'make deploy', description: 'Deploy the whole integration build for the device mod' }, 900)
+  startStep(t, 'live', 'Bash', { command: 'ls', description: 'List files' }, 900) // a short status: the spare row is the narration's
   t.todos[0] = { ...t.todos[0]!, status: 'completed' }
   t.todos[1] = { ...t.todos[1]!, status: 'in_progress' }
   const k = compact(t, 'tool-use', 'checking which of the model files exist on the disk right now', 41, 30_000, 44, false)
-  expect(k.body.length).toBe(2)
+  expect(k.body.length).toBe(3)
   expect(text(k.top).length).toBeLessThanOrEqual(38)
   expect(text(k.bottom).length).toBeLessThanOrEqual(38)
   for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
-  expect(text(k.body[0])).toMatch(/^» checking which of the model files…$/)
-  expect(text(k.body[1])).toMatch(/^steps █{6}[█▄]░ 6 done {2}■◉□□□□ 1\/6$/)
+  // The narration takes the one spare row instead of being cut.
+  expect(text(k.body[0])).toBe('» checking which of the model files')
+  expect(text(k.body[1])).toBe('  exist on the disk right now')
+  expect(text(k.body[2])).toMatch(/^steps █{6}[█▄]░ 6 done {2}■◉□□□□ 1\/6$/)
   expect(text(k.bottom)).toMatch(/^ctx {2}.{8} 41% {2}\d+ t\/s {2}30s$/)
   expect(k.tone).toBe('live')
 })
@@ -659,7 +661,10 @@ test('with the keyboard up the body folds to one row and the bottom edge is bare
   // 6000 t/s would push the row past 40 cells, so it goes whole.
   expect(text(k.body[0])).toBe('██████ 6 · □□□□□□ 0/6 · ctx 6%')
   // Too narrow for every part: the rightmost go whole, the rest stay intact.
-  expect(text(compact(busyTurn(), undefined, null, 6, 30_000, 28, true).body[0])).toBe('██████ 6 · □□□□□□ 0/6')
+  // At 28 cells the status ('◇ waiting on the model · 29s') wraps too, so the folded row is second.
+  const narrow = compact(busyTurn(), undefined, null, 6, 30_000, 28, true)
+  expect(text(narrow.body[0])).toBe('  · 29s')
+  expect(text(narrow.body[1])).toBe('██████ 6 · □□□□□□ 0/6')
 })
 
 test('the spinner draws one framed card at 47 columns, folded at 21 rows, the three cards at 100', async ($, on) => {
@@ -706,4 +711,33 @@ test('panel times past a minute read 2m 01s, not 121s', async () => {
   expect(rows.some(r => r.includes('2m 01s'))).toBe(true)
   expect(rows.some(r => /\b121s\b/.test(r))).toBe(false)
   expect(rows.some(r => r.includes('4.2s'))).toBe(true)
+})
+
+test('a long status wraps into the spare row, keyboard up or down; the card grows by one row at most', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
+  const say = 'a narration line that would also like the spare row on the phone screen'
+  const down = compact(t, 'tool-use', say, 20, 9_000, 44, false)
+  const up = compact(t, 'tool-use', say, 20, 9_000, 44, true)
+  const status = text(nowCard(t, 'tool-use', null, 9_000, 72).lines[0])
+  expect(status.length).toBeGreaterThan(38)
+  for (const k of [down, up]) {
+    expect(text(k.top).length).toBeLessThanOrEqual(38)
+    expect(text(k.body[0])).toMatch(/^ {2}\S/)
+    expect((text(k.top) + ' ' + text(k.body[0]).trim()).replace(/…$/, '')).toBe(status.slice(0, text(k.top).length + 1 + text(k.body[0]).trim().replace(/…$/, '').length))
+    for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
+  }
+  expect(down.body.length).toBe(3)
+  expect(text(down.body[1])).toMatch(/…$/)
+  expect(up.body.length).toBe(2)
+  // A short status and short narration: no extra row.
+  expect(compact(newTurn('x', 0), undefined, 'short', 20, 1000, 44, false).body.length).toBe(2)
+  expect(compact(newTurn('x', 0), undefined, null, 20, 1000, 44, true).body.length).toBe(1)
+})
+
+test('step text is kept to 72 chars; the wide now card still shows 40', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
+  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle fo… ▄')
+  expect(text(nowCard(t, 'tool-use', null, 1000, 72).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▄')
 })
