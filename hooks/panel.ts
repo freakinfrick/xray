@@ -32,7 +32,12 @@ function fit(core: Line, extras: Line[], cols: number): Line {
 }
 const GAUGE = 12
 
-const secs = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 1000)}s`)
+// Tenths under 10 s, whole seconds to a minute, then 2m 01s like the cards (fits the 6-cell column).
+const secs = (ms: number) => {
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
 const kilo = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n))
 const when = (iso: string) => {
   const ms = Date.parse(iso)

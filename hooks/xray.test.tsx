@@ -696,3 +696,14 @@ test('a step past a minute reads 2m 01s, not 121s', async () => {
   startStep(t, 'a', 'Bash', { command: 'make' }, 0)
   expect(text(nowCard(t, 'tool-use', null, 121_000).lines[0])).toContain('· 2m 01s')
 })
+
+test('panel times past a minute read 2m 01s, not 121s', async () => {
+  const t = newTurn('x', 0)
+  t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 121_000, output: 100, input: 10, cacheRead: 0, cacheWrite: 0 })
+  startStep(t, 'a', 'Bash', { command: 'make' }, 0)
+  finishStep(t, 'a', 'Bash', { command: 'make' }, true, '', undefined, 4_200)
+  const rows = panel(t, null, 200_000).flatMap(x => x.rows.map(r => text(r)))
+  expect(rows.some(r => r.includes('2m 01s'))).toBe(true)
+  expect(rows.some(r => /\b121s\b/.test(r))).toBe(false)
+  expect(rows.some(r => r.includes('4.2s'))).toBe(true)
+})
