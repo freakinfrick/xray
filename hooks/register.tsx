@@ -285,7 +285,7 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     // A narration line is news for 30 s; after that the last finished step says more.
     const said = now - s.narratedAt < NARRATION_TTL_MS ? s.narration : null
-    // Under 60 columns, rounds 8–9: one framed card; with few rows (phone keyboard up) its body folds to one row.
+    // Under 60 columns, rounds 8–11: one framed card; with few rows (phone keyboard up) its body folds to one row.
     if ((e.viewport?.columns ?? 100) < NARROW) {
       const w = Math.max(24, (e.viewport?.columns ?? 47) - 3) // never fill the last column
       const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT)
@@ -305,10 +305,30 @@ export const register: Register = (on, options) => {
           <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '─'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
         </Text>
       )
+      // The status as a band in the tone color, text reversed (round 11). It starts right after the
+      // corner, so its text sits in column 2 like the body's; its overflow is a band row under it.
+      const hi = (t: string, key: string) => (
+        <Text key={key} color={color} dimColor={dim} inverse>
+          {` ${t} `}
+        </Text>
+      )
+      const pulseCells = k.pulse ? 1 + k.pulse.t.length : 0
       return (
         <Box flexDirection="column">
           {line}
-          {edge(k.top, '╭', '╮', 'kt')}
+          <Text key="kt" wrap="truncate-end">
+            <Text color={color} dimColor={dim}>{'╭'}</Text>
+            {hi(k.status, 'kts')}
+            {k.pulse ? <Text color={k.pulse.color}>{` ${k.pulse.t}`}</Text> : null}
+            <Text color={color} dimColor={dim}>{' ' + '─'.repeat(Math.max(1, w - 5 - k.status.length - pulseCells)) + '╮'}</Text>
+          </Text>
+          {k.more ? (
+            <Text key="km" wrap="truncate-end">
+              <Text color={color} dimColor={dim}>{'│'}</Text>
+              {hi(k.more, 'kms')}
+              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - k.more.length)) + '│'}</Text>
+            </Text>
+          ) : null}
           {k.body.map((l, r) => (
             <Text key={`kb${r}`} wrap="truncate-end">
               <Text color={color} dimColor={dim}>{'│ '}</Text>

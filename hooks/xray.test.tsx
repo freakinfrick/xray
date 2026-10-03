@@ -630,7 +630,8 @@ test('on a phone the card grows one row for a long narration, each row within th
   t.todos[1] = { ...t.todos[1]!, status: 'in_progress' }
   const k = compact(t, 'tool-use', 'checking which of the model files exist on the disk right now', 41, 30_000, 44, false)
   expect(k.body.length).toBe(3)
-  expect(text(k.top).length).toBeLessThanOrEqual(38)
+  expect(k.status.length).toBeLessThanOrEqual(36) // band: width − 8
+  expect(k.more).toBeUndefined()
   expect(text(k.bottom).length).toBeLessThanOrEqual(38)
   for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
   // The narration takes the one spare row instead of being cut.
@@ -663,8 +664,8 @@ test('with the keyboard up the body folds to one row and the bottom edge is bare
   // Too narrow for every part: the rightmost go whole, the rest stay intact.
   // At 28 cells the status ('◇ waiting on the model · 29s') wraps too, so the folded row is second.
   const narrow = compact(busyTurn(), undefined, null, 6, 30_000, 28, true)
-  expect(text(narrow.body[0])).toBe('  · 29s')
-  expect(text(narrow.body[1])).toBe('██████ 6 · □□□□□□ 0/6')
+  expect(narrow.more).toBe('model · 29s')
+  expect(text(narrow.body[0])).toBe('██████ 6 · □□□□□□ 0/6')
 })
 
 test('the spinner draws one framed card at 47 columns, folded at 21 rows, the three cards at 100', async ($, on) => {
@@ -674,7 +675,8 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   const at = (columns: number, rows: number) => $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps, viewport: { columns, rows } })
   const phone = await at(47, 42)
   expect(await phone.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
-  expect(await phone.find({ type: 'Text', text: /^╭─ $/ })).toBeDefined()
+  expect(await phone.find({ type: 'Text', text: /^╭$/ })).toBeDefined()
+  expect(await phone.find({ type: 'Text', text: /^ ◇ thinking $/ })).toBeDefined() // the status band
   expect(await phone.find({ type: 'Text', text: /thinking/ })).toBeDefined()
   expect(await phone.find({ type: 'Text', text: /^» / })).toBeDefined()
   await phone.unmount()
@@ -719,17 +721,19 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
   const say = 'a narration line that would also like the spare row on the phone screen'
   const down = compact(t, 'tool-use', say, 20, 9_000, 44, false)
   const up = compact(t, 'tool-use', say, 20, 9_000, 44, true)
-  const status = text(nowCard(t, 'tool-use', null, 9_000, 72).lines[0])
-  expect(status.length).toBeGreaterThan(38)
+  // The band carries the status as plain text: tile, timer and spaces folded, the pulse kept apart.
+  expect(down.status).toBe('◆ rebuild the whole integration')
+  expect(down.more).toBe('bundle for every device · 9s')
+  expect(down.pulse?.t).toMatch(/^[▂▄▆█]$/)
   for (const k of [down, up]) {
-    expect(text(k.top).length).toBeLessThanOrEqual(38)
-    expect(text(k.body[0])).toMatch(/^ {2}\S/)
-    expect((text(k.top) + ' ' + text(k.body[0]).trim()).replace(/…$/, '')).toBe(status.slice(0, text(k.top).length + 1 + text(k.body[0]).trim().replace(/…$/, '').length))
+    expect(k.status.length).toBeLessThanOrEqual(36)
+    expect(k.more).toBe(down.more)
     for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
   }
-  expect(down.body.length).toBe(3)
-  expect(text(down.body[1])).toMatch(/…$/)
-  expect(up.body.length).toBe(2)
+  // The status took the spare row: the narration is cut, the card grows by that one row only.
+  expect(down.body.length).toBe(2)
+  expect(text(down.body[0])).toMatch(/^» a narration .*…$/)
+  expect(up.body.length).toBe(1)
   // A short status and short narration: no extra row.
   expect(compact(newTurn('x', 0), undefined, 'short', 20, 1000, 44, false).body.length).toBe(2)
   expect(compact(newTurn('x', 0), undefined, null, 20, 1000, 44, true).body.length).toBe(1)

@@ -276,7 +276,9 @@ export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line
 // Under 60 columns (a phone, a narrow pane), rounds 8–9: one card `width` cells wide. Top edge = what
 // runs now; body = narration, then steps + to-do squares; bottom edge = telemetry. Ticker (few rows,
 // the phone's keyboard up): the body folds to one row and the bottom edge stays bare.
-export type Compact = { tone: Tone; top: Line; body: Line[]; bottom: Line }
+// status: the top edge's highlighted band (round 11), `more` its overflow on a band row of its own;
+// pulse: the live step's 1 Hz glyph, drawn after the band in the tone color.
+export type Compact = { tone: Tone; status: string; more?: string; pulse?: Seg; body: Line[]; bottom: Line }
 
 const LABEL = 'steps ' // so both gauges start in one column: '│ ' + 6 cells = '╰─ ' + 'ctx  '
 
@@ -288,6 +290,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const tone: Tone = !live && last?.ok === false ? 'fail' : card.tone
   const inner = width - 4 // │ text │
   const edge = width - 6 // ╭─ text ─╮, at least one ─ of fill
+  const band = width - 8 // ╭ ␣status␣ ▂ ─╮: the band's two pads, the pulse and one ─ of fill
   const failed = t.done.filter(x => x.ok === false).length
   // The steps as a gauge the ctx bar's shape: one █ per step on the same dim ░ track.
   const steps = (n: number): Line => {
@@ -300,11 +303,17 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const tok: Line | undefined = rate === null ? undefined : [{ t: `${rate} t/s` }]
   // The card grows at most one row so status texts are not cut: the status's overflow takes it first,
   // else the narration's (rounds 9–10).
-  const [top, more] = wrapOnce(head, edge, inner)
+  // The band is one tone, so the status goes in as plain text: the live tile and dim timer fold into it.
+  const tail = live ? head[head.length - 1] : undefined
+  const pulse = tail ? { ...tail, t: tail.t.trim() } : undefined
+  const said = (tail ? head.slice(0, -1) : head).map(x => x.t).join('').replace(/\s+/g, ' ').trim()
+  const [first, rest] = wrapOnce([{ t: said }], band, inner)
+  const status = first.map(x => x.t).join('')
+  const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
     const counts: Line = [...steps(6), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
-    return { tone, top, body: [...(more ? [more] : []), fitParts([counts, squares, ctx, tok], inner, ' · ')], bottom: [] }
+    return { tone, status, more, pulse, body: [fitParts([counts, squares, ctx, tok], inner, ' · ')], bottom: [] }
   }
   const isTask = !!t.signal || t.template !== 'default'
   const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [{ t: LABEL, dim: true }, ...steps(GAUGE), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
@@ -314,8 +323,10 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]
   return {
     tone,
-    top,
-    body: [...(more ? [more, clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, squares], inner, '  ')],
+    status,
+    more,
+    pulse,
+    body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, squares], inner, '  ')],
     bottom: fitParts([gauge, tok, turn, cache], edge, '  '),
   }
 }

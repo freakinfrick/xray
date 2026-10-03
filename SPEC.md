@@ -301,3 +301,16 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   that edit the mod.
 - Checked: validate, tsc, 55 tests (status wrap keyboard up/down, narration wrap, one-row cap,
   40/72 step text); text render at 44 cols eyeballed.
+
+## Round 11 — status as a highlighted band (2026-10-03)
+
+- User, verbatim: "lets make the status line "highlighted" with the status box color and its text
+  will be "negative" so it visually pops, we can scoot it over to the left 1 char longer for
+  nicer alignments".
+- Top edge: `╭` + band ` status ` (inverse, the card's tone color; quiet = dim inverse, a grey
+  patch) + live pulse in its own color + `─…╮`. The band starts right after the corner (one
+  column left of the old `╭─ text`), so its text sits in column 2 like the body rows'.
+- The band is one tone: the live `◆` tile, timer and spacing fold into plain text. Band text
+  ≤ width − 8. Overflow (round 10's spare row) is a band row of its own: `│` + band + `│`.
+- Checked: validate, tsc, 55 tests (band text, overflow band, pulse apart, mounted band at 47×42);
+  text render at 44 cols eyeballed. Not yet seen on the phone.
