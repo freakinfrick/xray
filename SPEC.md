@@ -497,3 +497,4 @@ What is known (agent, 2026-10-03):
 - A name cut short on a tall terminal takes the ▸ row back (3 name rows instead of 2).
 - Still open: the phone (Termius) unseen for round 16–17; a carried list ≥ 80% done opens in the green
   "closing" mood before any step runs (per the round-16 rule).
+- Phone check deferred by the user (2026-10-03, "skip phone for now").
