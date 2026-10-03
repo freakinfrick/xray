@@ -36,3 +36,10 @@ export function spark(xs: readonly number[], color = 'cyan'): Seg {
 
 // A solid tile: the glyph in the terminal's background color on `color`.
 export const tile = (t: string, color: string): Seg => ({ t, color, inv: true })
+
+// One meaning per shape, on every card and the panel (round 16, direction 5). Circles belong to effort
+// alone (○ ◐ ● ◉, Claude Code's own), so a status mark never reads as an effort level.
+export const MARK = { live: '◆', done: '■', pending: '□', warn: '▲', fail: '✕', ok: '✓' } as const
+// Emphasis in four steps and none between: dim (context, labels, pending), plain (values), bright
+// (the one value that changed or matters), band (a card's state, one per card at most).
+export const EMPH = { dim: { dim: true }, plain: {}, bright: { bold: true } } as const

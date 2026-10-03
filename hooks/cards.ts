@@ -3,7 +3,7 @@
 
 import type { LastTurn } from '../types'
 import { DEFAULTS, customCard } from './custom'
-import { SPARK, bar, frame, spark, tile } from './glyphs'
+import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
 import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
 // inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
@@ -49,7 +49,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   }
   const el = secs(now - since)
   const last = t.done[t.done.length - 1]
-  const lastLine: Line | undefined = last ? [{ t: 'last: ', dim: true }, { t: last.say + (last.ok === false ? ' ✗' : ''), dim: true }] : undefined
+  const lastLine: Line | undefined = last ? [{ t: 'last: ', dim: true }, { t: last.say + (last.ok === false ? ` ${MARK.fail}` : ''), dim: true }] : undefined
   const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : lastLine ? [{ t: lastLine.map(x => x.t).join(''), dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
@@ -78,12 +78,12 @@ function stepGauge(t: Turn, n: number, now: number): Line {
 
 const NBSP = '\u00a0' // keeps a chip whole when its row wraps
 
-// One patch per to-do: a grey patch while pending, its own color in progress (mark and name) and a
+// One patch per to-do: a grey patch while pending, ◆ and its name in its own color in progress, and a
 // solid patch in that color when done.
 function chip(x: Todo): Line {
   const name = clip(x.text, 48).replace(/ /g, NBSP)
   if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
-  if (x.status === 'in_progress') return [{ t: '▐◉▌', color: x.color }, { t: name, color: x.color }]
+  if (x.status === 'in_progress') return [{ t: `${MARK.live} `, color: x.color }, { t: name, color: x.color, bold: true }]
   return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
 }
 
@@ -94,7 +94,7 @@ export function todoCard(t: Turn, ctxPercent: number | null): Card {
   const q = t.queued.size
   const bg = runningAgents(t).length
   const warn = ctxPercent !== null && ctxPercent >= 70
-  const tags: Line = [...(q ? [{ t: `${q} queued`, dim: true }] : []), ...(bg ? [{ t: plural(bg, 'agent'), dim: true }] : []), ...(warn ? [{ t: `⚠ context ${Math.round(ctxPercent)}%`, color: 'yellow' }] : [])]
+  const tags: Line = [...(q ? [{ t: `${q} queued`, dim: true }] : []), ...(bg ? [{ t: plural(bg, 'agent'), dim: true }] : []), ...(warn ? [{ t: `${MARK.warn} context ${Math.round(ctxPercent)}%`, color: 'yellow' }] : [])]
   const note = tags.flatMap((s, i) => (i ? [{ t: ' · ', dim: true }, s] : [s]))
   const cur = t.todos.find(x => x.status === 'in_progress')
   return {
@@ -147,7 +147,7 @@ function testsCard(t: Turn, now: number): Card {
   return {
     title: `tests · run ${n}`,
     tone: 'fail',
-    lines: [[...bar, { t: `${r.pass}/${r.total} pass` }], [{ t: '✗ ', color: 'red' }, { t: name ? name + (r.fail > 1 ? ` +${r.fail - 1}` : '') : plural(r.fail, 'failing test') }]],
+    lines: [[...bar, { t: `${r.pass}/${r.total} pass` }], [{ t: `${MARK.fail} `, color: 'red' }, { t: name ? name + (r.fail > 1 ? ` +${r.fail - 1}` : '') : plural(r.fail, 'failing test') }]],
     spare,
   }
 }
@@ -191,7 +191,7 @@ function agentsCard(t: Turn): Card {
   const live = runningAgents(t)
   const failed = t.agents.filter(a => a.ok === false).length
   const done = t.agents.length - live.length - failed
-  const marks: Line = t.agents.slice(0, 12).map(a => (a.endedAt === undefined ? { t: '◆', color: 'cyan' } : a.ok === false ? { t: '✗', color: 'red' } : { t: '●', color: 'green' }))
+  const marks: Line = t.agents.slice(0, 12).map(a => (a.endedAt === undefined ? { t: MARK.live, color: 'cyan' } : a.ok === false ? { t: MARK.fail, color: 'red' } : { t: MARK.done, color: 'green' }))
   const counts = [live.length ? `${live.length} running` : '', done ? `${done} done` : '', failed ? `${failed} failed` : ''].filter(Boolean).join(' · ')
   const first = live[0]
   const tone: Tone = live.length ? 'live' : failed ? 'fail' : 'ok'
@@ -219,7 +219,7 @@ function progressCard(t: Turn, now: number): Card {
 }
 
 function dots(t: Turn): Line {
-  return t.todos.slice(0, 12).map(x => ({ t: x.status === 'completed' ? '●' : x.status === 'in_progress' ? '◉' : '○', color: x.status === 'pending' ? undefined : 'green', dim: x.status === 'pending' }))
+  return t.todos.slice(0, 12).map(x => ({ t: x.status === 'completed' ? MARK.done : x.status === 'in_progress' ? MARK.live : MARK.pending, color: x.status === 'pending' ? undefined : 'green', dim: x.status === 'pending' }))
 }
 
 // One square per to-do in its hue, then k/N; undefined before any to-do list exists.
@@ -230,7 +230,7 @@ function squares(t: Turn): Line | undefined {
 }
 
 // A segment of bars, sparklines or marks only (dots and spaces aside): no words for a one-line summary.
-const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐][\s·█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■●◉○◆✗▐]*$/
+const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■□◆▲✕▐][\s·█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■□◆▲✕▐]*$/
 
 // The one line above the prompt between turns: how it ended, what is still owed.
 // The device mod's class as the idle strip's leading glyph; unknown (or no device mod) draws nothing.
@@ -343,7 +343,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
-    const counts: Line = [...stepGauge(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
+    const counts: Line = [...stepGauge(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
   const progress: Line = taskCard(t, now).lines[0] ?? []
@@ -365,8 +365,8 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
 // Any use at all shows one cell.
 const wholeCells = (frac: number, n: number) => (frac > 0 ? Math.max(1, Math.round(frac * n)) / n : 0)
 
-// One square per to-do in its hue: solid when done, ◉ in progress, a grey □ while pending.
-const squareOf = (x: Todo): Seg => (x.status === 'completed' ? { t: '■', color: x.color } : x.status === 'in_progress' ? { t: '◉', color: x.color } : { t: '□', dim: true })
+// One square per to-do in its hue: solid when done, ◆ in progress, a grey □ while pending.
+const squareOf = (x: Todo): Seg => (x.status === 'completed' ? { t: MARK.done, color: x.color } : x.status === 'in_progress' ? { t: MARK.live, color: x.color } : { t: MARK.pending, dim: true })
 
 const tokRate = (t: Turn): number | null => {
   const done = t.requests.filter(r => r.endedAt > r.firstAt)

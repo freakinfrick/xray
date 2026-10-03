@@ -1,7 +1,7 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
 import type { Line } from './cards'
-import { bar, tile } from './glyphs'
+import { MARK, bar, tile } from './glyphs'
 import type { Entry } from './ledger'
 import { openTodos, type Request, type Step, type Turn } from './track'
 
@@ -74,7 +74,7 @@ function requestRow(r: Request, n: number, longest: number, cols: number): Line 
 }
 
 function stepRow(s: Step, now: number, cols: number): Line {
-  const mark = s.endedAt === undefined ? tile(' ◆ ', 'cyan') : s.ok === false ? tile(' ✗ ', 'red') : tile(' ✓ ', 'green')
+  const mark = s.endedAt === undefined ? tile(` ${MARK.live} `, 'cyan') : s.ok === false ? tile(` ${MARK.fail} `, 'red') : tile(` ${MARK.ok} `, 'green')
   // mark (3) + space + text + secs (7)
   const n = Math.max(12, Math.min(STEP_TEXT, cols - 11))
   return [mark, { t: ' ' }, { t: (s.say.length > n ? s.say.slice(0, n - 1) + '…' : s.say).padEnd(n) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]

@@ -136,7 +136,7 @@ test('spawned agents make the agents card: who runs, what the oldest is doing, t
   finishAgent(t, { agentId: 'ag1' }, true, 30)
   finishAgent(t, { agentId: 'ag2' }, false, 31)
   card = taskCard(t, 40)
-  expect(text(card.lines[0])).toBe('●✗ 1 done · 1 failed')
+  expect(text(card.lines[0])).toBe('■✕ 1 done · 1 failed')
   expect(card.tone).toBe('fail')
   expect(lastTurn(t, 40).headline).toBe('1 done · 1 failed')
 })
@@ -183,7 +183,7 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress' }, { content: 'commit', status: 'pending' }] }, 0)
   const card = todoCard(t, 50)
   expect(card.title).toBe('to-do · 1 of 3')
-  expect((card.chips ?? []).map(c => text(c).replace(/\u00a0/g, ' '))).toEqual([' read spec ', '▐◉▌draw cards', ' commit '])
+  expect((card.chips ?? []).map(c => text(c).replace(/\u00a0/g, ' '))).toEqual([' read spec ', '◆ draw cards', ' commit '])
   expect(card.chips?.[0]?.[0]?.inv).toBe(true) // done: a solid patch in its hue
   expect(card.chips?.at(-1)?.at(-1)?.inv).toBe(true) // pending: a grey patch
   expect(text(card.foot)).toBe('▸ ' + t.todos[1]?.active) // the one in progress, as the card's fact row
@@ -193,7 +193,7 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   expect(done?.color).toBe(t.todos[0]?.color)
   expect(card.chips?.at(-1)?.at(-1)?.dim).toBe(true)
   expect(card.note).toBeUndefined()
-  expect(text(todoCard(t, 72).note)).toBe('⚠ context 72%')
+  expect(text(todoCard(t, 72).note)).toBe('▲ context 72%')
   // a rewrite keeps each surviving to-do's hue
   const hue = t.todos[1]?.color
   startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'draw cards', status: 'completed' }, { content: 'commit', status: 'in_progress' }, { content: 'push', status: 'pending' }] }, 1)
@@ -344,7 +344,7 @@ test('the panel lists requests on one time scale, recent steps, and session budg
   expect(text(req?.rows[0])).toBe('#1  ' + '▒'.repeat(7) + '█'.repeat(13) + ' ' + '  3.0s  80 out · 40 tok/s · cache 80%')
   expect(text(req?.rows[1])).toContain('20 out · 40 tok/s')
   expect(steps?.title).toBe('steps · 1 done · 1 failed')
-  expect(text(steps?.rows[0]).startsWith(' ✗  reading a.ts')).toBe(true)
+  expect(text(steps?.rows[0]).startsWith(' ✕  reading a.ts')).toBe(true)
   expect(text(steps?.rows[1]).startsWith(' ◆  running the tests')).toBe(true)
   expect(text(session?.rows[0])).toBe('context   ████▉░░░░░░░ 41% · 82k of 200k')
   expect(session?.rows[1]?.[1]?.color).toBe('red')
@@ -392,7 +392,7 @@ test('git bisect makes a bisect card: marks per step, commits left, commit under
   bash(t, 'c', 'git bisect good', 'Bisecting: 6 revisions left to test after this (roughly 3 steps)\n[c1d2e3f4] lexer: utf8', 200)
   const card = taskCard(t, 300)
   expect(card.title).toBe('bisect · step 2')
-  expect(text(card.lines[0])).toBe('✗ ✓ 6 commits · ~3 steps')
+  expect(text(card.lines[0])).toBe('✕ ✓ 6 commits · ~3 steps')
   expect(card.lines[0]?.[0]).toMatchObject({ color: 'red', inv: true })
   expect(text(card.lines[1])).toBe('testing c1d2e3f · "lexer: utf8"')
   expect(text(card.lines[2])).toBe('░░░░███░░░░░ 6 of 28')
@@ -640,7 +640,7 @@ test('on a phone the card grows one row for a long narration, each row within th
   // The narration takes the one spare row instead of being cut.
   expect(text(k.body[0])).toBe('» checking which of the model files')
   expect(text(k.body[1])).toBe('  exist on the disk right now')
-  expect(text(k.body[2])).toMatch(/^steps █{6}[█▄]░ 6 done {2}■◉□□□□ 1\/6$/)
+  expect(text(k.body[2])).toMatch(/^steps █{6}[█▄]░ 6 done {2}■◆□□□□ 1\/6$/)
   expect(text(k.bottom)).toMatch(/^ctx {2}.{8} 41% {2}\d+ t\/s {2}30s$/)
   expect(k.tone).toBe('live')
 })
@@ -715,7 +715,7 @@ test('the progress card carries the step gauge, then the to-do squares and the o
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress', activeForm: 'drawing cards' }, { content: 'commit', status: 'pending' }] }, 40)
   finishStep(t, 'w', 'TodoWrite', {}, true, '', undefined, 50)
   const c = taskCard(t, 1000)
-  expect(text(c.lines[1])).toBe('to-do ■◉□ 1/3')
+  expect(text(c.lines[1])).toBe('to-do ■◆□ 1/3')
   expect(text(c.lines[2])).toBe('drawing cards')
 })
 

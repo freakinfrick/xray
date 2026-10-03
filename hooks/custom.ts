@@ -3,7 +3,7 @@
 // A small model may write the recipe; checkRecipe keeps it to the kit, and DEFAULTS stand in.
 
 import type { Card, Line, Tone } from './cards'
-import { bar, frame, spark, tile } from './glyphs'
+import { MARK, bar, frame, spark, tile } from './glyphs'
 import type { Cmd, Turn } from './track'
 
 export type Signal = 'bisect' | 'bench' | 'batch' | 'build'
@@ -196,7 +196,7 @@ function widget(v: Val, f: number): Line {
     case 'series':
       return [spark(v.v.slice(-12))]
     case 'marks':
-      return v.v.flatMap((m, i) => [...(i ? [{ t: ' ' }] : []), m === 'good' ? tile('✓', 'green') : m === 'bad' ? tile('✗', 'red') : { t: f % 2 ? '▓' : '▒', color: 'cyan' }])
+      return v.v.flatMap((m, i) => [...(i ? [{ t: ' ' }] : []), m === 'good' ? tile(MARK.ok, 'green') : m === 'bad' ? tile(MARK.fail, 'red') : { t: f % 2 ? '▓' : '▒', color: 'cyan' }])
     case 'window': {
       // What is left, as a lit stretch in the middle of the range it started from.
       const lit = Math.max(1, Math.round(Math.max(0, Math.min(1, v.v)) * BAR))
