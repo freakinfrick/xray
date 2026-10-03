@@ -619,3 +619,27 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   working row keeps its label at the left edge (1a); between turns the label sits just left of the
   cells and moves with them. When the strip's line is full (long memo, narrow pane, phone) the genome
   takes its own row, same look, flush right (seen live: `genome ███▌▌██` under a long memo line).
+
+## Round 20 — character from real data (2026-10-03, offered)
+- User, verbatim: "what do you think we should do to xray to add more character? brainstorm and use a
+  swarm of subagents to create demos and show them to me on an html explainer". Fourth character ask.
+- Rule set from round 19's lesson: no metaphor, no redesign; each idea adds more real history said with
+  more personality, drawn onto the cards as built (baseline rendered from `spinnerRows`/`compact`/
+  `genome.rows` via tsx). Six agents, one idea each, every element cites its event or store key.
+- Page: `~/claude/.explainers/2026-10-03-xray-round20.html`; sources + brief + generators:
+  `~/claude/.explainers/xray-r20-src/` (`build.py` rebuilds; generators not copied into `tools/` until
+  a pick, so the live mod isn't reloaded per draft).
+- Offered: **20a celebrations** (a1 tests red→green bar sweep, a2 to-do list closes, a3 commit hash tile
+  → lasting genome cell `k`; agent recommends a1+a3) · **20b genome landmarks** (b1 marker row over the
+  genome aligned to step columns, b2 tag at │, b3 newest landmark on the idle strip; commits ⚑ since ◆ =
+  live) · **20c records + streaks** (c1 peach ★ tile in the tray when a project best falls, c2 strip clause
+  only, c3 panel section; new keys `records:<cwd>`, `sessions:<cwd>`) · **20d turn signatures** (19 rules
+  over step letters + runs, e.g. "red → green", "edit storm", "talk only"; d1 name on the idle tile, d2 names
+  under genome turns, d3 panel; d2/d3 need `names:<session>`) · **20e file heat** (e1 `files` row under the
+  genome, per-file patches in genome legend; needs a file field on Step + `files:<session>`) · **20f idle
+  pulse + rare moments** (f1 draining cache bar + session age, f2 one-time milestone tiles: 100th step,
+  long haul, first green today, past midnight, welcome back; keys `marks:<session>`, `steps:<cwd>`).
+- Finding from 20c: `history:<cwd>` holds non-test commands (`sed -i`, heredocs, `mkdir -p`) recorded as
+  passing runs, so `isTestCommand` (track.ts) matches too loosely; records/streaks would be fake until fixed.
+  `recall()` also treats `cmd` and `cmd 2>&1` as different commands.
+- Next: user picks from the page. No code before go.
