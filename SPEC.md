@@ -408,3 +408,35 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   folded into the task card at 120. A live check found the now card hoarding width at 120; fixed in
   4137ca1. Not yet seen: the phone (Termius), forest-light, a recalled memory line (needs a second
   session in one project), the chip flash and tone fade by eye (unit-tested only).
+
+## Round 17 — open, handed off (2026-10-03)
+
+User, verbatim (three messages):
+1. "we gave too much whitespace to the status card, and the to-do card got too deemphasized. i want the
+   to-do card to have multi-row cells for the to-dos that are drawn horizontally in order of the to do"
+2. "since we have to-do in the xray mod, and we silence / hide the built-in to-do list on claude code?"
+3. "we can basically fold everything in the claude code status line into the xray mod, for simplicity"
+
+What is known (agent, 2026-10-03):
+- (1) Cause: `allot()` in `hooks/layout.ts` hands all spare width to the now card (prose, index 0); the
+  to-do card asks only for its chips over two rows (`ideal()`), and chips are small patches. The ask
+  is a new to-do widget: each to-do a cell 2–3 rows tall (status mark + wrapped name inside), cells
+  laid left to right in list order, in its own hue (done solid, live ◆, pending grey). Width should
+  favor it over the now card.
+- (2) The mod API has no render hook for Claude Code's task panel (`RenderComponent` in
+  `.claude-plugin/types/claude-code/index.d.ts`: no TaskList). Claude Code 2.1.287 has global config
+  keys `todoFeatureEnabled` ("Enable the todo / task tracking panel", default true) and
+  `showExpandedTodos` (default false); ctrl+t = `app:toggleTodos` per session. UNTESTED whether
+  `todoFeatureEnabled: false` also removes TaskCreate/TaskUpdate (that would starve xray's to-do card).
+  Test headless before recommending it (A/B like round 13's `CLAUDE_CODE_ENABLE_TODO_TOOLS` check).
+- (3) Today's status line: `~/.claude/statusline-command.sh` (settings `statusLine`), prints
+  `cwd | ctx gauge tokens % | [PT ●] [ADHD-CM ●]`; the device mod also feeds it (glyph + 44-col phone
+  form, see memory device-mod). xray already shows ctx in the tray. Folding means: xray draws those
+  figures (between turns too, e.g. the AbovePrompt strip) and the settings statusLine goes away.
+  Check what PT and ADHD-CM dots mean in the script before moving them.
+- Process the user has used every round: mockup page (generate with `tools/mockup.py`, measured
+  lines, both themes, 190/120/44 cols) → picks → explicit go → build → `mods/check.sh xray` → live
+  tmux check → commit per step. Height B stays.
+- Still unseen from round 16: the phone (Termius). Forest-light seen by the user on desktop ("looks
+  fine on desktop"); readability fixes went into herdr-theme (dotfiles 13571aa, cab129a) and the
+  status line (~/.claude 847c19a).
