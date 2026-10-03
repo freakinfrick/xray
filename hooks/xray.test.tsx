@@ -6,6 +6,7 @@ import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
+import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { recall, record } from './memory'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
@@ -1150,4 +1151,66 @@ test('round 17: a name cut short takes the ▸ row back on a tall terminal', asy
   const short = newTurn('y', 0)
   startStep(short, 'w', 'TodoWrite', { todos: [{ content: 'fix mul', status: 'in_progress', activeForm: 'fixing mul' }] }, 0)
   expect(body(todoCard(short, 10), 40, 4).map(l => text(l)).at(-1)).toContain('▸ fixing mul') // fits: the ▸ row stays
+})
+
+// ── round 18: the prompt-cache countdown ──
+const req = (startedAt: number, cacheRead: number, cacheWrite: number, model = 'opus') => ({ startedAt, input: 300, cacheRead, cacheWrite, output: 0, model })
+const warm = (ttl: '5m' | '1h', at = 0): Cache => ({ ...noteRequest(emptyCache(), req(at, 150_000, 1000), true), ttl })
+
+test('round 18: the lifetime comes from the newest main-thread write in the transcript tail', async () => {
+  const main = (h: number, m: number) => `{"type":"assistant","message":{"usage":{"cache_creation":{"ephemeral_5m_input_tokens":${m},"ephemeral_1h_input_tokens":${h}}}}}`
+  expect(ttlFromTail([main(0, 900), main(1200, 0)].join('\n'))).toBe('1h')
+  expect(ttlFromTail([main(1200, 0), main(0, 900)].join('\n'))).toBe('5m')
+  expect(ttlFromTail(`${main(0, 900)}\n{"isSidechain":true,"message":{"usage":{"cache_creation":{"ephemeral_1h_input_tokens":5}}}}`)).toBe('5m')
+  expect(ttlFromTail(main(0, 0))).toBe(null) // a read-only request: the last known lifetime carries
+  expect(transcriptPath('/h/.claude', '/tmp/a_b.c/d', 'sid')).toBe('/h/.claude/projects/-tmp-a-b-c-d/sid.jsonl')
+})
+
+test('round 18: the strip counts down in words, yellow near the end, red once lapsed (1b, 2b)', async () => {
+  const c = warm('1h')
+  expect(text(cacheStrip(c, 13 * 60_000, false))).toBe('  cache 47m left')
+  const late = cacheStrip(c, 3_600_000 - 252_000, false)
+  expect(text(late)).toBe('  cache 4:12 left')
+  expect(late[1]?.color).toBe('yellow')
+  expect(text(cacheStrip(warm('5m'), 149_000, false))).toBe('  cache 2:31 left (5 min)')
+  const gone = cacheStrip(c, 3_600_001, false)
+  expect(text(gone)).toBe('   cache lapsed  next message rewrites 151k')
+  expect(gone[1]?.bg).toBe('red')
+  expect(text(cacheStrip(c, 13 * 60_000, true))).toBe(' ⏱47m')
+  expect(text(cacheStrip(c, 3_600_001, true))).toBe('  lapsed 151k ')
+  expect(cacheStrip(emptyCache(), 0, false)).toEqual([]) // nothing before the first request
+  expect(cacheStrip({ ...c, ttl: null }, 0, false)).toEqual([]) // lifetime unknown: no guess
+})
+
+test('round 18: one toast per cache entry, at the warning edge, big prompts only', async () => {
+  const c = warm('1h')
+  expect(isToastDue(c, 3_600_000 - 400_000)).toBe(false)
+  expect(isToastDue(c, 3_600_000 - 290_000)).toBe(true)
+  expect(isToastDue({ ...c, toastedAt: c.anchor }, 3_600_000 - 290_000)).toBe(false)
+  expect(isToastDue({ ...c, size: 5000 }, 3_600_000 - 290_000)).toBe(false)
+  expect(isToastDue(c, 3_600_001)).toBe(false) // lapsed: too late to say
+  expect(nextChange(c, 0)).toBe(60_000)
+  expect(nextChange(c, 3_600_000 - 310_000)).toBe(10_000) // lands on the warning edge
+  expect(nextChange(c, 3_600_000 - 1500)).toBe(500)
+  expect(nextChange(c, 3_600_001)).toBe(null)
+})
+
+test('round 18: each turn files one row, and a miss names its cause', async () => {
+  let c = noteRequest(emptyCache(), req(0, 0, 150_000), true)
+  c = { ...c, ttl: '1h' }
+  c = noteRequest(c, req(1000, 150_000, 500), false) // same turn: anchor moves, no row
+  expect(c.rows.length).toBe(1)
+  expect(c.anchor).toBe(1000)
+  c = noteRequest(c, req(60_000, 150_000, 800), true)
+  c = noteRequest(c, req(60_000 + 4_320_000, 0, 151_000), true)
+  c = noteRequest(c, req(4_400_000, 0, 151_000, 'sonnet'), true)
+  c = noteRequest(c, req(4_401_000, 10_000, 141_000, 'sonnet'), true)
+  expect(c.rows.map(r => r.why)).toEqual(['new session', undefined, 'lapsed · idle 1h 12m', 'model opus → sonnet', 'prefix changed'])
+  expect(cacheLeft(c, 4_401_000)).toBe(3_600_000)
+  const sec = cacheRows(c, 4_401_000 + 60_000, 6, 200)
+  expect(sec?.title).toBe('cache · 1h · 59m left')
+  expect(text(sec?.rows[1])).toContain('#5')
+  expect(text(sec?.rows[1])).toContain('prefix changed')
+  expect(text(sec?.rows.at(-1))).toBe('5 turns · 3 missed · 443k rewritten')
+  expect(text(cacheRows(c, 0, 6, 40)?.rows[1])).not.toContain('prefix') // a narrow panel drops the reason, never wraps
 })
