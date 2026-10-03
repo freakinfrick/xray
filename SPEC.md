@@ -494,6 +494,6 @@ What is known (agent, 2026-10-03):
   `checkVoice` drops I/you/facts/context lines, `narrationOf()`); at 120 the now card narrows to its 40
   floor so every cell fits (`7223e72`); herdr forest and forest-light sidebar sub-lines readable
   (dotfiles d9a0ef5, 9cb3865); herdr-theme sets Claude Code's theme with the palette (d572c41).
-- Still open: the phone (Termius) unseen for round 16–17; a name past two rows at a cell's width ends in
-  … (cells could take 3 name rows when tall, ~10 min); a carried list ≥ 80% done opens in the green
+- A name cut short on a tall terminal takes the ▸ row back (3 name rows instead of 2).
+- Still open: the phone (Termius) unseen for round 16–17; a carried list ≥ 80% done opens in the green
   "closing" mood before any step runs (per the round-16 rule).

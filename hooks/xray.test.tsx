@@ -1125,3 +1125,15 @@ test('round 17: the folder follows the session after a cd, as the status line di
   expect(await ui.find({ type: 'Text', text: /~\/proj\/sub/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('round 17: a name cut short takes the ▸ row back on a tall terminal', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'write m.test.js with node:assert tests for every export', status: 'in_progress', activeForm: 'writing tests' }, { content: 'run', status: 'pending' }] }, 0)
+  const card = todoCard(t, 10)
+  const rows = body(card, 40, 4).map(l => text(l))
+  expect(rows.join('\n')).not.toContain('▸ writing tests')
+  expect(rows.filter(r => r.trim()).length).toBe(4)
+  const short = newTurn('y', 0)
+  startStep(short, 'w', 'TodoWrite', { todos: [{ content: 'fix mul', status: 'in_progress', activeForm: 'fixing mul' }] }, 0)
+  expect(body(todoCard(short, 10), 40, 4).map(l => text(l)).at(-1)).toContain('▸ fixing mul') // fits: the ▸ row stays
+})

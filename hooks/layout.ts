@@ -146,8 +146,10 @@ const MARK_OK = '✓'
 // by a blank row when one is free.
 export function body(c: Card, inner: number, rows: number): Line[] {
   if (c.tiles?.length) {
-    const cr = cellRowsOf(c, rows)
-    const out = tileRows(c.tiles, inner, cr)
+    let cr = cellRowsOf(c, rows)
+    let out = tileRows(c.tiles, inner, cr)
+    // A name cut short takes the ▸ row back: the band above already names the live step.
+    if (cr < rows && out.some(l => l.some(g => g.t.includes('…')))) out = tileRows(c.tiles, inner, (cr = rows))
     if (cr < rows && c.foot) out.push(wrap(c.foot, inner)[0] ?? [])
     while (out.length < rows) out.push([])
     return out.slice(0, rows).map(l => clipLine(l, inner))
