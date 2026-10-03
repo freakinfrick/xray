@@ -500,5 +500,8 @@ What is known (agent, 2026-10-03):
 - Phone check deferred by the user (2026-10-03, "skip phone for now").
 - Phone check done (2026-10-03, Termius ~47 cols, dark-ansi, 5 captures IMG_2480–2484): one
   framed card fits; to-do cells ◆□□ → ■■■ and the status line fit inside it; a long status carries
-  into a band row as designed; a finished 3/3 list goes green "✓ closing". Still unseen on the
-  phone: a carried list ≥ 80% done opening green before any step runs.
+  into a band row as designed; a finished 3/3 list goes green "✓ closing".
+- Carried list on the phone (2026-10-03, IMG_2487 + 14.12.59): a list carried at 1/2 opened cyan
+  (50%, under the bar: correct); at 4/5 the card went green "✓ closing · deciding the next step".
+  Trap for the next tester: Claude Code drops a fully finished list, so stage the 80% list in one
+  batch — finished tasks from an earlier list do not count toward it.
