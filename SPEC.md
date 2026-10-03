@@ -615,3 +615,7 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   (EDGE_MARK = 5), own row at 47 cols. Unseen live: /resume restoring it, 3-row fold, the panel section.
 - Live-check trap: a long prompt sent with `tmux send-keys "…" Enter` stayed in the input box twice
   (looks like paste detection); send the text, wait 1 s, then Enter.
+- **Follow-up (2026-10-03):** "1a but move the 'genome' text left of the genome, moving as it grows":
+  working row keeps its label at the left edge (1a); between turns the label sits just left of the
+  cells and moves with them. When the strip's line is full (long memo, narrow pane, phone) the genome
+  takes its own row, same look, flush right (seen live: `genome ███▌▌██` under a long memo line).

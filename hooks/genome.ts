@@ -100,12 +100,13 @@ function merge(segs: Seg[]): Line {
   return out
 }
 
-// Round 19 (user): between turns the genome rides the strip's line, flush right, label last, newest cells
-// at the right end; past `room` the oldest whole turns fold. Empty when even one turn won't fit.
-export function tail(turns: readonly string[], room: number, label = ' genome'): Line {
+// Round 19 (user): between turns the genome rides the strip's line, flush right, newest cells at the right
+// end, its label just left of it (so the label moves left as the genome grows); past `room` the oldest
+// whole turns fold. Empty when even one turn won't fit.
+export function tail(turns: readonly string[], room: number, label = 'genome '): Line {
   const r = rows(turns, room - label.length, { maxRows: 1 })[0]
   if (!r || room < 12) return []
-  return [...r, { t: label, dim: true }]
+  return [{ t: label, dim: true }, ...r]
 }
 
 export const summary = (turns: readonly string[]) => `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${turns.reduce((a, x) => a + x.length, 0)} steps`

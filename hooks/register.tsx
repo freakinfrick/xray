@@ -569,7 +569,9 @@ export const register: Register = (on, options) => {
     const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
-    const ownRow = s.isHidden ? null : genomeRows(genome.rows(s.genome, width, { maxRows: 1 }), 'ig', Text)
+    // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
+    const own = s.isHidden ? [] : genome.tail(s.genome, width)
+    const ownRow = own.length ? genomeRows([[{ t: ' '.repeat(Math.max(0, width - own.reduce((a, g) => a + g.t.length, 0))) }, ...own]], 'ig', Text) : null
     const cacheSegs = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, await $.clock.now(), !hasTail)
     const lead = (
       <Text>
