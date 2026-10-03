@@ -5,7 +5,7 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, cells, clipLine, fitParts, nowCard, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg } from './cards'
+import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg } from './cards'
 import type { Turn } from './track'
 
 export const THREE = 140 // columns: three cards from here; below, the to-dos fold into the task card
@@ -150,7 +150,9 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const head = nowCard(t, mode, narration, now)
   const now0: Card = { ...head, lines: head.lines.slice(1) }
   const todo = todoCard(t, ctx)
-  const task = taskCard(t, now)
+  // Rule 4: a task card without the step gauge takes the filmstrip as its second subcolumn.
+  const plain = taskCard(t, now)
+  const task: Card = plain.title === 'progress' || !t.done.length ? plain : { ...plain, side: [[{ t: 'steps ', dim: true }, ...filmstrip(t, 24, now, false)], stepCounts(t)] }
   const tp = teleParts(t, ctx, now)
   const hasTodo = !!(todo.chips?.length || todo.note)
   let cards: Card[]

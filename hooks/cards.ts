@@ -4,7 +4,7 @@
 import type { LastTurn } from '../types'
 import { DEFAULTS, customCard } from './custom'
 import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
-import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
+import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
 
 // inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
 export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string }
@@ -68,12 +68,38 @@ export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg
   return { status: said, pulse: tail ? { ...tail, t: tail.t.trim() } : undefined }
 }
 
-// The steps as a gauge the ctx bar's shape: one █ per step on a dim ░ track, green done, red failed,
-// cyan running (blinking at the tick).
-function stepGauge(t: Turn, n: number, now: number): Line {
-  const live = t.running.size > 0
-  const m: Line = [...t.done.slice(-(live ? n - 1 : n)).map(x => ({ t: '█', color: x.ok === false ? 'red' : 'green' })), ...(live ? [{ t: frame(now) % 2 ? '█' : '▄', color: 'cyan' }] : [])]
-  return m.length < n ? [...m, { t: '░'.repeat(n - m.length), dim: true }] : m
+// The filmstrip (round 16, direction 1): one cell per step, colored by what it was, so the turn's shape
+// reads at a glance: reads as quiet half cells, edits yellow, commands magenta, a test run that passed
+// green, agents cyan, anything that failed red; the live step blinks in its kind's color at the tick.
+// To-do bookkeeping is left out. With `track`, exactly n cells on a dim ░ track (the phone's gauge,
+// aligned with ctx); without, up to n cells with the older steps folded into a dim +k.
+const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
+  read: { t: '▌', color: 'blue' },
+  edit: { t: '█', color: 'yellow' },
+  run: { t: '█', color: 'magenta' },
+  test: { t: '█', color: 'green' },
+  agent: { t: '█', color: 'cyan' },
+  todo: { t: '▌', dim: true },
+  other: { t: '▌', dim: true },
+}
+export function filmstrip(t: Turn, n: number, now: number, track = true): Line {
+  const steps = [...t.done, ...[...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)].filter(x => x.kind !== 'todo')
+  const fold = !track && steps.length > n ? steps.length - (n - 3) : 0
+  const shown = track ? steps.slice(-n) : steps.slice(fold)
+  const cells: Line = shown.map(x => {
+    const k = KIND[x.kind ?? 'other']
+    if (x.endedAt === undefined) return { t: frame(now) % 2 ? k.t : '▄', color: k.color ?? 'cyan' }
+    return x.ok === false ? { t: '█', color: 'red' } : { ...k }
+  })
+  const lead: Line = fold ? [{ t: `+${fold} `, dim: true }] : []
+  return track && cells.length < n ? [...cells, { t: '░'.repeat(n - cells.length), dim: true }] : [...lead, ...cells]
+}
+
+// Step counts beside the filmstrip.
+export function stepCounts(t: Turn): Line {
+  const steps = t.done.filter(x => x.kind !== 'todo')
+  const failed = steps.filter(x => x.ok === false).length
+  return [{ t: `${steps.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} ${MARK.fail}`, color: 'red' }] : [])]
 }
 
 const NBSP = '\u00a0' // keeps a chip whole when its row wraps
@@ -206,7 +232,7 @@ function agentsCard(t: Turn): Card {
 // is in progress, or the files changed when there is no to-do list.
 function progressCard(t: Turn, now: number): Card {
   const failed = t.done.filter(x => x.ok === false).length
-  const gauge: Line = [{ t: LABEL, dim: true }, ...stepGauge(t, GAUGE, now), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
+  const gauge: Line = [{ t: LABEL, dim: true }, ...filmstrip(t, GAUGE, now), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
   const files: Line = [{ t: t.edited.size ? `${plural(t.edited.size, 'file')} changed` : '', dim: true }]
   if (!t.todos.length) return { title: 'progress', tone: failed ? 'warn' : 'quiet', lines: [gauge, files] }
   const done = t.todos.filter(x => x.status === 'completed').length
@@ -343,7 +369,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
-    const counts: Line = [...stepGauge(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
+    const counts: Line = [...filmstrip(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
   const progress: Line = taskCard(t, now).lines[0] ?? []

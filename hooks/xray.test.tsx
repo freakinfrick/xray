@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { compact, deviceGlyph, effortTag, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { compact, deviceGlyph, effortTag, filmstrip, stepCounts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -884,4 +884,19 @@ test('round 16: the spinner takes one more body row on a tall terminal', async (
   }
   expect(await at(50)).toBe(2 * 4) // two cards × 4 body rows
   expect(await at(35)).toBe(2 * 3)
+})
+
+test('the filmstrip colors each step by its kind, failures red, the live one blinking; to-do bookkeeping left out', async () => {
+  const t = midFix()
+  const strip = filmstrip(t, 24, 9_000, false)
+  expect(strip.map(s => `${s.t}:${s.color}`)).toEqual(['█:red', '█:yellow', '█:red'])
+  startStep(t, 'r', 'Read', { file_path: 'sum.js' }, 9_000)
+  const live = filmstrip(t, 24, 9_000, false)
+  expect(live.at(-1)?.color).toBe('blue')
+  expect(filmstrip(t, 8, 9_000).map(s => s.t).join('')).toMatch(/^███[▌▄]░{4}$/) // the phone's 8-cell gauge on its track
+  for (let i = 0; i < 30; i++) bash(t, `x${i}`, 'ls', '', 10_000 + i)
+  const long = filmstrip(t, 12, 11_000, false)
+  expect(long[0]?.t).toMatch(/^\+\d+ $/) // older steps fold into a count
+  expect(long.slice(1).length).toBe(9)
+  expect(text(stepCounts(t))).toBe('33 done · 2 ✕')
 })

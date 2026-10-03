@@ -15,7 +15,20 @@ function colorTodos(t: Turn) {
     x.color = TODO_COLORS.find(c => !taken.has(c)) ?? TODO_COLORS[t.todos.indexOf(x) % TODO_COLORS.length]
   }
 }
-export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean }
+// kind: what the filmstrip colors a step by (round 16, direction 1).
+export type StepKind = 'read' | 'edit' | 'run' | 'test' | 'agent' | 'todo' | 'other'
+export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind }
+const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
+const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+const TODOS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop'])
+export function stepKind(tool: string, input: Record<string, unknown>): StepKind {
+  if (READS.has(tool)) return 'read'
+  if (EDITS.has(tool)) return 'edit'
+  if (TODOS.has(tool)) return 'todo'
+  if (tool === 'Agent' || tool === 'Task') return 'agent'
+  if (tool === 'Bash') return isTestCommand(String(input.command ?? '')) ? 'test' : 'run'
+  return 'other'
+}
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
 export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
 export type Template = 'default' | 'research' | 'agents' | 'tests' | 'refactor'
@@ -152,7 +165,7 @@ export function queueFromResponse(t: Turn, content: unknown) {
 
 export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number) {
   t.queued.delete(id)
-  t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now })
+  t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input) })
   if (tool === 'Bash') t.cmds.push({ cmd: String(input.command ?? '').trim(), startedAt: now })
   if (tool === 'Bash' && isTestCommand(String(input.command ?? ''))) t.runs.push({ pass: 0, fail: 0, total: 0, failing: [], running: true, startedAt: now })
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
@@ -176,7 +189,7 @@ export function startStep(t: Turn, id: string, tool: string, input: Record<strin
 }
 
 export function finishStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, ok: boolean, text: string, result: unknown, now: number) {
-  const step = t.running.get(id) ?? { id, tool, say: sayStep(tool, input), startedAt: now }
+  const step = t.running.get(id) ?? { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input) }
   t.running.delete(id)
   step.endedAt = now
   step.ok = ok
