@@ -28,6 +28,16 @@ export function testHead(cmd: string): string | undefined {
   return h?.replace(/\s*\d?>&?\s*\S+/g, '').trim()
 }
 export const isTestCommand = (cmd: string) => testHead(cmd) !== undefined
+// Round 20a: a git commit at a command's head; `git -C dir commit` too.
+export const isCommitCommand = (cmd: string) => heads(cmd).some(h => /^git\s+(?:-C\s+\S+\s+)?commit\b/.test(h))
+// What a finished commit says about itself: "3f9c2ab subject" from git's own "[branch 3f9c2ab] subject"
+// line, else the -m message (git commit -q prints nothing), else empty.
+export function commitNote(cmd: string, out: string): string {
+  const m = out.match(/^\[[^\]\s]+(?: \([^)]*\))? ([0-9a-f]{7,})\] (.*)$/m)
+  if (m) return `${m[1]} ${m[2]}`.trim()
+  const msg = cmd.match(/(?:^|\s)-\w*m\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/)
+  return (msg?.[1] ?? msg?.[2] ?? '').split('\n')[0]?.trim() ?? ''
+}
 export const isCheckCommand = (cmd: string) => !isTestCommand(cmd) && heads(cmd).some(x => CHECK_CMD.test(x))
 
 const num = (re: RegExp, s: string) => {

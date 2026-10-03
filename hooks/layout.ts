@@ -261,6 +261,8 @@ function topTitle(c: Drawn, w: number): Line {
   const note = c.note ? [{ t: ' ' }, ...c.note, { t: ' ' }] : []
   const room = Math.max(1, w - 6 - cells(note))
   const title = c.title.length > room ? c.title.slice(0, room - 1) + '…' : c.title
+  // Round 20a: a lit title is a patch in the tone's colour, black text, in the same cells.
+  if (c.isLit) return [edge(c, '╭─'), { t: ` ${title} `, bg: TONE_COLOR[c.tone] ?? 'gray', color: 'black' }, edge(c, '─'.repeat(Math.max(0, w - 6 - title.length - cells(note)))), ...note, edge(c, '─╮')]
   return [edge(c, `╭─ ${title} ` + '─'.repeat(Math.max(0, w - 6 - title.length - cells(note)))), ...note, edge(c, '─╮')]
 }
 

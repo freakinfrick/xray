@@ -1,7 +1,7 @@
 // What the current turn has done, is doing, and still owes. Pure: events in, state out.
 
 import { detect, lastLine, lastMeasure, lastPair, type Recipe, type Signal } from './custom'
-import { isCheckCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
+import { commitNote, isCheckCommand, isCommitCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
 
 // doneAt: when it turned completed, for the one-time flash (round 16, direction 3).
 export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string; doneAt?: number }
@@ -17,8 +17,9 @@ function colorTodos(t: Turn) {
   }
 }
 // kind: what the filmstrip colors a step by (round 16, direction 1).
-export type StepKind = 'read' | 'edit' | 'run' | 'test' | 'agent' | 'todo' | 'other'
-export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind }
+export type StepKind = 'read' | 'edit' | 'run' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
+// note: what a commit step committed (round 20a), "3f9c2ab subject".
+export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string }
 const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const TODOS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop'])
@@ -27,11 +28,11 @@ export function stepKind(tool: string, input: Record<string, unknown>): StepKind
   if (EDITS.has(tool)) return 'edit'
   if (TODOS.has(tool)) return 'todo'
   if (tool === 'Agent' || tool === 'Task') return 'agent'
-  if (tool === 'Bash') return isTestCommand(String(input.command ?? '')) ? 'test' : 'run'
+  if (tool === 'Bash') return isTestCommand(String(input.command ?? '')) ? 'test' : isCommitCommand(String(input.command ?? '')) ? 'commit' : 'run'
   return 'other'
 }
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
-export type Run = TestRun & { running: boolean; startedAt: number; ok?: boolean; isStopped?: boolean }
+export type Run = TestRun & { running: boolean; startedAt: number; endedAt?: number; ok?: boolean; isStopped?: boolean }
 export type Template = 'default' | 'research' | 'agents' | 'tests' | 'refactor'
 // A subagent the main session started. Its own steps arrive on tool.call with its agentId.
 export type Agent = { toolUseId: string; agentId?: string; label: string; isBackground: boolean; startedAt: number; endedAt?: number; ok?: boolean; steps: number; doing?: string }
@@ -234,6 +235,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
   step.ok = ok
   t.done.push(step)
   if (!ok) t.failures += 1
+  if (step.kind === 'commit' && ok) step.note = commitNote(String(input.command ?? ''), text)
   const cmd = String(input.command ?? '')
   if (tool === 'Bash') {
     const c = t.cmds.findLast(x => x.cmd === cmd.trim() && x.endedAt === undefined)
@@ -246,7 +248,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
   if (tool === 'Bash' && isTestCommand(cmd)) {
     const run = t.runs.findLast(r => r.running)
     const counts = parseTestOutput(text)
-    if (run) Object.assign(run, counts ?? { pass: 0, fail: 0, total: 0, failing: [] }, { running: false, ok })
+    if (run) Object.assign(run, counts ?? { pass: 0, fail: 0, total: 0, failing: [] }, { running: false, ok, endedAt: now })
     if (ok || (counts && counts.fail === 0)) markChecked(t, step.startedAt)
   }
   if (tool === 'Bash' && isCheckCommand(cmd) && ok) markChecked(t, step.startedAt)

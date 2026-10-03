@@ -12,7 +12,7 @@ import { checkVoice, narrationOf, sayStep } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
-import { MOMENT_BG, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
+import { MOMENT_BG, celebrations, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -446,7 +446,7 @@ export const register: Register = (on, options) => {
       endTurn(t)
       t.endedAt = now
       const letters = genome.code(t)
-      const moments = await turnMoments($, s, t, letters, now).catch(() => [])
+      const moments = [...celebrations(t), ...(await turnMoments($, s, t, letters, now).catch(() => []))]
       await saveGenome($, s, letters)
       const memo = recall(s.history, t)
       s.history = record(s.history, t)

@@ -14,7 +14,8 @@ export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explor
 // side: a second subcolumn beside `lines` when the card is wide enough (else under them); chips: whole
 // tokens flowed into rows; foot: the card's fact row, set off by a blank row when one is spare (round 16).
 // tiles: the to-dos as cells a few rows tall, laid left to right in list order (round 17).
-export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; tiles?: Tile[]; foot?: Line }
+// isLit: the title drawn as a patch in the tone's colour for a beat (round 20a celebrations).
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; tiles?: Tile[]; foot?: Line; isLit?: boolean }
 // One to-do cell: `n` its place in the list, `look` how its mark and name are drawn; `fill` paints the
 // whole cell in the look's background (a patch), else only the text carries it.
 export type Tile = { n: number; mark: string; text: string; status: Todo['status']; look: Omit<Seg, 't'>; fill: boolean }
@@ -119,6 +120,7 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }
   edit: { t: '█', color: 'yellow' },
   run: { t: '█', color: 'magenta' },
   test: { t: '█', color: 'green' },
+  commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
   agent: { t: '█', color: 'cyan' },
   todo: { t: '▌', dim: true },
   other: { t: '▌', dim: true },
@@ -166,6 +168,10 @@ export function tileOf(x: Todo, n: number, now = Infinity): Tile {
 
 // The to-do list as cells; what else is on the plate (queued calls, agents out, a filling context)
 // rides in the top border.
+// Round 20a: the list just closed: its title lights for a beat (the last to-do done within LIT_MS).
+export const LIT_MS = 1500
+const isClosing = (t: Turn, now: number) => t.todos.length > 0 && t.todos.every(x => x.status === 'completed') && t.todos.some(x => x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < LIT_MS)
+
 export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Card {
   const done = t.todos.filter(x => x.status === 'completed').length
   const q = t.queued.size
@@ -175,7 +181,8 @@ export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Ca
   const note = tags.flatMap((s, i) => (i ? [{ t: ' · ', dim: true }, s] : [s]))
   const cur = t.todos.find(x => x.status === 'in_progress')
   return {
-    title: t.todos.length ? `to-do · ${done} of ${t.todos.length}` : 'to-do',
+    title: t.todos.length ? `to-do · ${done} of ${t.todos.length}${done === t.todos.length ? ' ✓' : ''}` : 'to-do',
+    isLit: isClosing(t, now),
     tone: warn ? 'warn' : t.todos.length && done === t.todos.length ? 'ok' : 'quiet',
     note: note.length ? note : undefined,
     lines: t.todos.length ? [] : [[{ t: 'no to-do list yet', dim: true }]],
@@ -203,6 +210,7 @@ export function taskCard(t: Turn, now: number): Card {
 const BAR = 16
 const isFailed = (r: Run) => (r.total ? r.fail > 0 : r.ok === false)
 const sayRun = (r: Run) => (r.isStopped ? 'stopped' : !r.total ? (r.ok ? 'passed' : 'failed') : r.fail ? `${r.fail} failing` : `all ${r.total} passed`)
+const SWEEP_MS = 500
 function testsCard(t: Turn, now: number): Card {
   const n = t.runs.length
   const r = t.runs[n - 1]
@@ -214,17 +222,21 @@ function testsCard(t: Turn, now: number): Card {
   }
   if (r.isStopped) return { title: `tests · run ${n}`, tone: 'warn', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: 'run stopped' }], [{ t: 'the turn ended before it finished', dim: true }]] }
   const passed = r.total ? r.pass / r.total : r.ok ? 1 : 0
-  const bar: Line = [...barOf(passed), { t: ' ' }]
+  const barLine: Line = [...barOf(passed), { t: ' ' }]
   const failedBefore = t.runs.slice(0, -1).filter(isFailed).length
   const fixed: Line = [{ t: failedBefore ? `fixed after ${plural(failedBefore, 'failing run')}` : n > 1 ? 'passed every run' : 'passed first time', dim: true }]
+  // Round 20a: red → green. The bar fills from empty over SWEEP_MS and the title lights for a beat.
+  const el = r.endedAt === undefined ? Infinity : now - r.endedAt
+  const isGreening = !isFailed(r) && failedBefore > 0 && prev !== undefined && isFailed(prev) && el >= 0 && el < LIT_MS
+  const swept: Line = isGreening && el < SWEEP_MS ? [...bar(el / SWEEP_MS, BAR, 'green'), { t: ' ' }] : barLine
   const spare = runHistory(t)
-  if (!r.total) return { title: `tests · run ${n}`, tone: r.ok ? 'ok' : 'fail', lines: [[...bar, r.ok ? { t: 'passed ✓', color: 'green' } : { t: 'failed' }], r.ok ? fixed : [{ t: 'no test count in the output', dim: true }]], spare }
-  if (!isFailed(r)) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...bar, { t: `all ${r.total} pass ✓`, color: 'green' }], fixed], spare }
+  if (!r.total) return { title: `tests · run ${n}`, tone: r.ok ? 'ok' : 'fail', lines: [[...swept, r.ok ? { t: 'passed ✓', color: 'green' } : { t: 'failed' }], r.ok ? fixed : [{ t: 'no test count in the output', dim: true }]], spare, isLit: isGreening && r.ok === true }
+  if (!isFailed(r)) return { title: `tests · run ${n}`, tone: 'ok', lines: [[...swept, { t: `all ${r.total} pass ✓`, color: 'green' }], fixed], spare, isLit: isGreening }
   const name = r.failing[0]
   return {
     title: `tests · run ${n}`,
     tone: 'fail',
-    lines: [[...bar, { t: `${r.pass}/${r.total} pass` }], [{ t: `${MARK.fail} `, color: 'red' }, { t: name ? name + (r.fail > 1 ? ` +${r.fail - 1}` : '') : plural(r.fail, 'failing test') }]],
+    lines: [[...barLine, { t: `${r.pass}/${r.total} pass` }], [{ t: `${MARK.fail} `, color: 'red' }, { t: name ? name + (r.fail > 1 ? ` +${r.fail - 1}` : '') : plural(r.fail, 'failing test') }]],
     spare,
   }
 }

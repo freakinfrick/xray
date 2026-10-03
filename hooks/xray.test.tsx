@@ -7,11 +7,11 @@ import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerP
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
-import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
+import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
-import { MOMENT_BG, milestones, noteRuns, pick, tile } from './moments'
+import { MOMENT_BG, celebrations, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -1337,4 +1337,38 @@ test('20f: the cache figure gains an 8-cell draining bar; the genome counts the 
   expect(genome.shown(turns, 200)).toBe(20)
   expect(genome.shown(turns, 30)).toBeLessThan(20)
   expect(genome.shown(turns, 5)).toBe(0)
+})
+
+test('20a: a commit is its own step kind, a # cell in the genome, its hash from git or its -m message', async () => {
+  expect(commitNote('git commit -m "fix: sum"', '[main 3f9c2ab] fix: sum\n 1 file changed')).toBe('3f9c2ab fix: sum')
+  expect(commitNote('git commit -q -m "fix: sum"', '')).toBe('fix: sum')
+  expect(commitNote("git -C x commit -qm 'a b'", '')).toBe('a b')
+  const t = newTurn('x', 0)
+  startStep(t, 'k', 'Bash', { command: 'git add a && git commit -m "fix: sum"' }, 0)
+  finishStep(t, 'k', 'Bash', { command: 'git add a && git commit -m "fix: sum"' }, true, '[feat/x 3f9c2ab] fix: sum', undefined, 1000)
+  expect(genome.code(t)).toBe('k')
+  expect(text(genome.rows([], 60, { live: t, now: 1000 })[0])).toBe('#  3') // the tile starts folded: one character of it
+  expect(text(genome.rows([], 60, { live: t, now: 2000 })[0])).toBe('#  3f9c2ab fix: sum ') // unfolded, held until the next step
+  expect(celebrations(t)).toEqual([{ kind: 'celebrate', text: 'committed 3f9c2ab', fact: 'fix: sum' }])
+})
+
+test('20a: tests back to green sweep the bar from empty and light the title; the list closing lights its own', async () => {
+  const t = newTurn('x', 0)
+  bash(t, 'b1', 'npm test', 'Tests: 1 failed, 2 passed, 3 total', 1000)
+  bash(t, 'b2', 'npm test', 'Tests: 3 passed, 3 total', 5000)
+  const end = t.runs[1]?.endedAt ?? 0
+  const at = (ms: number) => taskCard(t, end + ms)
+  expect(at(100).isLit).toBe(true)
+  expect(text(at(100).lines[0]).startsWith('███')).toBe(true)
+  expect(text(at(100).lines[0])).toContain('░') // still filling
+  expect(text(at(600).lines[0])).not.toContain('░') // full
+  expect(at(5000).isLit).toBeFalsy()
+  expect(celebrations(t)[0]).toEqual({ kind: 'celebrate', text: 'green', fact: 'after 1 failing run' })
+  const lit = spinnerRows(t, undefined, null, 17, end + 100, 188, 4).map(l => l.find(g => g.bg === 'green' && g.t.includes('tests')))
+  expect(lit.some(Boolean)).toBe(true)
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'a', status: 'in_progress' }] }, 6000)
+  startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'a', status: 'completed' }] }, 7000)
+  expect(todoCard(t, null, 7100)).toMatchObject({ title: 'to-do · 1 of 1 ✓', isLit: true })
+  expect(todoCard(t, null, 9000).isLit).toBe(false)
+  expect(celebrations(t).map(x => x.text)).toEqual(['green', 'list done'])
 })

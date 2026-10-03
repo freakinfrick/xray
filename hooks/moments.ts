@@ -3,6 +3,7 @@
 // and the panel. Every moment is a measured fact. Pure: the register gathers the inputs.
 
 import type { Line } from './cards'
+import type { Run, Turn } from './track'
 
 export type MomentKind = 'celebrate' | 'record' | 'milestone' | 'landmark'
 export type Moment = { kind: MomentKind; text: string; fact?: string }
@@ -76,4 +77,23 @@ export function noteRuns(d: Day | undefined, oks: readonly boolean[], now: numbe
     }
   }
   return { day: cur, isFirstGreen, reds }
+}
+
+// Round 20a: what a finished turn celebrates, in this order: tests back to green, a commit, the to-do
+// list closed. Each is the turn's own record, not a guess.
+export function celebrations(t: Turn): Moment[] {
+  const out: Moment[] = []
+  const runs = t.runs.filter(r => !r.running && !r.isStopped)
+  const isRed = (r: Run) => (r.total ? r.fail > 0 : r.ok === false)
+  const last = runs[runs.length - 1]
+  const reds = runs.slice(0, -1).filter(isRed).length
+  if (last && !isRed(last) && reds) out.push({ kind: 'celebrate', text: 'green', fact: `after ${reds} failing run${reds > 1 ? 's' : ''}` })
+  const commit = t.done.findLast(x => x.kind === 'commit' && x.ok)
+  if (commit) {
+    const hash = commit.note?.match(/^[0-9a-f]{7,}\b/)?.[0]
+    out.push({ kind: 'celebrate', text: hash ? `committed ${hash.slice(0, 7)}` : 'committed', fact: (hash ? commit.note?.slice(hash.length) : commit.note)?.trim().slice(0, 60) || undefined })
+  }
+  const n = t.todos.length
+  if (n && t.todos.every(x => x.status === 'completed') && t.todos.some(x => x.doneAt !== undefined && x.doneAt >= t.startedAt)) out.push({ kind: 'celebrate', text: 'list done', fact: `${n} of ${n}` })
+  return out
 }

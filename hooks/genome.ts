@@ -8,8 +8,8 @@ import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
 // One letter per step; a failed step is `x` whatever its kind. To-do bookkeeping is left out, as in the filmstrip.
-const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', run: 'c', test: 't', agent: 'a', todo: '', other: 'o' }
-const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', c: 'run', t: 'test', a: 'agent', o: 'other' }
+const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', run: 'c', test: 't', commit: 'k', agent: 'a', todo: '', other: 'o' }
+const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', c: 'run', t: 'test', k: 'commit', a: 'agent', o: 'other' }
 
 export const MAX_ROWS = 3
 export const MAX_TURNS = 400 // per session, oldest dropped: a few KB at most
@@ -47,11 +47,19 @@ const cellOf = (c: string): Seg => {
 function liveCells(t: Turn, now: number): Seg[] {
   const done = [...code(t)].map(cellOf)
   const running = [...t.running.values()].filter(x => x.kind !== 'todo').sort((a, b) => a.startedAt - b.startedAt)
-  return [...done, ...running.map(x => {
+  const cells: Seg[] = [...done, ...running.map(x => {
     const k = KIND[x.kind ?? 'other']
     return { t: frame(now) % 2 ? k.t : '▄', color: k.color ?? 'cyan' }
   })]
+  // Round 20a: a commit just landed: its hash and subject unfold from its cell, and stay until the next step.
+  const last = t.done[t.done.length - 1]
+  if (running.length || last?.kind !== 'commit' || !last.ok || !last.note || last.endedAt === undefined) return cells
+  const said = ` ${last.note.length > COMMIT_CHARS ? last.note.slice(0, COMMIT_CHARS - 1) + '…' : last.note} `
+  const shown = Math.max(2, Math.ceil(said.length * Math.min(1, Math.max(0, now - last.endedAt) / UNFOLD_MS)))
+  return [...cells, { t: ' ' }, { t: said.slice(0, shown), bg: 'magenta', color: 'black' }]
 }
+const COMMIT_CHARS = 40
+const UNFOLD_MS = 500
 
 // Rows of exactly `width` cells or fewer. `label` leads the first row; later rows indent under it.
 // Past `maxRows` the oldest whole turns fold, one at a time, so a turn is never cut in half.
