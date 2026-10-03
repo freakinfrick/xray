@@ -540,3 +540,10 @@ Picks (AskUserQuestion, 2026-10-03):
 Standing rules applied: no `/compact` advice ever (user never compacts); lapsed state states the cost only.
 Open for build: exact strip wording + phone fit → mockup via `tools/mockup.py` (190/120/44 cols),
 then go → build → `mods/check.sh xray` → live tmux check → commit.
+
+### Round 18 — picked (2026-10-03): **1b + 2b**
+- Desktop strip: words only — `cache 47m left` (dim label), `cache 4:12 left` yellow under the warning,
+  `cache 2:31 left (5 min)` on a 5-minute cache, lapsed = red tile ` cache lapsed ` + `next message rewrites 151k`.
+- Phone strip: always — `⏱47m` after ctx %, yellow `⏱4:12`, red tile ` lapsed 151k `; the headline gets cut.
+- d1 panel table, d2 one toast, d3 rules: as offered (page `.explainers/2026-10-03-xray-round18.html`,
+  generator `tools/mockup18.py`).
