@@ -576,3 +576,10 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   phone fit (< 60 cols one card), Termius colour rule (explicit bg + black fg), circles = effort only.
 - Next: mockup page (`tools/mockup19.py`), wide / 120 / phone, both themes, with motion frames. No
   code before go.
+- **Round 19 verdict (2026-10-03, from the page):** "A - these are too abstract and confuses the user
+  about that they are looking at, B doesnt translate - lets refer to the webp image i droped via
+  tailscale, C too abstract, Celebrations are all nice tho actually". Reference: OP-1 screen sheet,
+  `~/inbox/teenage-engineering-op-1-mobile-1280x2080-v0-vf205wjomk541.webp`. Read: each OP-1 screen draws
+  the literal thing (tape, mixer, signal flow), thin line art on black, big thin digits, one colour per
+  parameter, envelope curves, wide empty space. Metaphors (factory, crew) rejected. Celebrations kept.
+  Next: round 19b mockups in that language (`tools/mockup19b.py`).
