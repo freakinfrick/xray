@@ -138,6 +138,6 @@ export function cacheRows(c: Cache, now: number, max: number, cols: number): { t
   })
   const missed = c.rows.filter(r => r.why && r.why !== 'new session')
   const rewritten = missed.reduce((n, r) => n + r.wrote, 0)
-  const foot: Line = [{ t: `${c.turns} turn${c.turns === 1 ? "" : "s"} · ${missed.length} missed${missed.length ? ` · ${kilo(rewritten)} rewritten` : ''}`, dim: true }]
+  const foot: Line = [{ t: `${c.turns} turn${c.turns === 1 ? '' : 's'} · ${missed.length} missed${missed.length ? ` · ${kilo(rewritten)} rewritten` : ''}`, dim: true }]
   return { title, rows: [head, ...body.reverse(), foot] }
 }
