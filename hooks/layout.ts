@@ -15,7 +15,7 @@ const GUTTER = 1
 const SUBGAP = 3 // between two subcolumns
 const MIN_W = 24
 const NOW_MIN = 36
-const CAP = 0.45 // a non-prose card takes at most this share of the width
+const PROSE = 0.55 // the most of the width the prose card holds back for itself
 
 const pad = (l: Line, n: number): Line => (cells(l) < n ? [...l, { t: ' '.repeat(n - cells(l)) }] : l)
 
@@ -100,16 +100,18 @@ export function ideal(c: Card, tray: Line[] = []): number {
   return Math.max(content + 4, title, tray.length ? cells(fitParts(tray, Infinity, '  ')) + 6 : 0)
 }
 
-// The prose card (index 0) takes what the others leave; each other card its ideal within [MIN_W, CAP].
+// The prose card (index 0) keeps room for its content over two rows (between NOW_MIN and PROSE of the width),
+// each other card gets its ideal out of the rest (never under MIN_W), and whatever is left over goes
+// back to the prose card. A short narration so lends its width to a card that needs it.
 export function allot(ideals: number[], cols: number): number[] {
   const avail = cols - GUTTER * (ideals.length - 1)
-  const rest = ideals.slice(1).map(w => Math.max(MIN_W, Math.min(w, Math.floor(avail * CAP))))
-  let over = NOW_MIN - (avail - rest.reduce((a, b) => a + b, 0))
-  for (let i = rest.length - 1; over > 0 && i >= 0; i--) {
-    const give = Math.min(over, (rest[i] ?? MIN_W) - MIN_W)
-    rest[i] = (rest[i] ?? MIN_W) - give
-    over -= give
-  }
+  // Prose wraps, so it holds back room for its longest line over two rows, not one.
+  const keepNow = Math.max(NOW_MIN, Math.min(Math.ceil((ideals[0] ?? 0) / 2) + 2, Math.floor(avail * PROSE)))
+  const room = avail - keepNow
+  const want = ideals.slice(1).map(w => Math.max(MIN_W, w))
+  const total = want.reduce((a, b) => a + b, 0)
+  // Over budget: each card gives back in proportion to what it asked above the minimum.
+  const rest = total <= room ? want : want.map(w => MIN_W + Math.floor(((w - MIN_W) * Math.max(0, room - MIN_W * want.length)) / Math.max(1, total - MIN_W * want.length)))
   return [avail - rest.reduce((a, b) => a + b, 0), ...rest]
 }
 

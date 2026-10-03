@@ -863,6 +863,8 @@ test('round 16: a card asks for its content width; the prose card takes what is 
   expect(ws[0]).toBeGreaterThanOrEqual(36) // the now card keeps room to read
   expect(ws.reduce((a, b) => a + b, 0)).toBe(98)
   expect(ideal({ title: 'x', tone: 'quiet', lines: [[{ t: 'ab' }]], side: [[{ t: 'cdef' }]] })).toBe(2 + 3 + 4 + 4)
+  expect(allot([30, 70], 118)).toEqual([117 - 70, 70]) // a short narration lends its width to a card that needs it
+  expect(allot([200, 70], 118)[0]).toBe(Math.floor(117 * 0.55)) // a long one holds back at most 55%, and wraps
 })
 
 test('round 16: wrap breaks at words, pack keeps chips whole, body ends in … only when rows run out', async () => {
