@@ -3,6 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, deviceGlyph, lastTurn, where, type Line, type Mode } from './cards'
 import { bar } from './glyphs'
+import { cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
@@ -13,6 +14,7 @@ import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, i
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const keptTurn = atom({ plugin: 'xray', key: 'prev' } as const, null) // the last finished turn, for the panel after a reload
+const keptCache = atom({ plugin: 'xray', key: 'cache' } as const, null) // round 18: the cache countdown outlives a reload
 const COMMAND = 'xray'
 const PANE = 'xray'
 const NARRATE_GAP_MS = 60_000
@@ -54,8 +56,49 @@ type Live = {
   isBursting: boolean // round 16 transitions: a short ~6 fps redraw after an event is under way
   isMobile: boolean // a phone keeps the 1 Hz tick: no bursts over SSH
   memo: Memo // each card's last tone, for the one-time fade
+  cache: Cache // round 18: the prompt cache's countdown
+  isCacheOff: boolean // /xray cache off: no countdown, toast or table
+  idleGen: number // the between-turns clock running now; a newer one retires it
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
+
+// Round 18: between turns, the cache countdown's own clock. It wakes only when the strip's text changes
+// (each minute, each second in the last five) or the toast is due, and stops once the cache lapses.
+// Each start retires the one before (idleGen), so a sleeping old loop never draws stale minutes.
+async function idle($: EngineInterface, s: Live) {
+  const gen = ++s.idleGen
+  if (s.isCacheOff || isOff(s)) return
+  try {
+    if (!s.turn && s.cache.anchor >= 0) {
+      const ttl = await readTtl($, s)
+      if (ttl) s.cache = { ...s.cache, ttl }
+      await update($, keptCache, () => s.cache)
+    }
+    while (gen === s.idleGen && !s.turn && !s.isCacheOff && !isOff(s)) {
+      const now = await $.clock.now()
+      if (isToastDue(s.cache, now)) {
+        s.cache = { ...s.cache, toastedAt: s.cache.anchor }
+        $.ui.toast(toastText(s.cache, now), { timeoutMs: 15_000 })
+        await update($, keptCache, () => s.cache)
+      }
+      $.ui.invalidate('ui.render')
+      const wait = nextChange(s.cache, now)
+      if (wait === null) return
+      await $.clock.sleep(wait + 50)
+    }
+  } catch {
+    // the strip keeps its last figure
+  }
+}
+
+const TAIL_BYTES = '262144'
+
+// The lifetime of the newest write, from the end of this session's transcript (it can run to tens of MB).
+async function readTtl($: EngineInterface, s: Live): Promise<Cache['ttl']> {
+  const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${s.home}/.claude`
+  const ran = await $.process.run(['tail', '-c', TAIL_BYTES, transcriptPath(dir, s.cwd, await $.session.id())]).catch(() => null)
+  return ran && ran.exitCode === 0 ? ttlFromTail(ran.stdout) : null
+}
 
 // Once a second while a turn runs: fresh context figure and elapsed times.
 function tick($: EngineInterface, s: Live) {
@@ -169,7 +212,7 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} } }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0 }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
@@ -183,9 +226,15 @@ export const register: Register = (on, options) => {
     s.history = Array.isArray(past) ? (past as Event[]) : []
     const saved = s.prev ? null : await read($, keptTurn)
     if (saved) s.prev = loadTurn(saved)
+    s.isCacheOff = (await $.store.get('isCacheOff')) === true
+    const cached = s.cache.anchor < 0 ? await read($, keptCache) : null
+    if (cached) {
+      s.cache = cached
+      void idle($, s)
+    }
     const kept = await $.store.get('ledger')
     s.ledger = Array.isArray(kept) ? (kept as Entry[]) : []
-    await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards; rate good|bad rates the custom card', argumentHint: '[on|off|rate good|bad <note>]', immediate: true })
+    await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards; cache on|off the cache countdown; rate good|bad rates the custom card', argumentHint: '[on|off|cache on|off|rate good|bad <note>]', immediate: true })
 
     return next(e)
   })
@@ -202,6 +251,14 @@ export const register: Register = (on, options) => {
       await $.store.set('ledger', s.ledger)
 
       return { text: `${signal ? `the ${signal} card` : 'the cards'} rated ${rating.verdict}. ${s.ledger.length} in the taste ledger.` }
+    }
+    if (arg === 'cache on' || arg === 'cache off') {
+      s.isCacheOff = arg === 'cache off'
+      await $.store.set('isCacheOff', s.isCacheOff)
+      if (!s.isCacheOff) void idle($, s)
+      $.ui.invalidate('ui.render')
+
+      return { text: s.isCacheOff ? 'cache countdown off. /xray cache on brings it back.' : 'cache countdown on.' }
     }
     if (arg === 'on' || arg === 'off') {
       s.isHidden = arg === 'off'
@@ -303,7 +360,10 @@ export const register: Register = (on, options) => {
     }
     const r = await stream.result
     const u = r.usage
-    if (u) t.requests.push({ startedAt, firstAt: firstAt || startedAt, endedAt: await $.clock.now(), output: u.output_tokens, input: u.input_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens })
+    if (u) {
+      t.requests.push({ startedAt, firstAt: firstAt || startedAt, endedAt: await $.clock.now(), output: u.output_tokens, input: u.input_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens })
+      s.cache = noteRequest(s.cache, { startedAt, input: u.input_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens, output: u.output_tokens, model: e.model }, t.requests.length === 1)
+    }
 
     return r
   })
@@ -329,6 +389,18 @@ export const register: Register = (on, options) => {
       await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined }))
       await update($, keptTurn, () => saveTurn(t))
       $.ui.invalidate('ui.render')
+      void idle($, s)
+    }
+
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    // /clear: the same process goes on as a new conversation with a cold cache.
+    if (e.reason === 'clear') {
+      s.cache = emptyCache()
+      s.idleGen++
+      await update($, keptCache, () => null)
     }
 
     return next(e)
@@ -423,7 +495,7 @@ export const register: Register = (on, options) => {
     const usage = await $.session.usage().catch(() => null)
     // Text columns inside the paddingX={1} below; rows as the surface measured them.
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
-    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows })
+    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -465,6 +537,11 @@ export const register: Register = (on, options) => {
         {folder ? <Text>{`${folder}  `}</Text> : null}
         {gauge.map((g, i) => (
           <Text key={`c${i}`} color={g.color} dimColor={g.dim}>
+            {g.t}
+          </Text>
+        ))}
+        {(s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, await $.clock.now(), !hasTail)).map((g, i) => (
+          <Text key={`k${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim}>
             {g.t}
           </Text>
         ))}

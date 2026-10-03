@@ -2,6 +2,7 @@
 
 import type { Line } from './cards'
 import { MARK, bar, tile } from './glyphs'
+import { cacheRows, type Cache } from './cache'
 import type { Entry } from './ledger'
 import { openTodos, type Request, type Step, type Turn } from './track'
 
@@ -80,7 +81,7 @@ function stepRow(s: Step, now: number, cols: number): Line {
   return [mark, { t: ' ' }, { t: (s.say.length > n ? s.say.slice(0, n - 1) + '…' : s.say).padEnd(n) }, { t: secs((s.endedAt ?? now) - s.startedAt).padStart(7), dim: true }]
 }
 
-export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: readonly Entry[] = [], size: Size = {}): Section[] {
+export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: readonly Entry[] = [], size: Size = {}, cache: Cache | null = null): Section[] {
   const out: Section[] = []
   // At NARROW and wider the panel draws exactly as before; the Text rows truncate any overflow.
   const cols = size.cols !== undefined && size.cols < NARROW ? size.cols : Infinity
@@ -117,6 +118,8 @@ export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: 
     if (usage.cost) rows.push([{ t: 'spent'.padEnd(10), dim: true }, { t: `$${usage.cost.usd.toFixed(2)}` }, { t: ' this session', dim: true }])
     if (rows.length) out.push({ title: 'session', rows })
   }
+  const cached = cache ? cacheRows(cache, now, isShort ? 3 : MAX_REQUESTS, cols) : null
+  if (cached) out.push(cached)
   if (ledger.length)
     out.push({
       title: `taste ledger · ${ledger.length}`,
