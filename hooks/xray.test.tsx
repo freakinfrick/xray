@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard } from './cards'
 import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -92,29 +92,32 @@ test('a run cut off by the end of the turn reads as stopped, not running', async
   expect(lastTurn(t, 10)).toEqual({ title: 'tests · run 1', headline: 'run stopped', tone: 'fail', owed: [] })
 })
 
-test('a long line takes the spare row instead of being cut, splitting at a space', async () => {
-  const rows = fitRows([[{ t: '◆ reading' }], [{ t: '» Rerunning the tests after fixing the rounding', dim: true }]], 20, 3)
-  expect(rows.map(text)).toEqual(['◆ reading', '» Rerunning the', '  tests after fixing the rounding'])
+test('a long line wraps at a space into the card body instead of being cut', async () => {
+  const rows = body({ title: 'now', tone: 'quiet', lines: [[{ t: '◆ reading' }], [{ t: '» Rerunning the tests after fixing the rounding', dim: true }]] }, 20, 3)
+  expect(rows.map(text)).toEqual(['◆ reading', '» Rerunning the', '  tests after…'])
   expect(rows[1]?.[0]?.dim).toBe(true)
-  expect(fitRows([[{ t: 'short' }], [{ t: '' }]], 20, 3).map(text)).toEqual(['short', '', ''])
-  const styled = fitRows([[{ t: 'next ▸ ', dim: true }, { t: 'updating all of the call sites' }]], 16, 3)
+  const styled = wrap([{ t: 'next ▸ ', dim: true }, { t: 'updating all of the call sites' }], 16)
   expect(styled.map(text)).toEqual(['next ▸ updating', '  all of the', '  call sites'])
 })
 
 test('a spare row is drawn only when the lines leave one free after wrapping', async () => {
   const spare = [{ t: 'steps ▆▆' }]
-  expect(fitRows([[{ t: 'a' }], [{ t: 'short' }]], 20, 3, spare).map(l => text(l))).toEqual(['a', 'short', 'steps ▆▆'])
-  expect(fitRows([[{ t: 'a' }], [{ t: 'a narration long enough to wrap' }]], 20, 3, spare).map(l => text(l))).toEqual(['a', 'a narration long', '  enough to wrap'])
+  expect(body({ title: 'x', tone: 'quiet', lines: [[{ t: 'a' }], [{ t: 'short' }]], spare }, 20, 3).map(l => text(l))).toEqual(['a', 'short', 'steps ▆▆'])
+  expect(body({ title: 'x', tone: 'quiet', lines: [[{ t: 'a' }], [{ t: 'a narration long enough to wrap' }]], spare }, 20, 3).map(l => text(l))).toEqual(['a', 'a narration long', '  enough to wrap'])
 })
 
-test('the telemetry line shows only measured figures', async () => {
+test('the telemetry figures are only the measured ones', async () => {
   const t = newTurn('x', 0)
-  expect(text(telemetry(t, null, 5000))).toBe('turn 5s')
+  const all = (c: number | null, n: number) => {
+    const p = teleParts(t, c, n)
+    return [p.ctx, p.tok, p.cache, p.turn, p.effort].filter(Boolean).map(x => text(x)).join('   ')
+  }
+  expect(all(null, 5000)).toBe('turn 5s')
   t.requests.push({ startedAt: 0, firstAt: 1000, endedAt: 3000, output: 80, input: 100, cacheRead: 800, cacheWrite: 100 })
-  expect(text(telemetry(t, 41.4, 72_000))).toBe('ctx ███▎░░░░ 41%   tok/s 40   cache ██████▍░ 80%   turn 1m 12s')
-  expect(telemetry(t, 74, 0).find(x => x.t === ' 74%')?.color).toBe('yellow')
+  expect(all(41.4, 72_000)).toBe('ctx ███▎░░░░ 41%   tok/s 40   cache ██████▍░ 80%   turn 1m 12s')
+  expect(teleParts(t, 74, 0).ctx?.find(x => x.t === ' 74%')?.color).toBe('yellow')
   t.requests.push({ startedAt: 3000, firstAt: 3500, endedAt: 4500, output: 20, input: 100, cacheRead: 800, cacheWrite: 100 })
-  expect(text(telemetry(t, null, 5000))).toContain('tok/s █▁ 33')
+  expect(all(null, 5000)).toContain('tok/s █▁ 33')
 })
 
 test('spawned agents make the agents card: who runs, what the oldest is doing, the goal', async () => {
@@ -780,9 +783,9 @@ test('step text is kept to 72 chars and the now card shows it whole, last: inclu
 test('effort shows in shorthand: desktop telemetry, phone bottom edge, keyboard-up row; nothing when absent', async () => {
   expect([effortTag('low'), effortTag('medium'), effortTag('high'), effortTag('xhigh'), effortTag('max'), effortTag(undefined)]).toEqual(['○ low', '◐ med', '● high', '◉ xhigh', '◉ max', undefined])
   const t = newTurn('x', 0)
-  expect(text(telemetry(t, null, 5000))).toBe('turn 5s')
+  expect(teleParts(t, null, 5000).effort).toBeUndefined()
   t.effort = 'medium'
-  expect(text(telemetry(t, null, 5000))).toBe('turn 5s   ◐ med')
+  expect(text(teleParts(t, null, 5000).effort)).toBe('◐ med')
   expect(text(compact(t, undefined, null, 22, 2000, 44, false).bottom)).toBe('ctx  ██░░░░░░ 22%  ◐ med  2s')
   expect(text(compact(t, undefined, null, 22, 2000, 44, true).body[0])).toBe('░░░░░░ 0 · ctx 22% · ◐ med')
 })

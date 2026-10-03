@@ -316,24 +316,6 @@ export function lastTurn(t: Turn, now: number): LastTurn {
   return { title: card.title, headline, tone, owed: openTodos(t).slice(0, 4).map(x => ({ t: x.text, color: x.color })) }
 }
 
-// Long lines take the spare rows instead of being cut: each split breaks at a space and the
-// continuation is indented under the text. What still does not fit is truncated by the renderer.
-export function fitRows(lines: Line[], width: number, rows: number, spare?: Line): Line[] {
-  const out = lines.filter((l, i) => i === 0 || l.some(s => s.t))
-  for (let i = 0; i < out.length && out.length < rows; i++) {
-    const line = out[i] ?? []
-    const all = line.map(s => s.t).join('')
-    if (all.length <= width) continue
-    const space = all.lastIndexOf(' ', width)
-    const cut = space > width / 3 ? space : width
-    const [head, tail] = splitLine(line, cut, all[cut] === ' ' ? 1 : 0)
-    out.splice(i, 1, head, [{ t: '  ' }, ...tail])
-  }
-  if (spare && out.length < rows) out.push(spare)
-  while (out.length < rows) out.push([])
-  return out.slice(0, rows)
-}
-
 export function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
   const head: Line = []
   const tail: Line = []
@@ -358,12 +340,6 @@ const GAUGE = 8
 // A numeric budget reads as itself; no effort sent (a model without one) draws nothing.
 const EFFORT: Record<string, string> = { low: '○ low', medium: '◐ med', high: '● high', xhigh: '◉ xhigh', max: '◉ max' }
 export const effortTag = (e: string | number | undefined): string | undefined => (e === undefined ? undefined : typeof e === 'number' ? `◐ ${e}` : (EFFORT[e] ?? e))
-
-// The one telemetry line under the cards. Every figure is measured; a figure not known yet is left out.
-export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line {
-  const p = teleParts(t, ctxPercent, now)
-  return [p.ctx, p.tok, p.cache, p.turn, p.effort].filter((x): x is Line => !!x).flatMap((x, i) => (i ? [{ t: '   ' }, ...x] : x))
-}
 
 // Each figure on its own, so the tray can set each under the card it belongs to (round 16).
 export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } {

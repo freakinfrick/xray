@@ -55,7 +55,8 @@ function keep(rows: Line[], n: number, width: number): Line[] {
   if (rows.length <= n) return rows
   const out = rows.slice(0, Math.max(0, n))
   const last = out[out.length - 1]
-  if (last) out[out.length - 1] = cells(last) < width ? [...last, { t: '…', dim: true }] : clipLine(last, width)
+  // A full last row gives up its last word to make room for the ellipsis.
+  if (last) out[out.length - 1] = cells(last) < width ? [...last, { t: '…', dim: true }] : clipLine(last, width - 1)
   return out
 }
 
