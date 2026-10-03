@@ -659,7 +659,9 @@ export const register: Register = (on, options) => {
     const usedOf = (lead: Line) => cells(lead) + (glyph ? 1 : 0) + turnCells
     const roomOf = (lead: Line) => width - usedOf(lead) - 3 - EDGE_MARK
     const extra = leadOf(true)
-    const isExtra = hasTail && !s.isHidden && genome.shown(s.rec.turns, roomOf(extra)) >= Math.min(3, s.rec.turns.length)
+    // They cost nothing when the genome is on its own row anyway (a long last-turn line pushes it there).
+    const bare = s.isHidden ? 0 : genome.shown(s.rec.turns, roomOf(leadOf(false)))
+    const isExtra = hasTail && (s.isHidden || genome.shown(s.rec.turns, roomOf(extra)) >= Math.min(3, bare))
     const lead = isExtra ? extra : leadOf(false)
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
