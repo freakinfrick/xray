@@ -231,3 +231,29 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   width; session rows drop their dim tail when it would not fit. Rows: when the surface
   measures < 30 rows (phone with keyboard up ≈ 21), at most 3 requests, 3 steps, 4 owed,
   1 ledger entry. Measured basis: `~/claude/mods/mobile/README.md` (47 × 42, keyboard ≈ 21).
+
+## Round 8 — compact narrow layout (2026-10-03, user "go but 1b")
+
+- Picks: **1b** strip, no frames (over the recommended one-card 1a); **2a** switch by width,
+  not device class; **3a** keyboard up → two-row ticker. Mockups were drawn in-session (≤ 41 cols).
+- Trigger: `e.viewport.columns < 60` → compact; ≥ 60 unchanged (2 or 3 cards). Rows: compact
+  draws the **strip** when `e.viewport.rows` ≥ 30 or unknown, the **ticker** when < 30
+  (phone keyboard up ≈ 21). Spinner viewport rows not yet measured: check before relying on it.
+- Width: every row `truncate-end`, text ≤ columns − 3 (2 padding + never fill the last column,
+  capture 3). Parts drop right to left when they do not fit; never cut mid-word.
+- Strip, fixed 4 rows (fixed so the spinner area does not jump):
+  1. now: running step as the round-6 inverse tile `◆` + tool, elapsed turn clock, 1 Hz pulse,
+     step subject. `◆ Bash 46s ▂▄▆  find arch registry`
+  2. narration `» …` (same 30 s TTL as the cards); else dim `last: <finished step>`.
+  3. progress: the task card's first row when its template is not plain progress (tests bar,
+     bisect range, custom card); else the step trail (last steps that fit) + `5 done` / `· 1
+     failed`. Then to-do squares if they fit: one per to-do in its hue (done inverse, in
+     progress `◉`, pending dim `□`) + `k/N`. `▆▆▆▆▆▄ 5 done      to-do ■■◉□ 2/4`
+  4. telemetry, trimmed: `ctx` gauge + %, tok/s (no sparkline), cache %.
+     Turn clock lives in row 1. `ctx ▌······· 6%  108 t/s  cache 92%`
+- Ticker, 2 rows: row 1 as above; row 2 = trail count · squares k/N · ctx % · tok/s.
+  `▆▆▆▆▆▄ 5 · ■■◉□ 2/4 · ctx 6% · 108 t/s`
+- Colors, glyphs, tones: round 6 unchanged. Context warning (≥ 70%) colors the ctx part.
+- Checks: tests at 47×42 (4 rows, every row ≤ 44 cells), 47×21 (2 rows), 47×unknown rows
+  (strip), 100 cols (cards unchanged, existing tests green); tsc; live phone capture 6 in
+  `~/claude/mods/mobile/README.md`.
