@@ -676,7 +676,9 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   const phone = await at(47, 42)
   expect(await phone.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
   expect(await phone.find({ type: 'Text', text: /^╭$/ })).toBeDefined()
-  expect(await phone.find({ type: 'Text', text: /^ ◇ thinking $/ })).toBeDefined() // the status band
+  const band = await phone.find({ type: 'Text', text: /^ ◇ thinking $/ }) // the status band
+  expect((band as { props?: Record<string, unknown> } | undefined)?.props?.backgroundColor).toBe('magenta')
+  expect((band as { props?: Record<string, unknown> } | undefined)?.props?.inverse).toBeUndefined()
   expect(await phone.find({ type: 'Text', text: /thinking/ })).toBeDefined()
   expect(await phone.find({ type: 'Text', text: /^» / })).toBeDefined()
   await phone.unmount()

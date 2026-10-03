@@ -314,3 +314,5 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   ≤ width − 8. Overflow (round 10's spare row) is a band row of its own: `│` + band + `│`.
 - Checked: validate, tsc, 55 tests (band text, overflow band, pulse apart, mounted band at 47×42);
   text render at 44 cols eyeballed. Not yet seen on the phone.
+- Capture 7: inverse + magenta drew as black on green in Termius. The band is now an explicit
+  `backgroundColor` (tone color; quiet = gray) with `color: black`; test asserts it.

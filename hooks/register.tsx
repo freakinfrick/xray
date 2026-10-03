@@ -305,10 +305,11 @@ export const register: Register = (on, options) => {
           <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '─'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
         </Text>
       )
-      // The status as a band in the tone color, text reversed (round 11). It starts right after the
+      // The status as a band: the tone color behind dark text (round 11). It starts right after the
       // corner, so its text sits in column 2 like the body's; its overflow is a band row under it.
+      // An explicit background, not inverse: Termius drew inverse + magenta as black on green (capture 7).
       const hi = (t: string, key: string) => (
-        <Text key={key} color={color} dimColor={dim} inverse>
+        <Text key={key} backgroundColor={color ?? 'gray'} color="black">
           {` ${t} `}
         </Text>
       )
