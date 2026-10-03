@@ -12,7 +12,7 @@ import { checkVoice, narrationOf, sayStep } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
-import { MOMENT_BG, celebrations, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
+import { MARK_GLYPH, MOMENT_BG, celebrations, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -446,8 +446,10 @@ export const register: Register = (on, options) => {
       endTurn(t)
       t.endedAt = now
       const letters = genome.code(t)
-      const moments = [...celebrations(t), ...(await turnMoments($, s, t, letters, now).catch(() => []))]
-      await saveGenome($, s, letters)
+      await loadGenome($, s)
+      const lm = landmarks(t, s.rec, s.ctx)
+      const moments = [...celebrations(t), ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
+      await saveGenome($, s, letters, { marks: lm.marks, tests: lm.tests })
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -556,7 +558,7 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         ))}
-        {genomeRows(genome.rows(s.rec.turns, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
+        {genomeRows(withNotes(s.rec, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
       </Box>
     )
   })
@@ -681,6 +683,22 @@ function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resol
     </Text>
   ))
 }
+
+// Round 20 (one shared row): the genome's rows with the note row just above the newest one: landmarks
+// over their step, turn names at each turn's first cell, the session's longest turn marked ⧗.
+function withNotes(rec: SessionRec, width: number, opts: Parameters<typeof genome.rows>[2]): Line[] {
+  const rows = genome.rows(rec.turns, width, opts)
+  if (!rows.length) return rows
+  const longest = rec.turns.reduce((best, x, i) => (x.length > (rec.turns[best]?.length ?? 0) ? i : best), 0)
+  const notes: genome.Note[] = [
+    ...rec.marks.map(m => ({ turn: m.turn, at: m.at, glyph: MARK_GLYPH[m.kind], text: m.text, look: markLook(m.kind) })),
+    ...(rec.turns.length >= 3 && (rec.turns[longest]?.length ?? 0) >= LONGEST_MIN ? [{ turn: longest, at: 0, glyph: MARK_GLYPH.longest, text: `longest · ${rec.turns[longest]?.length} steps`, look: markLook('longest') }] : []),
+    ...rec.names.map((name, turn) => ({ turn, at: 0, text: name })).filter(n => n.text && rec.turns[n.turn]),
+  ]
+  const row = genome.annotate(rec.turns, width, notes, opts)
+  return row.length ? [...rows.slice(0, -1), row, ...rows.slice(-1)] : rows
+}
+const LONGEST_MIN = 12
 
 // Round 19: the genome's rows, one Text each (exact widths from genome.ts).
 const GENOME_LABEL = 'genome '

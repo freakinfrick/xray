@@ -10,7 +10,8 @@ export type MarkKind = 'commit' | 'green' | 'red' | 'fanout' | 'ctx' | 'longest'
 export type Mark = { turn: number; at: number; kind: MarkKind; text: string }
 // A file's touches in time order as genome letters (r read, e edit, x failed), newest last (round 20e).
 export type FileHeat = { f: string; cells: string; at: number }
-export type SessionRec = { turns: string[]; names: string[]; marks: Mark[]; files: FileHeat[]; startedAt?: number }
+// tests: the session's test state after its last counted run (round 20b: "red again" needs it).
+export type SessionRec = { turns: string[]; names: string[]; marks: Mark[]; files: FileHeat[]; startedAt?: number; tests?: 'red' | 'green' }
 
 export const MAX_FILES = 60
 export const MAX_CELLS = 40 // per file; the oldest touches drop first
@@ -26,11 +27,11 @@ export function loadRec(v: unknown): SessionRec {
   const o = v as Record<string, unknown>
   const marks = Array.isArray(o.marks) ? (o.marks as Mark[]).filter(m => typeof m?.turn === 'number' && typeof m.at === 'number' && typeof m.text === 'string') : []
   const files = Array.isArray(o.files) ? (o.files as FileHeat[]).filter(x => typeof x?.f === 'string' && typeof x.cells === 'string') : []
-  return { turns: strs(o.turns), names: strs(o.names), marks, files, ...(typeof o.startedAt === 'number' ? { startedAt: o.startedAt } : {}) }
+  return { turns: strs(o.turns), names: strs(o.names), marks, files, ...(typeof o.startedAt === 'number' ? { startedAt: o.startedAt } : {}), ...(o.tests === 'red' || o.tests === 'green' ? { tests: o.tests } : {}) }
 }
 
 // One finished turn appended. Past MAX_TURNS the oldest turns go, and their names and marks with them.
-export function addTurn(rec: SessionRec, letters: string, extra: { name?: string; marks?: Omit<Mark, 'turn'>[]; files?: FileHeat[] } = {}): SessionRec {
+export function addTurn(rec: SessionRec, letters: string, extra: { name?: string; marks?: Omit<Mark, 'turn'>[]; files?: FileHeat[]; tests?: 'red' | 'green' } = {}): SessionRec {
   const n = rec.turns.length
   const names = [...rec.names, ...Array(Math.max(0, n - rec.names.length)).fill('')].slice(0, n)
   let turns = [...rec.turns, letters]
@@ -42,7 +43,7 @@ export function addTurn(rec: SessionRec, letters: string, extra: { name?: string
     named = named.slice(cut)
     marks = marks.filter(m => m.turn >= cut).map(m => ({ ...m, turn: m.turn - cut }))
   }
-  return { ...rec, turns, names: named, marks, files: mergeFiles(rec.files, extra.files ?? []) }
+  return { ...rec, turns, names: named, marks, files: mergeFiles(rec.files, extra.files ?? []), ...(extra.tests ? { tests: extra.tests } : {}) }
 }
 
 // A turn's file touches folded into the session's: cells appended, newest touch first, capped.

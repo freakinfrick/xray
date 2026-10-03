@@ -61,31 +61,35 @@ function liveCells(t: Turn, now: number): Seg[] {
 const COMMIT_CHARS = 40
 const UNFOLD_MS = 500
 
-// Rows of exactly `width` cells or fewer. `label` leads the first row; later rows indent under it.
-// Past `maxRows` the oldest whole turns fold, one at a time, so a turn is never cut in half.
-export function rows(turns: readonly string[], width: number, opts: { live?: Turn; now?: number; maxRows?: number; label?: string } = {}): Line[] {
+// A laid-out cell and where it came from: turn index (turns.length = the live turn) and step within it.
+type Placed = { seg: Seg; turn?: number; step?: number }
+type Opts = { live?: Turn; now?: number; maxRows?: number; label?: string }
+
+// The genome wrapped into rows of at most `width - label` cells. Past `maxRows` the oldest whole turns
+// fold, one at a time, so a turn is never cut in half.
+function place(turns: readonly string[], width: number, opts: Opts): Placed[][] {
   const { live, now = 0, maxRows = MAX_ROWS, label = '' } = opts
   const liveSegs = live ? liveCells(live, now) : []
   if (!turns.some(x => x) && !liveSegs.length) return []
   const room = Math.max(8, width - label.length)
-  const lay = (fold: number): Seg[][] => {
-    const segs: Seg[] = fold ? [{ t: `+${fold} turn${fold > 1 ? 's' : ''} `, dim: true }] : []
-    const kept: Seg[][] = [...turns.slice(fold).map(x => [...x].map(cellOf)), ...(liveSegs.length ? [liveSegs] : [])]
-    kept.forEach((cells, i) => {
-      if (i) segs.push({ t: '│', dim: true })
-      segs.push(...cells)
+  const lay = (fold: number): Placed[][] => {
+    const segs: Placed[] = fold ? [{ seg: { t: `+${fold} turn${fold > 1 ? 's' : ''} `, dim: true } }] : []
+    const kept: { cells: Seg[]; turn: number }[] = [...turns.slice(fold).map((x, i) => ({ cells: [...x].map(cellOf), turn: fold + i })), ...(liveSegs.length ? [{ cells: liveSegs, turn: turns.length }] : [])]
+    kept.forEach(({ cells, turn }, i) => {
+      if (i) segs.push({ seg: { t: '│', dim: true } })
+      cells.forEach((seg, step) => segs.push({ seg, turn, step }))
     })
-    const out: Seg[][] = []
-    let cur: Seg[] = []
+    const out: Placed[][] = []
+    let cur: Placed[] = []
     let n = 0
-    for (const s of segs) {
-      if (n + s.t.length > room && cur.length) {
+    for (const p of segs) {
+      if (n + p.seg.t.length > room && cur.length) {
         out.push(cur)
         cur = []
         n = 0
       }
-      cur.push(s)
-      n += s.t.length
+      cur.push(p)
+      n += p.seg.t.length
     }
     return cur.length ? [...out, cur] : out
   }
@@ -93,8 +97,53 @@ export function rows(turns: readonly string[], width: number, opts: { live?: Tur
   let laid = lay(0)
   while (laid.length > maxRows && fold < turns.length) laid = lay(++fold)
   // Still too long (one huge live turn): keep its newest cells.
-  if (laid.length > maxRows) laid = laid.slice(-maxRows)
-  return laid.map((r, i) => [...(label ? [i ? { t: ' '.repeat(label.length) } : { t: label, dim: true }] : []), ...merge(r)])
+  return laid.length > maxRows ? laid.slice(-maxRows) : laid
+}
+
+// Rows of exactly `width` cells or fewer. `label` leads the first row; later rows indent under it.
+export function rows(turns: readonly string[], width: number, opts: Opts = {}): Line[] {
+  const label = opts.label ?? ''
+  return place(turns, width, opts).map((r, i) => [...(label ? [i ? { t: ' '.repeat(label.length) } : { t: label, dim: true }] : []), ...merge(r.map(p => p.seg))])
+}
+
+// Round 20 (interview pick: one shared row): the row drawn just above the genome's newest row, naming
+// what happened there. Landmarks sit over their step's cell, glyph first; turn names (round 20d) sit at
+// their turn's first cell. Landmarks place first, newest first; a label that won't fit whole shrinks to
+// its glyph or is skipped, never cut. Empty when nothing fits.
+export type Note = { turn: number; at: number; glyph?: string; text: string; look?: Omit<Seg, 't'> }
+export function annotate(turns: readonly string[], width: number, notes: readonly Note[], opts: Opts = {}): Line {
+  const laid = place(turns, width, opts)
+  const row = laid[laid.length - 1]
+  if (!row) return []
+  const lead = opts.label?.length ?? 0
+  const where = new Map<string, number>()
+  let col = lead
+  for (const p of row) {
+    if (p.turn !== undefined && p.step !== undefined) where.set(`${p.turn}:${p.step}`, col)
+    col += p.seg.t.length
+  }
+  const taken: [number, number][] = []
+  const isFree = (a: number, b: number) => b <= width && taken.every(([x, y]) => b + 1 < x || a > y + 1)
+  const put: { col: number; segs: Seg[] }[] = []
+  const ordered = [...notes].sort((a, b) => Number(!!b.glyph) - Number(!!a.glyph) || b.turn - a.turn || b.at - a.at)
+  for (const n of ordered) {
+    const c = where.get(`${n.turn}:${n.at}`)
+    if (c === undefined) continue
+    const tries: Seg[][] = n.glyph ? [[{ t: n.glyph, ...n.look }, { t: ` ${n.text}`, dim: true }], [{ t: n.glyph, ...n.look }]] : [[{ t: n.text, dim: true, ...n.look }]]
+    const fit = tries.find(segs => isFree(c, c + segs.reduce((a, g) => a + g.t.length, 0)))
+    if (!fit) continue
+    const end = c + fit.reduce((a, g) => a + g.t.length, 0)
+    taken.push([c, end])
+    put.push({ col: c, segs: fit })
+  }
+  if (!put.length) return []
+  const out: Seg[] = []
+  let at = 0
+  for (const p of put.sort((a, b) => a.col - b.col)) {
+    out.push({ t: ' '.repeat(p.col - at) }, ...p.segs)
+    at = p.col + p.segs.reduce((a, g) => a + g.t.length, 0)
+  }
+  return out
 }
 
 // Neighbouring cells of one look become one segment (fewer Text nodes per frame).

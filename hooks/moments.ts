@@ -3,6 +3,7 @@
 // and the panel. Every moment is a measured fact. Pure: the register gathers the inputs.
 
 import type { Line } from './cards'
+import type { Mark } from './session'
 import type { Run, Turn } from './track'
 
 export type MomentKind = 'celebrate' | 'record' | 'milestone' | 'landmark'
@@ -96,4 +97,45 @@ export function celebrations(t: Turn): Moment[] {
   const n = t.todos.length
   if (n && t.todos.every(x => x.status === 'completed') && t.todos.some(x => x.doneAt !== undefined && x.doneAt >= t.startedAt)) out.push({ kind: 'celebrate', text: 'list done', fact: `${n} of ${n}` })
   return out
+}
+
+// Round 20b: a finished turn's landmarks on the genome, each at its step's index in the turn's letters
+// (genome.code's order: steps as they ended, to-do bookkeeping left out). `tests` carries the session's
+// test state across turns: green once means a later failing run is "red again".
+export type Landmarks = { marks: Omit<Mark, 'turn'>[]; tests?: 'red' | 'green' }
+export function landmarks(t: Turn, rec: { marks: readonly Mark[]; tests?: 'red' | 'green' }, ctx: number | null): Landmarks {
+  const steps = t.done.filter(x => x.kind !== 'todo')
+  const marks: Omit<Mark, 'turn'>[] = []
+  let tests = rec.tests
+  let isGreenSeen = rec.marks.some(m => m.kind === 'green')
+  steps.forEach((x, at) => {
+    if (x.kind === 'commit' && x.ok) marks.push({ at, kind: 'commit', text: x.note?.match(/^[0-9a-f]{7,}\b/)?.[0]?.slice(0, 7) ?? 'commit' })
+    if (x.kind !== 'test') return
+    const run = t.runs.find(r => r.startedAt === x.startedAt && !r.running && !r.isStopped)
+    if (!run || !(run.total > 0 || run.ok !== undefined)) return
+    const isRed = run.total ? run.fail > 0 : run.ok === false
+    if (isRed && tests === 'green') marks.push({ at, kind: 'red', text: 'red again' })
+    if (!isRed && tests === 'red' && !isGreenSeen) {
+      marks.push({ at, kind: 'green', text: 'green' })
+      isGreenSeen = true
+    }
+    tests = isRed ? 'red' : 'green'
+  })
+  const agents = steps.map((x, at) => ({ x, at })).filter(({ x }) => x.kind === 'agent')
+  if (agents.length >= 2) marks.push({ at: agents[0]?.at ?? 0, kind: 'fanout', text: `${agents.length} agents` })
+  const crossed = rec.marks.filter(m => m.kind === 'ctx').map(m => Number(m.text.match(/\d+/)?.[0] ?? 0))
+  const edge = [70, 50].find(n => ctx !== null && ctx >= n && !crossed.some(c => c >= n))
+  if (edge && steps.length) marks.push({ at: steps.length - 1, kind: 'ctx', text: `ctx ${edge}%` })
+  return { marks, tests }
+}
+
+// How a landmark draws on the shared row (round 20b's glyphs: ink is plain or peach only; the genome's
+// legend owns the other colours).
+export const MARK_GLYPH: Record<Mark['kind'], string> = { commit: '⚑', green: '✓', red: '✕', fanout: '⋔', ctx: '▲', longest: '⧗' }
+export const markLook = (k: Mark['kind']) => (k === 'commit' ? { color: MOMENT_BG } : { bold: true })
+
+// The newest landmark of a turn as the slot's lowest-ranked moment (round 20b, b3).
+export function landmarkMoment(marks: readonly Omit<Mark, 'turn'>[]): Moment | undefined {
+  const m = marks[marks.length - 1]
+  return m && m.kind !== 'commit' ? { kind: 'landmark', text: m.text } : undefined
 }

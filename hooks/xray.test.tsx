@@ -11,7 +11,7 @@ import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, par
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
-import { MOMENT_BG, celebrations, milestones, noteRuns, pick, tile } from './moments'
+import { MOMENT_BG, celebrations, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -1371,4 +1371,32 @@ test('20a: tests back to green sweep the bar from empty and light the title; the
   expect(todoCard(t, null, 7100)).toMatchObject({ title: 'to-do · 1 of 1 ✓', isLit: true })
   expect(todoCard(t, null, 9000).isLit).toBe(false)
   expect(celebrations(t).map(x => x.text)).toEqual(['green', 'list done'])
+})
+
+test('20b: landmarks at their step: a commit, back to green once, red again after green, a fan-out, context crossing 50 %', async () => {
+  const t = newTurn('x', 0)
+  bash(t, 'b1', 'npm test', 'Tests: 1 failed, 2 passed, 3 total', 100)
+  startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 200)
+  finishStep(t, 'e', 'Edit', { file_path: 'a.ts' }, true, '', undefined, 210)
+  bash(t, 'b2', 'npm test', 'Tests: 3 passed, 3 total', 300)
+  bash(t, 'k', 'git commit -m "fix"', '[main 3f9c2ab9] fix', 400)
+  const lm = landmarks(t, { marks: [] }, 55)
+  expect(genome.code(t)).toBe('tetk')
+  expect(lm).toEqual({ marks: [{ at: 2, kind: 'green', text: 'green' }, { at: 3, kind: 'commit', text: '3f9c2ab' }, { at: 3, kind: 'ctx', text: 'ctx 50%' }], tests: 'green' })
+  const u = newTurn('y', 1000)
+  bash(u, 'b3', 'npm test', 'Tests: 1 failed, 2 passed, 3 total', 1100)
+  const rec = addTurn(emptyRec(), 'tetk', lm)
+  expect(landmarks(u, rec, 55).marks).toEqual([{ at: 0, kind: 'red', text: 'red again' }]) // ctx 50 % already marked
+  expect(landmarkMoment([{ at: 0, kind: 'red', text: 'red again' }])).toEqual({ kind: 'landmark', text: 'red again' })
+})
+
+test('20b: the note row sits over the newest genome row; landmarks first, names where whole, nothing cut', async () => {
+  const turns = ['rrrrrrrr', 'eeeeeeeeeeee', 'ccc']
+  const notes = [{ turn: 1, at: 2, glyph: '⚑', text: '3f9c2ab' }, { turn: 0, at: 0, text: 'long read' }, { turn: 2, at: 0, text: 'at the shell ×3' }]
+  const row = text(genome.annotate(turns, 40, notes, { label: 'genome ' }))
+  expect(row.indexOf('⚑')).toBe(7 + 8 + 1 + 2) // label, turn 0, its │, then turn 1's third cell
+  expect(row.indexOf('long read')).toBe(7) // turn 0's first cell
+  expect(row).not.toContain('at the shell') // would run past the edge: skipped, not cut
+  expect(row.length).toBeLessThanOrEqual(40)
+  expect(genome.annotate(turns, 60, [{ turn: 1, at: 0, glyph: '⚑', text: 'x'.repeat(80) }], { label: 'genome ' }).map(g => g.t).join('').trim()).toBe('⚑') // shrinks to its glyph
 })
