@@ -285,22 +285,38 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     // A narration line is news for 30 s; after that the last finished step says more.
     const said = now - s.narratedAt < NARRATION_TTL_MS ? s.narration : null
-    // Under 60 columns, round 8: frameless rows; with few rows (phone keyboard up) the 2-row ticker.
+    // Under 60 columns, rounds 8–9: one framed card; with few rows (phone keyboard up) its body folds to one row.
     if ((e.viewport?.columns ?? 100) < NARROW) {
-      const width = Math.max(20, (e.viewport?.columns ?? 47) - 3)
-      const rows = compact(s.turn, s.mode, said, s.ctx, now, width, (e.viewport?.rows ?? Infinity) < SHORT)
+      const w = Math.max(24, (e.viewport?.columns ?? 47) - 3) // never fill the last column
+      const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT)
+      const color = TONE_COLOR[k.tone]
+      const dim = k.tone === 'quiet'
+      const ink = (l: Line, key: string) => l.map((g, i) => (
+        <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+          {g.t}
+        </Text>
+      ))
+      const cellsOf = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
+      // An edge carrying a line: ╭─ text ───╮, or bare when the line is empty.
+      const edge = (l: Line, left: string, right: string, key: string) => (
+        <Text key={key} wrap="truncate-end">
+          <Text color={color} dimColor={dim}>{l.length ? `${left}─ ` : left + '─'}</Text>
+          {ink(l, key)}
+          <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '─'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
+        </Text>
+      )
       return (
         <Box flexDirection="column">
           {line}
-          {rows.map((l, r) => (
-            <Box key={`k${r}`} paddingX={1}>
-              <Text wrap="truncate-end">{l.length ? l.map((g, i) => (
-                <Text key={`k${r}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
-                  {g.t}
-                </Text>
-              )) : ' '}</Text>
-            </Box>
+          {edge(k.top, '╭', '╮', 'kt')}
+          {k.body.map((l, r) => (
+            <Text key={`kb${r}`} wrap="truncate-end">
+              <Text color={color} dimColor={dim}>{'│ '}</Text>
+              {ink(l, `kb${r}`)}
+              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cellsOf(l))) + ' │'}</Text>
+            </Text>
           ))}
+          {edge(k.bottom, '╰', '╯', 'kz')}
         </Box>
       )
     }

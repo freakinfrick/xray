@@ -264,3 +264,20 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   word-cut narration, ticker parts drop whole from the right, mounted 47×42 / 47×21 / 100).
   Open: live phone capture 6; whether a height-only change (keyboard up) re-draws by the 1 s tick
   (`RenderViewport.rows` says height alone re-draws nothing).
+- Phone capture 6 (2026-10-03, `IMG_2470/2471` via Taildrop, not kept): strip fit at 47 cols;
+  keyboard up switched to the ticker live, so the height change DOES re-draw by the 1 s tick.
+
+## Round 9 — compact rows in a card (2026-10-03, user "1a but …")
+
+- User, verbatim: "it would be nice if the info was bound in a card" → pick **1a**: the status
+  in the top edge, 4 rows, same height as the strip. Then: "i dont like the odd alignment of the
+  "done" stepper and the ctx stepper its visually cluttery".
+- Card `columns − 3` wide: top edge `╭─ ◇ deciding the next step · 8s ──╮`; body: narration, then
+  `steps` gauge + `k done` (+ failed) + to-do squares; bottom edge `╰─ ctx  gauge %  t/s  turn  cache ─╯`
+  (cache drops first). Edges hold ≤ width − 6, body ≤ width − 4, cut at a word or whole parts.
+- Gauges aligned (user): steps = one `█` per step (red failed, cyan live) padded with the ctx
+  bar's dim `░` track to 8 cells; `│ steps ` and `╰─ ctx  ` both put the bar at column 8.
+- Keyboard up: same card, body folded to one row, bare bottom edge (3 rows).
+- Edge color = the now card's tone; red when the last step failed and nothing runs (agent d2).
+- Checked: validate, tsc, 50 tests (gauge column + 8 cells, frame widths, fold, mounted 47×42 /
+  47×21 / 100); text render at 44 cols eyeballed in-session.
