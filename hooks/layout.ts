@@ -5,16 +5,19 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tone } from './cards'
+import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tile, type Tone } from './cards'
 import { frame } from './glyphs'
 import type { Turn } from './track'
 
-export const THREE = 140 // columns: three cards from here; below, the to-dos fold into the task card
+export const THREE = 140 // columns: three cards from here; below, the task card folds into the now card (round 17)
 export const TALL = 40 // rows: from here the cards take one more body row (round 16 pick B)
 const GUTTER = 1
 const SUBGAP = 3 // between two subcolumns
 const MIN_W = 24
 const NOW_MIN = 36
+const NOW_TODO = 40 // the now card's floor beside to-do cells (round 17)
+const CELL_MIN = 13 // a to-do cell is never narrower
+const CELL_MAX = 24
 const PROSE = 0.55 // the most of the width the prose card holds back for itself
 
 const pad = (l: Line, n: number): Line => (cells(l) < n ? [...l, { t: ' '.repeat(n - cells(l)) }] : l)
@@ -74,9 +77,81 @@ function columns(c: Card, inner: number): Line[] {
   return [...c.lines, ...side].flatMap(l => wrap(l, inner))
 }
 
+// To-do cells (round 17): each a few rows tall, left to right in list order. Row 0 holds the mark and the
+// place in the list, the rest the name wrapped at words (… only when its rows run out).
+const cellRowsOf = (c: Card, rows: number) => (c.foot && rows >= 4 ? rows - 1 : rows)
+// The width one cell asks for: its name over the rows under the mark, between CELL_MIN and CELL_MAX.
+const cellWant = (x: Tile, rows: number) => Math.max(CELL_MIN, Math.min(CELL_MAX, Math.ceil(x.text.length / Math.max(1, rows - 1)) + 3))
+
+function words(text: string, width: number, rows: number): string[] {
+  const out: string[] = []
+  let cur = ''
+  for (const w0 of text.split(/\s+/).filter(Boolean)) {
+    const w = w0.length > width ? w0.slice(0, width) : w0
+    if (cur && cur.length + 1 + w.length > width) {
+      out.push(cur)
+      cur = w
+    } else cur = cur ? `${cur} ${w}` : w
+  }
+  if (cur) out.push(cur)
+  if (out.length <= rows) return out
+  const kept = out.slice(0, Math.max(1, rows))
+  const last = kept[kept.length - 1] ?? ''
+  kept[kept.length - 1] = (last.length >= width ? last.slice(0, width - 1) : last) + '…'
+  return kept
+}
+
+function cell(x: Tile, w: number, rows: number): Line[] {
+  const text = rows > 1 ? words(x.text, w - 2, rows - 1) : []
+  const head = rows > 1 ? `${x.mark} ${x.n}` : `${x.mark} ${words(x.text, w - 4, 1)[0] ?? ''}`
+  const lines = [head, ...text]
+  return Array.from({ length: rows }, (_, r) => {
+    const t = lines[r] ?? ''
+    if (x.fill) return [{ t: ' ' + t.padEnd(w - 1), ...x.look }]
+    if (r === 0) return [{ t: ' ' + t.padEnd(w - 1), color: x.look.color }]
+    return t ? [{ t: ' ' }, { t, ...x.look }, { t: ' '.repeat(Math.max(0, w - 1 - t.length)) }] : [{ t: ' '.repeat(w) }]
+  })
+}
+
+// The cells in `inner` columns over `rows`. More than fit: a window keeps the list order around the live
+// one (one before it for context), and dim counts stand for the rest (✓N when all of them are done).
+export function tileRows(tiles: Tile[], inner: number, rows: number): Line[] {
+  const n = tiles.length
+  let lo = 0
+  let k = n
+  if (n * CELL_MIN + (n - 1) > inner) {
+    k = Math.max(1, Math.floor((inner - 8 + 1) / (CELL_MIN + 1)))
+    const live = tiles.findIndex(x => x.status !== 'completed')
+    lo = Math.max(0, Math.min((live < 0 ? n : live) - 1, n - k))
+  }
+  const shown = tiles.slice(lo, lo + k)
+  const before = tiles.slice(0, lo)
+  const after = n - lo - shown.length
+  const side = (before.length ? 4 : 0) + (after ? 4 : 0)
+  const w = Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((inner - side - (shown.length - 1)) / shown.length)))
+  const drawn = shown.map(x => cell(x, w, rows))
+  const mid = Math.floor((rows - 1) / 2)
+  const allDone = before.every(x => x.status === 'completed')
+  return Array.from({ length: rows }, (_, r) => {
+    const out: Line = []
+    if (before.length) out.push(r === mid ? { t: `${allDone ? MARK_OK : '+'}${before.length}`.padEnd(4), color: allDone ? 'green' : undefined, dim: !allDone } : { t: '    ' })
+    drawn.forEach((c, i) => out.push(...(i ? [{ t: ' ' }] : []), ...(c[r] ?? [])))
+    if (after) out.push(r === mid ? { t: ` +${after}`.padEnd(4), dim: true } : { t: '    ' })
+    return out
+  })
+}
+const MARK_OK = '✓'
+
 // A card's body rows: its lines (or subcolumns), chips, the spare row, then its fact (`foot`) set off
 // by a blank row when one is free.
 export function body(c: Card, inner: number, rows: number): Line[] {
+  if (c.tiles?.length) {
+    const cr = cellRowsOf(c, rows)
+    const out = tileRows(c.tiles, inner, cr)
+    if (cr < rows && c.foot) out.push(wrap(c.foot, inner)[0] ?? [])
+    while (out.length < rows) out.push([])
+    return out.slice(0, rows).map(l => clipLine(l, inner))
+  }
   const foot = c.foot ? wrap(c.foot, inner) : []
   let main = [...columns(c, inner), ...(c.chips?.length ? pack(c.chips, inner) : [])].filter((l, i) => i === 0 || cells(l))
   main = keep(main, Math.max(1, rows - foot.length), inner)
@@ -95,6 +170,11 @@ export function body(c: Card, inner: number, rows: number): Line[] {
 export function ideal(c: Card, tray: Line[] = []): number {
   const side = c.side ?? []
   const chips = (c.chips ?? []).reduce((a, x, i) => a + cells(x) + (i ? 2 : 0), 0)
+  if (c.tiles?.length) {
+    // Cells at the width their names ask for (title and tray still count): the most a to-do card wants.
+    const cw = Math.max(...c.tiles.map(x => cellWant(x, 3)))
+    return Math.max(c.tiles.length * (cw + 1) - 1 + 4, c.title.length + 6 + (c.note ? cells(c.note) + 2 : 0), tray.length ? cells(fitParts(tray, Infinity, '  ')) + 6 : 0)
+  }
   const flow = chips > 40 ? Math.max(widest(c.chips ?? []), Math.ceil(chips / 2) + 2) : chips
   const content = Math.max(side.length ? widest(c.lines) + SUBGAP + widest(side) : widest(c.lines), widest(c.foot ? [c.foot] : []), widest(c.spare ? [c.spare] : []), flow)
   const title = c.title.length + 6 + (c.note ? cells(c.note) + 2 : 0)
@@ -104,15 +184,31 @@ export function ideal(c: Card, tray: Line[] = []): number {
 // The prose card (index 0) keeps room for its content over two rows (between NOW_MIN and PROSE of the width),
 // each other card gets its ideal out of the rest (never under MIN_W), and whatever is left over goes
 // back to the prose card. A short narration so lends its width to a card that needs it.
-export function allot(ideals: number[], cols: number): number[] {
+// Round 17: with to-do cells beside it (`cellsAt` their card's index, `cap` the most they use) the prose
+// card keeps room for three rows instead, and the spare width goes to the cells first.
+export const cellsCap = (c: Card) => (c.tiles?.length ? c.tiles.length * (CELL_MAX + 1) - 1 + 4 : 0)
+export function allot(ideals: number[], cols: number, cellsAt?: number, cap = Infinity): number[] {
   const avail = cols - GUTTER * (ideals.length - 1)
+  const want = ideals.map(w => Math.max(MIN_W, w))
+  if (cellsAt) {
+    // Cells beside the prose: the other cards keep what they ask, the prose card three rows' worth,
+    // the cells everything else up to their cap; whatever the cap leaves goes back to the prose.
+    const keepNow = Math.max(NOW_TODO, Math.min(Math.ceil(((ideals[0] ?? 0) - 4) / 3) + 12, Math.floor(avail * PROSE))) // + borders, indent, word breaks
+    const others = want.reduce((a, w, i) => (i === 0 || i === cellsAt ? a : a + w), 0)
+    const cellsW = Math.min(Math.max(cap, want[cellsAt] ?? 0), avail - keepNow - others)
+    if (cellsW >= MIN_W) {
+      const out = want.map((w, i) => (i === cellsAt ? cellsW : w))
+      out[0] = avail - out.reduce((a, w, i) => (i ? a + w : a), 0)
+      return out
+    }
+  }
   // Prose wraps, so it holds back room for its longest line over two rows, not one.
   const keepNow = Math.max(NOW_MIN, Math.min(Math.ceil((ideals[0] ?? 0) / 2) + 2, Math.floor(avail * PROSE)))
   const room = avail - keepNow
-  const want = ideals.slice(1).map(w => Math.max(MIN_W, w))
-  const total = want.reduce((a, b) => a + b, 0)
+  const rest0 = want.slice(1)
+  const total = rest0.reduce((a, b) => a + b, 0)
   // Over budget: each card gives back in proportion to what it asked above the minimum.
-  const rest = total <= room ? want : want.map(w => MIN_W + Math.floor(((w - MIN_W) * Math.max(0, room - MIN_W * want.length)) / Math.max(1, total - MIN_W * want.length)))
+  const rest = total <= room ? rest0 : rest0.map(w => MIN_W + Math.floor(((w - MIN_W) * Math.max(0, room - MIN_W * rest0.length)) / Math.max(1, total - MIN_W * rest0.length)))
   return [avail - rest.reduce((a, b) => a + b, 0), ...rest]
 }
 
@@ -184,16 +280,20 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const plain = taskCard(t, now)
   const task: Card = plain.title === 'progress' || !t.done.length ? plain : { ...plain, side: [[{ t: 'steps ', dim: true }, ...filmstrip(t, 24, now, false)], stepCounts(t)] }
   const tp = teleParts(t, ctx, now)
-  const hasTodo = !!(todo.chips?.length || todo.note)
+  const hasTodo = !!(todo.tiles?.length || todo.note)
   let cards: Card[]
   let parts: Line[][]
   if (cols >= THREE && hasTodo) {
     cards = [now0, todo, task]
     parts = [known([tp.turn, tp.effort]), known([tp.ctx]), known([tp.tok, tp.cache])]
+  } else if (todo.tiles?.length) {
+    // Rule 5, round 17: one card fewer, and the to-dos keep theirs; the task card's first row becomes
+    // the now card's fact row (the last step gives way, the band names what runs).
+    const gist: Line = [{ t: `${task.title}  `, dim: true }, ...(task.lines[0] ?? [])]
+    cards = [{ ...now0, foot: gist }, todo]
+    parts = [known([tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   } else {
-    // Rule 5: one card fewer; the to-dos ride in the task card unless it already shows them.
-    const folded: Card = task.title === 'progress' || !todo.chips?.length ? task : { ...task, chips: [...(task.chips ?? []), ...todo.chips] }
-    cards = [now0, folded]
+    cards = [now0, task]
     parts = [known([tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   }
   const f = frame(now)
@@ -211,7 +311,8 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
     const walk = (i > 0 && c.tone === 'fail') || (i === 0 && (isSlow || isStalled)) ? f : undefined
     return { ...c, walk, fade }
   })
-  const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols)
+  const at = cards.findIndex(c => !!c.tiles?.length)
+  const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined)
   const top = band(head.lines[0] ?? [], t.running.size > 0)
   const bodies = cards.map((c, i) => body(c, (ws[i] ?? MIN_W) - 4, rows))
   const join = (f: (c: Card, i: number) => Line): Line => cards.flatMap((c, i) => (i ? [{ t: ' '.repeat(GUTTER) }, ...f(c, i)] : f(c, i)))

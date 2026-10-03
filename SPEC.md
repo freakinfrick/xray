@@ -462,3 +462,7 @@ What is known (agent, 2026-10-03):
 - Bugs seen live in the successor pane (190 cols): to-do names cut with `…` while rows sit empty (breaks
   the wrap rule); title `to-do · 0 of 2` with 4 to-dos (2 done) in the list; task card `batch · 80 of 100`
   with no batch running (custom card misfire).
+- **Pick (2026-10-03, from the page):** "xray r17: go; patches, also completed steps should be strike
+  through text, and steps to be completed shall have grey patch color fills/background". So 1a, with:
+  done = strikethrough text (in its hue), pending = grey background patch, live = solid hue patch.
+  Question 2 unanswered → recommended 2a (fold in, statusline script kept, prints only when mods off).

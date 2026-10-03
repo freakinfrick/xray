@@ -7,13 +7,17 @@ import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
 import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
 
 // inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
-export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string }
+export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string; strike?: boolean }
 export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explore'
 // spare: a row drawn only when the lines leave one free after wrapping.
 // side: a second subcolumn beside `lines` when the card is wide enough (else under them); chips: whole
 // tokens flowed into rows; foot: the card's fact row, set off by a blank row when one is spare (round 16).
-export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; foot?: Line }
+// tiles: the to-dos as cells a few rows tall, laid left to right in list order (round 17).
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; tiles?: Tile[]; foot?: Line }
+// One to-do cell: `n` its place in the list, `look` how its mark and name are drawn; `fill` paints the
+// whole cell in the look's background (a patch), else only the text carries it.
+export type Tile = { n: number; mark: string; text: string; status: Todo['status']; look: Omit<Seg, 't'>; fill: boolean }
 export type Mode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use' | undefined
 
 export const TONE_COLOR: Record<Tone, string | undefined> = { quiet: undefined, ok: 'green', fail: 'red', warn: 'yellow', live: 'cyan', think: 'magenta', explore: 'blue' }
@@ -144,22 +148,21 @@ export function stepCounts(t: Turn): Line {
   return [{ t: `${steps.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} ${MARK.fail}`, color: 'red' }] : [])]
 }
 
-const NBSP = '\u00a0' // keeps a chip whole when its row wraps
-
-// One patch per to-do: a grey patch while pending, ◆ and its name in its own color in progress, and a
-// solid patch in that color when done.
+// One cell per to-do (round 17 pick: patches): the live one a solid patch in its own hue, pending ones a
+// grey patch, done ones struck through in their hue. Patches are an explicit background with black ink,
+// never inverse (Termius drew inverse + color wrong). Just done, the name pops bold before the strike.
 const FLASH_MS = 320
-function chip(x: Todo, now = Infinity): Line {
-  const name = clip(x.text, 48).replace(/ /g, NBSP)
-  // Just done: its name pops bold in its own hue, then settles into the solid patch (round 16,
-  // direction 3). Its own hue reads on both palettes; white was paper on forest-light.
-  if (x.status === 'completed' && x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < FLASH_MS) return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, bold: true }]
-  if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
-  if (x.status === 'in_progress') return [{ t: `${MARK.live} `, color: x.color }, { t: name, color: x.color, bold: true }]
-  return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
+export function tileOf(x: Todo, n: number, now = Infinity): Tile {
+  const base = { n, text: x.text, status: x.status }
+  if (x.status === 'completed') {
+    const flash = x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < FLASH_MS
+    return { ...base, mark: MARK.done, look: flash ? { color: x.color, bold: true } : { color: x.color, strike: true }, fill: false }
+  }
+  if (x.status === 'in_progress') return { ...base, mark: MARK.live, look: { color: 'black', bg: x.color, bold: true }, fill: true }
+  return { ...base, mark: MARK.pending, look: { color: 'black', bg: 'gray' }, fill: true }
 }
 
-// The to-do list as chips; what else is on the plate (queued calls, agents out, a filling context)
+// The to-do list as cells; what else is on the plate (queued calls, agents out, a filling context)
 // rides in the top border.
 export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Card {
   const done = t.todos.filter(x => x.status === 'completed').length
@@ -174,7 +177,7 @@ export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Ca
     tone: warn ? 'warn' : t.todos.length && done === t.todos.length ? 'ok' : 'quiet',
     note: note.length ? note : undefined,
     lines: t.todos.length ? [] : [[{ t: 'no to-do list yet', dim: true }]],
-    chips: t.todos.length ? t.todos.map(x => chip(x, now)) : undefined,
+    tiles: t.todos.length ? t.todos.map((x, i) => tileOf(x, i + 1, now)) : undefined,
     foot: cur ? [{ t: '▸ ', dim: true }, { t: cur.active }] : undefined,
   }
 }

@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard } from './cards'
-import { allot, body, ideal, pack, spinnerRows, wrap } from './layout'
+import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
@@ -181,21 +181,20 @@ test('reads without edits make it research; to-dos become the questions', async 
   expect(text(card.lines[1])).toBe('? cache counted?')
 })
 
-test('the to-do card: one chip per to-do, grey until done, each in its own hue; plate tags in the border', async () => {
+test('the to-do card: one cell per to-do, live a patch in its hue, pending grey, done struck through; plate tags in the border', async () => {
   const t = newTurn('x', 0)
   expect(text(todoCard(t, 10).lines[0])).toBe('no to-do list yet')
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress' }, { content: 'commit', status: 'pending' }] }, 0)
   const card = todoCard(t, 50)
   expect(card.title).toBe('to-do · 1 of 3')
-  expect((card.chips ?? []).map(c => text(c).replace(/\u00a0/g, ' '))).toEqual([' read spec ', '◆ draw cards', ' commit '])
-  expect(card.chips?.[0]?.[0]?.inv).toBe(true) // done: a solid patch in its hue
-  expect(card.chips?.at(-1)?.at(-1)?.inv).toBe(true) // pending: a grey patch
+  expect((card.tiles ?? []).map(x => `${x.n} ${x.mark} ${x.text}`)).toEqual(['1 ■ read spec', '2 ◆ draw cards', '3 □ commit'])
+  expect(card.tiles?.[0]).toMatchObject({ fill: false, look: { strike: true } }) // done: struck through in its hue
+  expect(card.tiles?.[1]).toMatchObject({ fill: true, look: { color: 'black', bg: t.todos[1]?.color } }) // live: a solid patch, never inverse
+  expect(card.tiles?.[2]).toMatchObject({ fill: true, look: { color: 'black', bg: 'gray' } }) // pending: a grey patch
   expect(text(card.foot)).toBe('▸ ' + t.todos[1]?.active) // the one in progress, as the card's fact row
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
   expect(t.todos.some(x => x.color === 'red')).toBe(false)
-  const done = card.chips?.[0]?.[0]
-  expect(done?.color).toBe(t.todos[0]?.color)
-  expect(card.chips?.at(-1)?.at(-1)?.dim).toBe(true)
+  expect(card.tiles?.[0]?.look.color).toBe(t.todos[0]?.color)
   expect(card.note).toBeUndefined()
   expect(text(todoCard(t, 72).note)).toBe('▲ context 72%')
   // a rewrite keeps each surviving to-do's hue
@@ -203,11 +202,11 @@ test('the to-do card: one chip per to-do, grey until done, each in its own hue; 
   startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'draw cards', status: 'completed' }, { content: 'commit', status: 'in_progress' }, { content: 'push', status: 'pending' }] }, 1)
   expect(t.todos[0]?.color).toBe(hue)
   expect(new Set(t.todos.map(x => x.color)).size).toBe(3)
-  // chips flow whole: a row breaks between chips, never inside one
-  const chips = todoCard(t, 10).chips ?? []
-  const rows = pack(chips, 26).map(l => text(l))
-  expect(rows.join('  ').replace(/ {2,}/g, '|')).toBe(chips.map(c => text(c)).join('|').replace(/ {2,}/g, '|'))
-  expect(rows.every(r => r.length <= 26)).toBe(true)
+  // cells sit left to right in list order, each name wrapped inside its own cell
+  const rows = tileRows(todoCard(t, 10).tiles ?? [], 60, 3).map(l => text(l))
+  expect(rows.length === 3 && rows.every(r => r.length <= 60)).toBe(true) // fits; the card pads the rest
+  expect(rows[0]).toMatch(/■ 1 .*◆ 2 .*□ 3/)
+  expect(rows[1]).toMatch(/draw cards .*commit .*push/)
   const next = newTurn('y', 10)
   carryTodos(t, next)
   expect(next.todos.map(x => x.text)).toEqual(['commit', 'push'])
@@ -832,7 +831,7 @@ test('round 16: every row is exactly as wide as asked, at 190, 120 and 60 column
   }
 })
 
-test('round 16: three cards from 140 columns with a gap between them; below, the to-dos ride in the task card', async () => {
+test('round 16: three cards from 140 columns with a gap between them; below, the task card rides in the now card (round 17)', async () => {
   const t = midFix()
   const wide = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
   expect(wide[0]?.match(/╮ ╭/g)?.length).toBe(2) // three cards, one blank column between each
@@ -841,19 +840,19 @@ test('round 16: three cards from 140 columns with a gap between them; below, the
   expect(wide.at(-1)).toMatch(/^╰─ turn 9s .*┴─┴─ ctx .*┴─┴[─╌]*╯$/) // the tray: each card's figures under it
   const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
   expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
-  expect(mid.join('\n').replace(/\u00a0/g, ' ')).toContain('fix mul') // the chips came along into the task card
-  expect(mid.join('\n')).not.toContain('╭─ to-do')
+  expect(mid[0]).toContain('╭─ to-do · 3 of 5') // the to-dos keep their card
+  expect(mid.some(r => /│ tests · run 2  .*pass/.test(r))).toBe(true) // the task card's first row is the now card's fact
 })
 
-test('round 16: narration wraps whole and the last step keeps its own row, set off by a blank one', async () => {
+test('round 16: narration wraps whole and the last step keeps its own row; beside to-do cells the prose takes three rows', async () => {
   const t = midFix()
   const out = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
   const nowCol = (r: string) => r.slice(0, r.indexOf('│', 1) + 1)
   const rows = out.slice(1, 5).map(nowCol).map(r => r.slice(2, -2).trimEnd())
   expect(rows.join(' ').replace(/\s+/g, ' ')).toContain('the assert wants 6 and it returns 5.')
-  const at = rows.findIndex(r => r.startsWith('last: '))
-  expect(at).toBeGreaterThan(0)
-  expect(rows[at - 1]).toBe('') // a blank row between the story and the fact
+  expect(rows.at(-1)).toMatch(/^last: /) // the fact row last, the story whole above it
+  expect(rows.slice(0, 3).every(r => r !== '')).toBe(true) // three rows of prose, the now card no wider than that needs
+  expect(rows[0]?.length ?? 0).toBeLessThan(50)
   // at 3 rows the blank goes first; the fact row stays
   const three = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 3).map(l => text(l)).slice(1, 4).map(nowCol)
   expect(three[2]).toMatch(/last: /)
@@ -999,9 +998,8 @@ test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flas
   startStep(t, 'u', 'TodoWrite', { todos: [{ content: 'run tests', status: 'completed' }, { content: 'fix sum', status: 'completed' }, { content: 're-run tests', status: 'completed' }, { content: 'fix mul', status: 'completed' }, { content: 're-run tests to verify', status: 'in_progress' }] }, 6_000)
   expect(t.todos[3]?.doneAt).toBe(6_000)
   expect(t.todos[0]?.doneAt).toBeUndefined() // done before, never flashes again
-  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]).toMatchObject({ color: t.todos[3]?.color, bold: true })
-  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]?.inv).toBeUndefined()
-  expect(todoCard(t, 10, 7_000).chips?.[3]?.[0]).toMatchObject({ color: t.todos[3]?.color, inv: true })
+  expect(todoCard(t, 10, 6_100).tiles?.[3]?.look).toEqual({ color: t.todos[3]?.color, bold: true })
+  expect(todoCard(t, 10, 7_000).tiles?.[3]?.look).toEqual({ color: t.todos[3]?.color, strike: true })
   const memo = { tones: {} }
   const borderOf = (rows: ReturnType<typeof spinnerRows>, i: number) => rows[0]?.filter(s => s.t.includes('╭'))[i]
   spinnerRows(t, undefined, null, 10, 6_000, 188, 3, memo)
@@ -1026,7 +1024,19 @@ test('the walk keeps one rhythm across segment joins, and a card that moves plac
   const span = tray.slice(tray.lastIndexOf('┴') + 1)
   expect(span).not.toMatch(/──|╌╌/) // strictly alternating once walking
   const memo = { tones: {} }
-  spinnerRows(f, undefined, null, 10, 9_000, 188, 3, memo) // three cards: now, to-do, tests
-  const two = spinnerRows(f, undefined, null, 10, 9_100, 118, 3, memo) // two cards: tests moves to place 1
+  f.todos = [] // a to-do card with only a border note gives way below 140 columns
+  spinnerRows(f, undefined, null, 72, 9_000, 188, 3, memo) // three cards: now, to-do (▲ context), tests
+  const two = spinnerRows(f, undefined, null, 72, 9_100, 118, 3, memo) // two cards: tests moves to place 1
   expect(two[0]?.filter(s => s.t.includes('╭'))[1]?.dim).not.toBe(true)
+})
+
+test('round 17: more to-dos than fit slide a window over the list, kept in order, counts at both ends', async () => {
+  const t = newTurn('x', 0)
+  const names = ['a1', 'a2', 'a3', 'a4', 'a5', 'live', 'p7', 'p8', 'p9']
+  startStep(t, 'w', 'TodoWrite', { todos: names.map((c, i) => ({ content: c, status: i < 5 ? 'completed' : i === 5 ? 'in_progress' : 'pending' })) }, 0)
+  const rows = tileRows(todoCard(t, 10).tiles ?? [], 70, 3).map(l => text(l))
+  expect(rows.every(r => r.length <= 70)).toBe(true)
+  expect(rows[0]).toMatch(/■ 5 .*◆ 6 .*□ 7/) // one done one kept before the live one, then the list in order
+  expect(rows[1]).toMatch(/^✓4 /) // the hidden done ones count at the left
+  expect(rows[1]).toMatch(/\+\d+ *$/) // the rest at the right
 })

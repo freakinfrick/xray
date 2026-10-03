@@ -339,7 +339,7 @@ export const register: Register = (on, options) => {
       const color = TONE_COLOR[k.tone]
       const dim = k.tone === 'quiet'
       const ink = (l: Line, key: string) => l.map((g, i) => (
-        <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+        <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
           {g.t}
         </Text>
       ))
@@ -398,7 +398,7 @@ export const register: Register = (on, options) => {
         {rows.map((l, r) => (
           <Text key={`w${r}`} wrap="truncate-end">
             {l.map((g, i) => (
-              <Text key={`w${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+              <Text key={`w${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
                 {g.t}
               </Text>
             ))}
@@ -423,7 +423,7 @@ export const register: Register = (on, options) => {
             {sec.rows.map((l, r) => (
               <Text key={`p${i}r${r}`} wrap="truncate-end">
                 {l.map((g, k) => (
-                  <Text key={`g${k}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+                  <Text key={`g${k}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
                     {g.t}
                   </Text>
                 ))}
