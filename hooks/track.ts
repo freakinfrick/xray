@@ -172,16 +172,20 @@ export function planFromText(t: Turn, text: string) {
   if (t.todos.some(x => !x.id.startsWith('k'))) return
   const m = [...text.matchAll(/\bStep (\d+)\s*(?:\/|of)\s*(\d+)\b[:.]?[ \t]*([^\n]*)/gi)].pop()
   if (!m) return
-  const k = Number(m[1])
   const n = Math.min(Number(m[2]), 20)
-  if (!(k >= 1 && k <= n)) return
-  const said = (m[3] ?? '').replace(/[*_`]/g, '').trim().replace(/\.$/, '').slice(0, 60)
+  let said = (m[3] ?? '').replace(/[*_`]/g, '').trim()
+  // "Step 3/5 done: X. Next: Y." (this user's own status line) means 3 finished and the next one running.
+  const isDone = /^done\b/i.test(said)
+  const k = Number(m[1]) + (isDone ? 1 : 0)
+  if (isDone) said = (said.match(/\bnext:\s*([^.]*)/i)?.[1] ?? '').trim()
+  said = said.replace(/\.$/, '').slice(0, 60)
+  if (!(k >= 1 && k <= n + 1)) return
   const old = new Map(t.todos.map(x => [x.id, x]))
   t.todos = Array.from({ length: n }, (_, i) => {
     const id = `k${i + 1}`
     const prev = old.get(id)
     const text = i + 1 === k && said ? said : (prev?.text ?? `step ${i + 1}`)
-    return { id, text, active: text, status: i + 1 < k ? 'completed' : i + 1 === k ? 'in_progress' : 'pending', color: prev?.color } as Todo
+    return { id, text, active: text, status: i + 1 < k ? 'completed' : i + 1 === k ? 'in_progress' : 'pending', color: prev?.color, doneAt: prev?.doneAt } as Todo
   })
   colorTodos(t)
 }

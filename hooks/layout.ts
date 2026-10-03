@@ -188,7 +188,8 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
     const seen = memo?.tones[i]
     if (memo && seen?.tone !== c.tone) memo.tones[i] = { tone: c.tone, at: seen ? now : -Infinity }
     const fade = !!memo && now - (memo.tones[i]?.at ?? -Infinity) < FADE_MS
-    const walk = c.tone === 'fail' || (i === 0 && (isSlow || isStalled)) ? f : undefined
+    // The now card turns red when stuck but holds still; the failing card itself is what walks.
+    const walk = (i > 0 && c.tone === 'fail') || (i === 0 && (isSlow || isStalled)) ? f : undefined
     return { ...c, walk, fade }
   })
   const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols)

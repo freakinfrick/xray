@@ -106,7 +106,7 @@ export const sourceOf = (tool: string, input: Record<string, unknown>): string |
 // The narrator's line is kept only when it holds to the facts it was given (round 16, direction 4):
 // every number and every file-like name in it appears in them, and it never calls itself "the agent".
 export function checkVoice(line: string, facts: string): boolean {
-  if (!line.trim() || /\b(the agent|claude)\b/i.test(line)) return false
+  if (!line.trim() || /\bthe agent\b|\bclaude(?: is|'s)\b/i.test(line)) return false
   const known = facts.toLowerCase()
   const nums = line.match(/\d+(?:\.\d+)?/g) ?? []
   const names = line.match(/[\w-]+(?:[./_][\w-]+)+/g) ?? []

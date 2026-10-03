@@ -918,6 +918,9 @@ test('mood comes from measured steps: exploring, focused, stuck, closing, thinki
   startStep(f, 'b3', 'Bash', { command: 'npm test' }, 9_000)
   finishStep(f, 'b3', 'Bash', { command: 'npm test' }, false, 'Tests: 3 failed, 0 passed, 3 total', undefined, 9_500)
   expect(mood(f, undefined, 10_000)?.word).toBe('stuck')
+  const stuck = spinnerRows(f, undefined, null, 10, 10_000, 188, 3).map(l => text(l))
+  expect(stuck[0]?.slice(0, 60)).not.toContain('╌') // stuck: the now card is red but still
+  expect(stuck[0]).toContain('╌') // the failing tests card walks
   expect(text(nowCard(f, undefined, null, 10_000).lines[0])).toMatch(/^✕ stuck · /)
   expect(nowCard(f, undefined, null, 10_000).tone).toBe('fail')
   startStep(f, 'b4', 'Bash', { command: 'npm test' }, 11_000)
@@ -931,6 +934,8 @@ test('the narrator line is kept only when its numbers and names are in the facts
   expect(checkVoice('2 of 3 pass; mul next in sum.js.', facts)).toBe(true)
   expect(checkVoice('4 tests failing in cost.ts.', facts)).toBe(false) // made-up number and file
   expect(checkVoice('The agent is planning the task.', facts)).toBe(false)
+  expect(checkVoice('Claude is planning.', facts)).toBe(false)
+  expect(checkVoice('Rebuilding the claude repo docs.', facts)).toBe(true) // the repo's name is fine
 })
 
 test('memory: finished runs become events per project; a recurring failure and the usual suite time are recalled', async () => {
@@ -956,6 +961,10 @@ test('a plan written as text ("Step 3/5: fix mul") fills the to-dos; a tool list
   queueFromResponse(t, [{ type: 'text', text: 'Step 4/5: re-run tests' }])
   expect(t.todos[2]?.text).toBe('fix mul') // a finished step keeps its name
   expect(t.todos[3]?.status).toBe('in_progress')
+  const own = newTurn('y', 0)
+  queueFromResponse(own, [{ type: 'text', text: 'Step 3/5 done: tests pass. Next: commit.' }])
+  expect(own.todos.map(x => x.status)).toEqual(['completed', 'completed', 'completed', 'in_progress', 'pending'])
+  expect(own.todos[3]?.text).toBe('commit')
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'real one', status: 'pending' }] }, 1)
   queueFromResponse(t, [{ type: 'text', text: 'Step 1/2: nope' }])
   expect(t.todos.map(x => x.text)).toEqual(['real one'])

@@ -122,7 +122,7 @@ async function narrate($: EngineInterface, s: Live) {
   const steps = t.done.slice(-8).map(x => `- ${x.say}${x.ok === false ? ' (failed)' : ''}`)
   const live = [...t.running.values()].map(x => x.say)
   const run = t.runs.filter(x => !x.running).pop()
-  const tests = run ? `\nLatest test run: ${run.total ? `${run.pass} of ${run.total} pass` : run.ok ? 'passed' : 'failed'}${run.failing.length ? `, failing: ${run.failing.slice(0, 3).join(', ')}` : ''}` : ''
+  const tests = run ? `\nLatest test run: ${run.total ? `${run.pass} of ${run.total} pass, ${run.fail} failing` : run.ok ? 'passed' : 'failed'}${run.failing.length ? `, failing: ${run.failing.slice(0, 3).join(', ')}` : ''}` : ''
   const past = recall(s.history, t)
   const history = past.length ? `\nHistory in this project: ${past.join('; ')}` : ''
   const prompt = `Task from the user: ${t.prompt.replace(/\s+/g, ' ').slice(0, 400)}\nSteps so far:\n${steps.join('\n') || '- none yet'}\nRunning now: ${live.join(', ') || 'thinking'}${tests}${history}`
@@ -389,7 +389,7 @@ export const register: Register = (on, options) => {
       )
     }
     // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
-    const cols = Math.max(NARROW, (e.viewport?.columns ?? 100) - 2)
+    const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2) // never fill the last column
     const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo)
 
     return (
