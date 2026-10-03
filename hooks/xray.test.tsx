@@ -6,7 +6,7 @@ import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
-import { checkVoice, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
+import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { recall, record } from './memory'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
@@ -337,6 +337,21 @@ test('a narration call that returns nothing does not mute narration for a minute
   await $.prompt.submit(submit)
   await $.prompt.submit(submit)
   expect(calls).toBe(2)
+})
+
+test('a narrator that answers "-" (nothing to say) shows nothing and holds its minute', async ($, on) => {
+  let calls = 0
+  engine(on, {}, () => {
+    calls += 1
+    return { value: { isAnswered: true, text: '-' } } as never
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ ...submit, text: 'done' })
+  await $.prompt.submit({ ...submit, text: 'done' })
+  expect(calls).toBe(1)
+  expect(narrationOf('-')).toBe('')
+  expect(narrationOf(' "—" ')).toBe('')
+  expect(narrationOf('» "Taking sum first."')).toBe('Taking sum first.')
 })
 
 test('the panel lists requests on one time scale, recent steps, and session budgets', async () => {
@@ -951,6 +966,11 @@ test('the narrator line is kept only when its numbers and names are in the facts
   expect(checkVoice('The agent is planning the task.', facts)).toBe(false)
   expect(checkVoice('Claude is planning.', facts)).toBe(false)
   expect(checkVoice('Rebuilding the claude repo docs.', facts)).toBe(true) // the repo's name is fine
+  // round 17 live: the narrator wrote about itself on a turn with no steps
+  expect(checkVoice("Starting fresh; need facts from you about what's being coded.", facts)).toBe(false)
+  expect(checkVoice('I am waiting for more context.', facts)).toBe(false)
+  expect(checkVoice('Not enough to go on yet.', facts)).toBe(false)
+  expect(checkVoice('Fixing mul next in sum.js.', facts)).toBe(true) // the work itself still passes
 })
 
 test('memory: finished runs become events per project; a recurring failure and the usual suite time are recalled', async () => {

@@ -105,8 +105,18 @@ export const sourceOf = (tool: string, input: Record<string, unknown>): string |
 
 // The narrator's line is kept only when it holds to the facts it was given (round 16, direction 4):
 // every number and every file-like name in it appears in them, and it never calls itself "the agent".
+// The narrator's reply as one line: quotes and the » mark trimmed, at most 120 chars; "-" (its way of
+// saying it has nothing about the work) comes back empty.
+export function narrationOf(text: string): string {
+  const line = text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120)
+  return /^[-–—.]*$/.test(line) ? '' : line
+}
+
 export function checkVoice(line: string, facts: string): boolean {
   if (!line.trim() || /\bthe agent\b|\bclaude(?: is|'s)\b/i.test(line)) return false
+  // About the narrator, not the work (round 17 live: "Starting fresh; need facts from you about what's being
+  // coded."): no I / you, no talk of facts, context or input.
+  if (/\b(I|I'm|I'll|I've|me|my)\b/.test(line) || /\b(you|your|yours)\b|\b(facts?|context|input|information)\b|\bnot enough\b|\bneed more\b/i.test(line)) return false
   const known = facts.toLowerCase()
   const nums = line.match(/\d+(?:\.\d+)?/g) ?? []
   const names = line.match(/[\w-]+(?:[./_][\w-]+)+/g) ?? []

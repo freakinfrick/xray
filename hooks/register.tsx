@@ -7,7 +7,7 @@ import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
-import { checkVoice, sayStep } from './parse'
+import { checkVoice, narrationOf, sayStep } from './parse'
 import { recall, record, storeKey, type Event } from './memory'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
@@ -31,7 +31,8 @@ const NARRATOR =
   'sentence of at most 14 words, present tense: what is happening now and the one thing that matters next. Never ' +
   'say "the agent" or "Claude"; leave the subject out ("Taking sum first."). Use only the facts given: every number ' +
   'and name you write must appear in them. When the history line bears on what is happening, you may point back to ' +
-  'it once ("broke here Oct 1 too"). No preamble, no quotes.'
+  'it once ("broke here Oct 1 too"). No preamble, no quotes. Never write about yourself, the facts or the reader; ' +
+  'if the facts are too thin to say something about the work, reply with exactly: -'
 
 type Live = {
   isNarrating: boolean
@@ -130,11 +131,12 @@ async function narrate($: EngineInterface, s: Live) {
   const history = past.length ? `\nHistory in this project: ${past.join('; ')}` : ''
   const prompt = `Task from the user: ${t.prompt.replace(/\s+/g, ' ').slice(0, 400)}\nSteps so far:\n${steps.join('\n') || '- none yet'}\nRunning now: ${live.join(', ') || 'thinking'}${tests}${history}`
   const r = await $.model.complete({ model: 'haiku', system: NARRATOR, prompt, maxTokens: 60, effort: 'low', timeoutMs: 8000 }).catch(() => null)
-  const said = r?.isAnswered ? r.text.replace(/\s+/g, ' ').replace(/^["'»\s]+|["'\s]+$/g, '').slice(0, 120) : ''
+  const said = r?.isAnswered ? narrationOf(r.text) : ''
+  const isBlank = !!r?.isAnswered && !said // "-": nothing to say, and that holds the slot
   if (said && s.turn === t && checkVoice(said, prompt)) {
     s.narration = said
     $.ui.invalidate('ui.render')
-  } else if (s.narratedAt === now) s.narratedAt = before // no sentence came back: the next trigger may try again
+  } else if (s.narratedAt === now && !isBlank) s.narratedAt = before // no sentence came back: the next trigger may try again
 }
 
 // One-time transitions (round 16, direction 3): a few quick redraws right after an event so a landing
