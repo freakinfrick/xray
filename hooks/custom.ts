@@ -63,9 +63,10 @@ const longRun = (t: Turn, now: number) => {
 export function detect(t: Turn, now: number): Signal | null {
   if (ofTurn(t).some(c => BISECT.test(c.cmd))) return 'bisect'
   if (benchRuns(t)) return 'bench'
-  // One k-of-N could be anything; a job's own output, or the same N seen twice, is progress.
+  // One k-of-N could be anything; a job's own output, or the same N seen twice, is progress. Other tool
+  // output while a job runs is still just text (round 17: "80 of 100" from a grep made a batch card).
   const last = t.samples[t.samples.length - 1]
-  if (last && (t.job || t.samples.filter(x => x.n === last.n).length >= 2)) return 'batch'
+  if (last && (t.samples.some(x => x.from === 'job') || t.samples.filter(x => x.n === last.n).length >= 2)) return 'batch'
   if (longRun(t, now)) return 'build'
   return null
 }

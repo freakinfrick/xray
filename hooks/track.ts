@@ -61,7 +61,7 @@ export type Turn = {
   requests: Request[]
   agents: Agent[]
   cmds: Cmd[]
-  samples: { at: number; k: number; n: number }[]
+  samples: { at: number; k: number; n: number; from?: 'job' }[] // from: the background job's own output
   job?: Job
   signal?: Signal
   recipe?: Recipe
@@ -88,10 +88,11 @@ export const newTurn = (prompt: string, now: number): Turn => ({
   template: 'default',
 })
 
-// To-dos and agents still running outlive a turn: they are the plate.
+// To-dos and agents still running outlive a turn: they are the plate. The list goes on whole while any
+// of it is open (its count and the done cells stay true, round 17), and is dropped once all of it is done.
 export function carryTodos(prev: Turn | null, next: Turn) {
   if (!prev) return
-  next.todos = prev.todos.filter(t => t.status !== 'completed')
+  next.todos = prev.todos.some(t => t.status !== 'completed') ? prev.todos.map(x => ({ ...x, doneAt: undefined })) : []
   next.agents = prev.agents.filter(a => a.endedAt === undefined)
   next.cmds = prev.cmds.slice(-MAX_CMDS)
   if (prev.job) Object.assign(next, { job: prev.job, samples: prev.samples })
@@ -103,10 +104,10 @@ export function checkSignal(t: Turn, now: number) {
 }
 
 // Progress read from wherever it shows up: a job's output file, or a tool result that printed it.
-export function sample(t: Turn, text: string, now: number) {
+export function sample(t: Turn, text: string, now: number, from?: 'job') {
   const p = lastPair(text)
   const last = t.samples[t.samples.length - 1]
-  if (p && (!last || last.k !== p.k || last.n !== p.n)) t.samples.push({ at: now, ...p })
+  if (p && (!last || last.k !== p.k || last.n !== p.n)) t.samples.push({ at: now, ...p, ...(from ? { from } : {}) })
 }
 
 // A whole-file read costs what the file weighs, so a grown file waits longer before the next one.
@@ -121,7 +122,7 @@ export function readJob(t: Turn, text: string, size: number, now: number) {
   t.job.size = size
   t.job.readAt = now
   t.job.lastline = lastLine(text).slice(0, 120) || t.job.lastline
-  sample(t, text, now)
+  sample(t, text, now, 'job')
 }
 
 export function spawnAgent(t: Turn, a: Omit<Agent, 'steps'>) {

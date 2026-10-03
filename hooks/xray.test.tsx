@@ -209,7 +209,12 @@ test('the to-do card: one cell per to-do, live a patch in its hue, pending grey,
   expect(rows[1]).toMatch(/draw cards .*commit .*push/)
   const next = newTurn('y', 10)
   carryTodos(t, next)
-  expect(next.todos.map(x => x.text)).toEqual(['commit', 'push'])
+  expect(next.todos.map(x => x.text)).toEqual(['draw cards', 'commit', 'push']) // whole while any is open: the count stays true
+  expect(todoCard(next, 10).title).toBe('to-do · 1 of 3')
+  next.todos.forEach(x => (x.status = 'completed'))
+  const after = newTurn('z', 20)
+  carryTodos(next, after)
+  expect(after.todos).toEqual([]) // all done: the next turn starts clean
 })
 
 test('task-tool to-dos get hues too, and the border tags queued calls and agents', async () => {
@@ -787,6 +792,14 @@ test('effort shows in shorthand: desktop telemetry, phone bottom edge, keyboard-
   expect(text(teleParts(t, null, 5000).effort)).toBe('◐ med')
   expect(text(compact(t, undefined, null, 22, 2000, 44, false).bottom)).toBe('ctx  ██░░░░░░ 22%  ◐ med  2s')
   expect(text(compact(t, undefined, null, 22, 2000, 44, true).body[0])).toBe('░░░░░░ 0 · ctx 22% · ◐ med')
+})
+
+test('round 17: a k-of-N in other tool output while a job runs is not a batch', async () => {
+  const t = newTurn('wait on the pane', 0)
+  bash(t, 'j', 'until grep -q x f; do sleep 1; done', 'Command running in background with ID: x2. Output is being written to: /tmp/t/x2.output', 0, 5, { run_in_background: true })
+  bash(t, 'g', 'grep -n budget SPEC.md', 'note: 80 of 100 rows kept', 10, 20)
+  checkSignal(t, 30)
+  expect(t.signal).toBeUndefined()
 })
 
 test('a finished turn survives the trip through $.state that a hot reload makes', async () => {
