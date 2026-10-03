@@ -6,7 +6,7 @@ import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerP
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, newTurn, queueFromResponse, readJob, spawnAgent, startStep } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
@@ -756,4 +756,20 @@ test('effort shows in shorthand: desktop telemetry, phone bottom edge, keyboard-
   expect(text(telemetry(t, null, 5000))).toBe('turn 5s   ◐ med')
   expect(text(compact(t, undefined, null, 22, 2000, 44, false).bottom)).toBe('ctx  ██░░░░░░ 22%  ◐ med  2s')
   expect(text(compact(t, undefined, null, 22, 2000, 44, true).body[0])).toBe('░░░░░░ 0 · ctx 22% · ◐ med')
+})
+
+test('a finished turn survives the trip through $.state that a hot reload makes', async () => {
+  const t = newTurn('fix the build', 1_000)
+  bash(t, 'b1', 'npm test', 'Tests: 3 passed, 3 total', 2_000)
+  t.todos = [{ id: '1', text: 'ship', active: 'shipping', status: 'pending', color: 'cyan' }]
+  endTurn(t)
+  const back = loadTurn(saveTurn(t))
+  expect(back?.prompt).toBe('fix the build')
+  expect(back?.edited instanceof Map).toBe(true)
+  expect(back?.done.length).toBe(1)
+  expect(panel(back, null, 5_000).map(x => x.title)).toEqual(panel(t, null, 5_000).map(x => x.title))
+  const next = newTurn('next', 6_000)
+  carryTodos(back, next)
+  expect(next.todos.map(x => x.text)).toEqual(['ship'])
+  expect(loadTurn('{not json')).toBe(null)
 })

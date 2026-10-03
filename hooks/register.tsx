@@ -6,9 +6,10 @@ import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { sayStep } from './parse'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, newTurn, queueFromResponse, readJob, spawnAgent, startStep, type Turn } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
+const keptTurn = atom({ plugin: 'xray', key: 'prev' } as const, null) // the last finished turn, for the panel after a reload
 const COMMAND = 'xray'
 const PANE = 'xray'
 const NARRATE_GAP_MS = 60_000
@@ -135,6 +136,8 @@ export const register: Register = (on, options) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
+    const saved = s.prev ? null : await read($, keptTurn)
+    if (saved) s.prev = loadTurn(saved)
     const kept = await $.store.get('ledger')
     s.ledger = Array.isArray(kept) ? (kept as Entry[]) : []
     await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards; rate good|bad rates the custom card', argumentHint: '[on|off|rate good|bad <note>]', immediate: true })
@@ -273,6 +276,7 @@ export const register: Register = (on, options) => {
       await update($, last, () => lastTurn(t, now))
       s.prev = t
       s.turn = null
+      await update($, keptTurn, () => saveTurn(t))
     }
 
     return next(e)

@@ -214,6 +214,16 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
 }
 
 // A run still going when the turn ends was cut off, not finished.
+// A finished turn as JSON for $.state, so a hot reload keeps the panel and the plate (Maps as entries).
+export const saveTurn = (t: Turn): string => JSON.stringify(t, (_, v) => (v instanceof Map ? { $map: [...v] } : v))
+export function loadTurn(json: string): Turn | null {
+  try {
+    return { ...newTurn('', 0), ...JSON.parse(json, (_, v) => (Array.isArray(v?.$map) ? new Map(v.$map) : v)) }
+  } catch {
+    return null
+  }
+}
+
 export function endTurn(t: Turn) {
   for (const r of t.runs) if (r.running) Object.assign(r, { running: false, isStopped: true })
 }
