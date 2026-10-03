@@ -354,3 +354,22 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
   the source) now goes in whole on every surface: the band clips the head to its width, the body
   wraps `last:` over its three rows. `nowCard`'s `sayMax` parameter is gone.
 - Checked: `mods/check.sh xray` (validate, tsc, 58 tests). Not yet seen live.
+
+## Round 15 — directions for a 10x (2026-10-03, offered, not picked)
+
+- User, verbatim: "how can we level up the xray mod 10x with high leverage design moves / aesthetic
+  upgrades / animations / character developemnt"; then "go" (live-check rounds 13+14, then mockups).
+- Live check (fresh Haiku session in tmux, 190 cols, failing node --test fix): round 13 as built
+  (band head, narration body, one bottom edge closing all cards, tests card + run history).
+  Round 14 never showed: `last:` appears only when narration is null (`cards.ts:50`), and narration
+  covered the whole 20 s turn with a stale "planning" line while the model ran, edited, passed.
+  Haiku wrote its to-do list as text ("Step 3/5") without the tool, so the to-do card stayed empty.
+- Mockups: `~/claude/.explainers/2026-10-03-xray-round15.html`, both themes, wide + phone. Ranked:
+  1 filmstrip (step gauge cells colored by kind: read ▌ / edit / run / agent / failed / run passed),
+  2 motion budget (calm = still; only the card that needs you walks its border at 1 Hz; no
+  permission/question event exists in `types/index.d.ts`, a stall is the stand-in),
+  3 one-shot transitions (~6 fps for 500 ms after an event; would revise round 6's 1 s-tick rule),
+  4 character = memory ($.store per-project history) + voice (persona contract, facts only) +
+  measured mood (exploring / focused / stuck / closing / thinking), narration and `last:` share the
+  body, 5 glyph grammar as tokens (today ● = done and high effort, ◉ = in progress and xhigh).
+- Suggested build order if several are picked: 5 → 1 → 4 → 2 → 3.
