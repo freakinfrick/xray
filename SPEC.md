@@ -505,3 +505,6 @@ What is known (agent, 2026-10-03):
   (50%, under the bar: correct); at 4/5 the card went green "✓ closing · deciding the next step".
   Trap for the next tester: Claude Code drops a fully finished list, so stage the 80% list in one
   batch — finished tasks from an earlier list do not count toward it.
+  The turn-start moment (green before any step) is pinned by the test "a carried list at 4 of 5
+  opens the next turn green before any step runs" (phone compact card, tone ok); the phone shot
+  covers the rendering. Phone check closed.

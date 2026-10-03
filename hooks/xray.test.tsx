@@ -217,6 +217,20 @@ test('the to-do card: one cell per to-do, live a patch in its hue, pending grey,
   expect(after.todos).toEqual([]) // all done: the next turn starts clean
 })
 
+test('a carried list at 4 of 5 opens the next turn green before any step runs', async () => {
+  const t = newTurn('x', 0)
+  t.todos = ['a', 'b', 'c', 'd', 'e'].map((s, i) => ({ id: `${i}`, text: s, active: s, status: i < 4 ? 'completed' : 'pending' }))
+  const next = newTurn('y', 10)
+  carryTodos(t, next)
+  expect(next.done.length).toBe(0)
+  expect(mood(next, undefined, 10)?.word).toBe('closing')
+  const k = compact(next, undefined, null, 8, 10, 44, false) // the phone card
+  expect(k.tone).toBe('ok')
+  expect(k.status).toMatch(/^✓ closing/)
+  next.todos[3]!.status = 'pending' // 3 of 5 is under the bar
+  expect(mood(next, undefined, 10)?.word).not.toBe('closing')
+})
+
 test('task-tool to-dos get hues too, and the border tags queued calls and agents', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'c', 'TaskCreate', { subject: 'write docs' }, 0)
