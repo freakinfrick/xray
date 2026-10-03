@@ -1091,3 +1091,16 @@ test('round 17: after a turn the strip leads with the folder, then how the turn 
   expect(await ui.find({ type: 'Text', text: /missing/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('round 17: the folder follows the session after a cd, as the status line did', async ($, on) => {
+  engine(on, { HOME: '/h' })
+  on('fs.exists', () => ({ value: true }) as never)
+  on('fs.read', () => ({ value: 'caveman compression' }) as never)
+  let cwd = '/h/proj'
+  on('session.cwd', () => ({ value: cwd }) as never)
+  await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
+  cwd = '/h/proj/sub'
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /~\/proj\/sub/ })).toBeDefined()
+  await ui.unmount()
+})

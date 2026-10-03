@@ -343,7 +343,7 @@ export const register: Register = (on, options) => {
     // Under 60 columns, rounds 8–11: one framed card; with few rows (phone keyboard up) its body folds to one row.
     if ((e.viewport?.columns ?? 100) < NARROW) {
       const w = Math.max(24, (e.viewport?.columns ?? 47) - 3) // never fill the last column
-      const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT, where(s.cwd, s.home, true))
+      const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT, where(await here($, s), s.home, true))
       const color = TONE_COLOR[k.tone]
       const dim = k.tone === 'quiet'
       const ink = (l: Line, key: string) => l.map((g, i) => (
@@ -398,7 +398,7 @@ export const register: Register = (on, options) => {
     }
     // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2) // never fill the last column
-    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo, where(s.cwd, s.home))
+    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo, where(await here($, s), s.home))
 
     return (
       <Box flexDirection="column">
@@ -455,7 +455,7 @@ export const register: Register = (on, options) => {
     // On a phone (47 cols) the tail was cut mid-word; the strip stops at the headline there.
     const hasTail = cls !== 'mobile'
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
-    const folder = where(s.cwd, s.home, !hasTail)
+    const folder = where(await here($, s), s.home, !hasTail)
     const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : 'green')] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
     const lead = (
       <Text>
@@ -517,3 +517,7 @@ async function health($: EngineInterface, home: string): Promise<string[]> {
   if (typeof rules !== 'string' || !rules.includes('caveman compression')) out.push('style rules missing from CLAUDE.md')
   return out
 }
+
+// The folder now, as the status line read it on every redraw: a cd mid-session moves it. s.cwd stays the
+// session's start folder (the project memory is keyed to it).
+const here = ($: EngineInterface, s: Live) => $.session.cwd().catch(() => s.cwd)

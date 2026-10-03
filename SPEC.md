@@ -485,3 +485,7 @@ What is known (agent, 2026-10-03):
   strip `…/live ctx █▌ 18% last turn …` after a turn; old status line gone. Not yet seen: the phone
   (Termius), forest-light. Seen live: a long name ("Write m.test.js with node:assert tests") ends in …
   after two rows at 19 columns; the rule allows it, but the cells could take 3 name rows when tall.
+- Follow-up (same day): the folder is read live (`$.session.cwd()`) on every draw, as the status line
+  re-read `workspace.current_dir`; memory stays keyed to the start folder. Worker pane (mods off) checked
+  live: the old status line draws in full. Open: grey pending patch contrast by eye. Under an ANSI theme
+  it is palette color 8 (#6a7058 forest, #827664 forest-light) under near-black text, about 3:1.
