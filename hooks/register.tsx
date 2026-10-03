@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
@@ -13,6 +13,8 @@ const COMMAND = 'xray'
 const PANE = 'xray'
 const NARRATE_GAP_MS = 60_000
 const NARRATION_TTL_MS = 30_000
+const NARROW = 60 // columns: below this the cards give way to the compact rows (round 8)
+const SHORT = 30 // rows: below this (phone keyboard up) the compact rows fold to the ticker
 const BODY_ROWS = 3 // card text rows; with the two borders and the telemetry line, 6 rows under the spinner
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
@@ -283,6 +285,25 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     // A narration line is news for 30 s; after that the last finished step says more.
     const said = now - s.narratedAt < NARRATION_TTL_MS ? s.narration : null
+    // Under 60 columns, round 8: frameless rows; with few rows (phone keyboard up) the 2-row ticker.
+    if ((e.viewport?.columns ?? 100) < NARROW) {
+      const width = Math.max(20, (e.viewport?.columns ?? 47) - 3)
+      const rows = compact(s.turn, s.mode, said, s.ctx, now, width, (e.viewport?.rows ?? Infinity) < SHORT)
+      return (
+        <Box flexDirection="column">
+          {line}
+          {rows.map((l, r) => (
+            <Box key={`k${r}`} paddingX={1}>
+              <Text wrap="truncate-end">{l.length ? l.map((g, i) => (
+                <Text key={`k${r}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv}>
+                  {g.t}
+                </Text>
+              )) : ' '}</Text>
+            </Box>
+          ))}
+        </Box>
+      )
+    }
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2)
     const cards = cols >= 72 ? [nowCard(s.turn, s.mode, said, now), todoCard(s.turn, s.ctx), taskCard(s.turn, now)] : [nowCard(s.turn, s.mode, said, now), taskCard(s.turn, now)]
     const widths = cards.length === 3 ? [Math.floor(cols * 0.38), Math.floor(cols * 0.3)] : [Math.floor(cols * 0.55)]

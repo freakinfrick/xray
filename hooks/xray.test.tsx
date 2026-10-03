@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
+import { compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard } from './cards'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
@@ -620,4 +620,48 @@ test('with the keyboard up (few rows) the panel shows fewer of each', async () =
   expect(sections.find(x => x.title.startsWith('steps'))?.rows.length).toBe(3)
   expect(sections.find(x => x.title.startsWith('still owed'))?.rows.length).toBe(4)
   expect(panel(busyTurn(), USAGE, 30_000, [], { cols: 42, rows: 42 }).find(x => x.title.startsWith('requests'))?.rows.length).toBe(6)
+})
+
+// Round 8: under 60 columns the cards give way to frameless rows, every one at most `width` cells.
+test('on a phone the strip is 4 rows, each within 44 cells, nothing cut mid-word', async () => {
+  const t = busyTurn()
+  startStep(t, 'live', 'Bash', { command: 'make deploy', description: 'Deploy the whole integration build for the device mod' }, 900)
+  t.todos[0] = { ...t.todos[0]!, status: 'completed' }
+  t.todos[1] = { ...t.todos[1]!, status: 'in_progress' }
+  const rows = compact(t, 'tool-use', 'checking which of the model files exist on the disk right now', 41, 30_000, 44, false)
+  expect(rows.length).toBe(4)
+  for (const r of rows) expect(text(r).length).toBeLessThanOrEqual(44)
+  expect(text(rows[1])).toMatch(/^» checking which of the model files exist…$/)
+  expect(text(rows[2])).toContain('6 done')
+  expect(text(rows[2])).toContain('■◉□□□□ 1/6')
+  expect(text(rows[3])).toMatch(/^ctx .* 41% {2}\d+ t\/s {2}cache 80%/)
+})
+
+test('with the keyboard up the strip folds to a 2-row ticker', async () => {
+  const rows = compact(busyTurn(), undefined, null, 6, 30_000, 44, true)
+  expect(rows.length).toBe(2)
+  expect(text(rows[1])).toMatch(/^▆{6} 6 · □{6} 0\/6 · ctx 6% · \d+ t\/s$/)
+  expect(text(rows[1]).length).toBeLessThanOrEqual(44)
+  // Too narrow for every part: the rightmost go whole, the rest stay intact.
+  expect(text(compact(busyTurn(), undefined, null, 6, 30_000, 24, true)[1])).toBe('▆▆▆▆▆▆ 6 · □□□□□□ 0/6')
+})
+
+test('the spinner draws the strip at 47 columns, the ticker at 21 rows, the cards at 100', async ($, on) => {
+  engine(on, {})
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const at = (columns: number, rows: number) => $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps, viewport: { columns, rows } })
+  const phone = await at(47, 42)
+  expect(await phone.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
+  expect(await phone.find({ type: 'Text', text: /thinking/ })).toBeDefined()
+  expect(await phone.find({ type: 'Text', text: /^» / })).toBeDefined()
+  await phone.unmount()
+  const typing = await at(47, 21)
+  expect(await typing.find({ type: 'Text', text: /^» / })).toBeUndefined()
+  expect(await typing.find({ type: 'Text', text: /thinking/ })).toBeDefined()
+  await typing.unmount()
+  const wide = await at(100, 42)
+  expect(await wide.find({ type: 'Text', text: /now/ })).toBeDefined()
+  expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeDefined()
+  await wide.unmount()
 })

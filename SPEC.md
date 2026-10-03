@@ -257,3 +257,10 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Checks: tests at 47×42 (4 rows, every row ≤ 44 cells), 47×21 (2 rows), 47×unknown rows
   (strip), 100 cols (cards unchanged, existing tests green); tsc; live phone capture 6 in
   `~/claude/mods/mobile/README.md`.
+- **Built 2026-10-03** (`compact()` in `cards.ts`, pure data; `NARROW`/`SHORT` in `register.tsx`).
+  Deviation, agent call: row 1 keeps the now card's head as is (step elapsed `· 12s` + pulse); the
+  turn clock went to the end of row 4, the first part dropped when short, so two clocks never share
+  a row. Ticker row 2 has no clock. Checked: validate, tsc, 49 tests (strip 4 rows ≤ 44 cells,
+  word-cut narration, ticker parts drop whole from the right, mounted 47×42 / 47×21 / 100).
+  Open: live phone capture 6; whether a height-only change (keyboard up) re-draws by the 1 s tick
+  (`RenderViewport.rows` says height alone re-draws nothing).

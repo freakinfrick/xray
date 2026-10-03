@@ -272,6 +272,72 @@ export function telemetry(t: Turn, ctxPercent: number | null, now: number): Line
   return parts.flatMap((p, i) => (i ? [{ t: '   ' }, ...p] : p))
 }
 
+// Under 60 columns (a phone, a narrow pane), round 8: no frames, one idea per row, every row at
+// most `width` cells. Strip: now · narration · progress + to-do squares · telemetry. Ticker (few
+// rows, the phone's keyboard up): now · everything else folded into one row.
+export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercent: number | null, now: number, width: number, isTicker: boolean): Line[] {
+  const [head = [], sub = []] = nowCard(t, mode, narration, now).lines
+  const live = t.running.size > 0
+  const failed = t.done.filter(x => x.ok === false).length
+  const marks = (n: number): Line => [...t.done.slice(-n).map(x => ({ t: '▆', color: x.ok === false ? 'red' : 'green' })), ...(live ? [{ t: frame(now) % 2 ? '▆' : '▄', color: 'cyan' }] : [])]
+  const done = t.todos.filter(x => x.status === 'completed').length
+  const squares: Line | undefined = t.todos.length ? [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }] : undefined
+  const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  const rate = tokRate(t)
+  const tok: Line | undefined = rate === null ? undefined : [{ t: `${rate} t/s` }]
+  if (isTicker) {
+    const steps: Line = [...marks(6), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
+    return [clipLine(head, width), fitParts([steps, squares, ctx, tok], width, ' · ')]
+  }
+  const isTask = !!t.signal || t.template !== 'default'
+  const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [...marks(8), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
+  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  const sent = lastSent(t)
+  const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
+  const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]
+  return [clipLine(head, width), clipLine(sub, width), fitParts([progress, squares && [{ t: 'to-do ', dim: true }, ...squares]], width, '   '), fitParts([gauge, tok, cache, turn], width, '  ')]
+}
+
+// One square per to-do in its hue: solid when done, ◉ in progress, a grey □ while pending.
+const squareOf = (x: Todo): Seg => (x.status === 'completed' ? { t: '■', color: x.color } : x.status === 'in_progress' ? { t: '◉', color: x.color } : { t: '□', dim: true })
+
+const tokRate = (t: Turn): number | null => {
+  const done = t.requests.filter(r => r.endedAt > r.firstAt)
+  const out = done.reduce((a, r) => a + r.output, 0)
+  const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
+  return out && gen ? Math.round(out / (gen / 1000)) : null
+}
+
+// The cache-read share of what the last request sent, or 0 before any request.
+const lastSent = (t: Turn): number => {
+  const last = t.requests[t.requests.length - 1]
+  const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
+  return last && sent ? last.cacheRead / sent : 0
+}
+
+const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)
+
+// Whole parts, left to right, while they fit: the rightmost go first, nothing is cut mid-part.
+function fitParts(parts: (Line | undefined)[], width: number, sep: string): Line {
+  const out: Line = []
+  for (const p of parts) {
+    if (!p) continue
+    const next: Line = out.length ? [{ t: sep }, ...p] : p
+    if (cells(out) + cells(next) > width) break
+    out.push(...next)
+  }
+  return out
+}
+
+// A line cut at the last word that fits, with an ellipsis; a line that fits is kept as is.
+function clipLine(l: Line, width: number): Line {
+  if (cells(l) <= width) return l
+  const all = l.map(s => s.t).join('')
+  const space = all.lastIndexOf(' ', width - 1)
+  const cut = space > width / 3 ? space : width - 1
+  return [...splitLine(l, cut, 0)[0], { t: '…', dim: true }]
+}
+
 const clock = (ms: number) => {
   const s = Math.floor(ms / 1000)
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
