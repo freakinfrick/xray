@@ -583,3 +583,9 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   the literal thing (tape, mixer, signal flow), thin line art on black, big thin digits, one colour per
   parameter, envelope curves, wide empty space. Metaphors (factory, crew) rejected. Celebrations kept.
   Next: round 19b mockups in that language (`tools/mockup19b.py`).
+- **Round 19b reply (2026-10-03):** "1a is nice, but i like the current to-do build we have, and the
+  progress timeline with legend coded colors. its like a genome of the session history. I would like
+  actually to build that in so it can be a full dedicated row that grows with the session, and has |
+  seperators between sesison replys". So: 1a Flow screen + round-17 to-do cells kept + a session-long
+  filmstrip ("genome") row, `│` between turns. Today the filmstrip is per turn (`cards.ts:128`) and only
+  the last turn survives (`xray.prev`); the genome needs a per-session step log. Open: overflow, persistence.
