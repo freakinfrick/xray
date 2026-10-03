@@ -4,6 +4,7 @@
 // and writes the store.
 
 import { MAX_TURNS } from './genome'
+import type { Turn } from './track'
 
 // A landmark on the genome: `turn` indexes `turns`, `at` the step within that turn's letters (round 20b).
 export type MarkKind = 'commit' | 'green' | 'red' | 'fanout' | 'ctx' | 'longest'
@@ -54,4 +55,32 @@ export function mergeFiles(old: readonly FileHeat[], add: readonly FileHeat[]): 
     by.set(x.f, p ? { f: x.f, cells: (p.cells + x.cells).slice(-MAX_CELLS), at: Math.max(p.at, x.at) } : { ...x, cells: x.cells.slice(-MAX_CELLS) })
   }
   return [...by.values()].sort((a, b) => b.at - a.at).slice(0, MAX_FILES)
+}
+
+// A turn's touches per file, in the order its steps ended: r read, e edit, x failed (round 20e).
+export function fileTouches(t: Turn, now: number): FileHeat[] {
+  const by = new Map<string, string>()
+  for (const x of t.done) {
+    if (!x.file || (x.kind !== 'read' && x.kind !== 'edit')) continue
+    by.set(x.file, (by.get(x.file) ?? '') + (x.ok === false ? 'x' : x.kind === 'read' ? 'r' : 'e'))
+  }
+  return [...by].map(([f, cells]) => ({ f, cells, at: now }))
+}
+
+// Paths as short as they can be and still tell apart: the file's name, one parent more where two
+// names clash or the name says little (index.ts), home as ~ when it is outside the folder.
+const GENERIC = /^(index|main|mod|init|__init__|utils?|types?)\.\w+$/
+export function shortName(path: string, all: readonly string[], cwd = '', home = ''): string {
+  if (cwd && path.startsWith(cwd + '/')) path = path.slice(cwd.length + 1)
+  else if (home && path.startsWith(home + '/')) path = '~/' + path.slice(home.length + 1)
+  const parts = path.split('/')
+  const base = parts[parts.length - 1] ?? path
+  const clash = all.some(p => p !== path && !p.endsWith('/' + path) && p.split('/').pop() === base)
+  return (clash || GENERIC.test(base)) && parts.length > 1 ? parts.slice(-2).join('/') : base
+}
+
+// The turn's hottest file (most touches, 2 at least), for the now card's last row.
+export function hotFile(t: Turn): { f: string; n: number; isEdited: boolean } | undefined {
+  const top = fileTouches(t, 0).sort((a, b) => b.cells.length - a.cells.length)[0]
+  return top && top.cells.length >= 2 ? { f: top.f, n: top.cells.length, isEdited: top.cells.includes('e') } : undefined
 }

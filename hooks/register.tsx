@@ -12,7 +12,7 @@ import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import { nameOf } from './names'
-import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
+import { addTurn, emptyRec, fileTouches, shortName, loadRec, type SessionRec } from './session'
 import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
@@ -457,7 +457,7 @@ export const register: Register = (on, options) => {
       s.records = rec20.records
       const moments = [...celebrations(t), ...rec20.moments, ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
       const name = nameOf(letters, countedRuns(t), filesRead(t))
-      await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests })
+      await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests, files: fileTouches(t, now) })
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -582,6 +582,14 @@ export const register: Register = (on, options) => {
     if (dna.length) sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: dna })
     const best = recordRows(s.records)
     if (best.length) sections.push({ title: 'records · this folder', rows: best })
+    // Round 20e: the files this session touched, newest touch first, each touch a genome cell.
+    const files = s.rec.files.slice(0, PANEL_TURNS)
+    if (files.length) {
+      const all = s.rec.files.map(x => x.f)
+      const names = files.map(x => shortName(x.f, all, s.cwd, s.home))
+      const w = Math.min(28, Math.max(...names.map(n => n.length)))
+      sections.push({ title: `files · ${s.rec.files.length}`, rows: files.map((x, i) => [{ t: (names[i] ?? '').slice(0, w).padEnd(w + 2) }, ...genome.cellsOf(x.cells.slice(-Math.max(8, (cols ?? 80) - w - 4)))]) })
+    }
     // Round 20d: each turn by name, newest first (10 at most: the pane is 32 rows).
     const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse()
     if (named.length) {

@@ -2,6 +2,7 @@
 // the terminal's own palette (herdr forest / forest-light); undefined = the terminal's default ink.
 
 import type { LastTurn } from '../types'
+import { hotFile } from './session'
 import { DEFAULTS, customCard } from './custom'
 import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
 import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
@@ -15,7 +16,7 @@ export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explor
 // tokens flowed into rows; foot: the card's fact row, set off by a blank row when one is spare (round 16).
 // tiles: the to-dos as cells a few rows tall, laid left to right in list order (round 17).
 // isLit: the title drawn as a patch in the tone's colour for a beat (round 20a celebrations).
-export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; tiles?: Tile[]; foot?: Line; isLit?: boolean }
+export type Card = { title: string; tone: Tone; note?: Line; lines: Line[]; spare?: Line; side?: Line[]; chips?: Line[]; tiles?: Tile[]; foot?: Line; isLit?: boolean; hot?: Line }
 // One to-do cell: `n` its place in the list, `look` how its mark and name are drawn; `fill` paints the
 // whole cell in the look's background (a patch), else only the text carries it.
 export type Tile = { n: number; mark: string; text: string; status: Todo['status']; look: Omit<Seg, 't'>; fill: boolean }
@@ -68,7 +69,10 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   }
   // Narration shown: the last step still gets its own row on the wide cards (round 16; the live check
   // saw a minute-old narration hide every step of a 20 s turn).
-  return { title: 'now', tone, lines: [head, sub], foot: narration ? lastLine : undefined }
+  // Round 20e: the turn's hottest file, flush right on the last-step row.
+  const h = hotFile(t)
+  const hot: Line | undefined = h ? [{ t: h.f.split('/').pop() ?? h.f, color: h.isEdited ? 'yellow' : 'blue' }, { t: ` ×${h.n}`, dim: true }] : undefined
+  return { title: 'now', tone, lines: [head, sub], foot: narration ? lastLine : undefined, hot }
 }
 
 // The session's mood (round 16, direction 4), worked out from measured steps, never guessed. First

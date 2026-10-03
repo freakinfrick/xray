@@ -37,6 +37,7 @@ export function stale(keys: readonly string[], keep: string): string[] {
   return mine.slice(0, Math.max(0, mine.length - (MAX_SESSIONS - 1)))
 }
 
+export const cellsOf = (letters: string): Line => merge([...letters].map(cellOf))
 const cellOf = (c: string): Seg => {
   if (c === 'x') return { t: '█', color: 'red' }
   const k = KIND[KIND_OF[c] ?? 'other']

@@ -167,7 +167,16 @@ export function body(c: Card, inner: number, rows: number): Line[] {
     out.push(...foot)
   }
   while (out.length < rows) out.push([])
-  return out.slice(0, rows).map(l => clipLine(l, inner))
+  return withHot(out.slice(0, rows), c.hot, inner).map(l => clipLine(l, inner))
+}
+
+// Round 20e: the hot file rides flush right on the row that names the last step, when it fits whole.
+function withHot(rows: Line[], hot: Line | undefined, inner: number): Line[] {
+  if (!hot) return rows
+  const i = rows.findLastIndex(l => (l[0]?.t ?? '').startsWith('last: '))
+  const row = rows[i]
+  if (!row || cells(row) + 3 + cells(hot) > inner) return rows
+  return rows.map((l, k) => (k === i ? [...l, { t: ' '.repeat(inner - cells(l) - cells(hot)) }, ...hot] : l))
 }
 
 // The width a card asks for: its longest row (subcolumns side by side), its chips over two rows once

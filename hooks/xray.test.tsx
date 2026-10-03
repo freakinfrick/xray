@@ -11,7 +11,7 @@ import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, par
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { nameOf } from './names'
-import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
+import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName } from './session'
 import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
@@ -1452,4 +1452,21 @@ test('20c: a record speaks only when it falls: fewest steps to green after 3 fix
   s = { fastest: { 'npm test': { ms: 50, at: 0, n: 5 } } }
   expect(records(green, s, testHead, 10).moments).toEqual([{ kind: 'record', text: 'fastest npm test', fact: '0.01 s, was 0.05 s' }])
   expect(recordRows(r).map(l => text(l))[0]).toMatch(/^red → green {3}fewest 4 steps · /)
+})
+
+test('20e: files touched per turn as cells, short names that still tell apart, the hot file on the last-step row', async () => {
+  const t = newTurn('x', 0)
+  for (const [i, tool, f, ok] of [[1, 'Read', '/p/src/sum.js', true], [2, 'Edit', '/p/src/sum.js', true], [3, 'Edit', '/p/src/sum.js', false], [4, 'Read', '/p/lib/index.js', true]] as const) {
+    startStep(t, `s${i}`, tool, { file_path: f }, i)
+    finishStep(t, `s${i}`, tool, { file_path: f }, ok, '', undefined, i)
+  }
+  expect(fileTouches(t, 9)).toEqual([{ f: '/p/src/sum.js', cells: 'rex', at: 9 }, { f: '/p/lib/index.js', cells: 'r', at: 9 }])
+  const all = ['/p/src/index.js', '/p/lib/index.js', '/p/src/sum.js', '/p/test/sum.js']
+  expect(shortName('/p/src/sum.js', all, '/p')).toBe('src/sum.js') // clashes with test/sum.js
+  expect(shortName('/p/lib/index.js', ['/p/lib/index.js'], '/p')).toBe('lib/index.js') // generic name
+  expect(shortName('/home/u/x/a.ts', [], '/p', '/home/u')).toBe('a.ts')
+  const card = nowCard(t, undefined, null, 10)
+  expect(text(card.hot)).toBe('sum.js ×3')
+  const rows = spinnerRows(t, undefined, null, 17, 10, 188, 4).map(l => text(l))
+  expect(rows.some(r => /last: .*sum\.js ×3 │/.test(r))).toBe(true)
 })
