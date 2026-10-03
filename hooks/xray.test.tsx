@@ -682,3 +682,17 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeDefined()
   await wide.unmount()
 })
+
+test('the narrow ctx gauge draws whole cells only, one at any use (no near-blank eighth)', async () => {
+  const gauge = (pct: number) => text(compact(newTurn('x', 0), undefined, null, pct, 1000, 44, false).bottom).slice(5, 13)
+  expect(gauge(15)).toBe('█░░░░░░░')
+  expect(gauge(2)).toBe('█░░░░░░░')
+  expect(gauge(0)).toBe('░░░░░░░░')
+  expect(gauge(50)).toBe('████░░░░')
+})
+
+test('a step past a minute reads 2m 01s, not 121s', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'make' }, 0)
+  expect(text(nowCard(t, 'tool-use', null, 121_000).lines[0])).toContain('· 2m 01s')
+})

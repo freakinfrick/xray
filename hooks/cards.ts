@@ -48,7 +48,7 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   const sub: Line = narration ? [{ t: '» ' + narration, dim: true }] : last ? [{ t: `last: ${last.say}${last.ok === false ? ' ✗' : ''}`, dim: true }] : [{ t: '» ' + clip(t.prompt, 80), dim: true }]
   const f = frame(now)
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
-  if (el > 5) head.push({ t: ` · ${el}s`, dim: true })
+  if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
   if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
   return { title: 'now', tone, lines: [head, sub], spare: stepTrail(t, live.length > 0, f) }
 }
@@ -119,7 +119,7 @@ function testsCard(t: Turn, now: number): Card {
   const prev = t.runs.slice(0, -1).reverse().find(x => !x.running)
   if (r.running) {
     const el = secs(now - r.startedAt)
-    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${el}s` : '…'}` }], [{ t: prev ? `last run: ${sayRun(prev)}` : 'first run', dim: true }]], spare: runHistory(t) }
+    return { title: `tests · run ${n}`, tone: 'live', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: `running${el > 5 ? ` · ${clock(el * 1000)}` : '…'}` }], [{ t: prev ? `last run: ${sayRun(prev)}` : 'first run', dim: true }]], spare: runHistory(t) }
   }
   if (r.isStopped) return { title: `tests · run ${n}`, tone: 'warn', lines: [[{ t: '░'.repeat(BAR) + ' ', dim: true }, { t: 'run stopped' }], [{ t: 'the turn ended before it finished', dim: true }]] }
   const passed = r.total ? r.pass / r.total : r.ok ? 1 : 0
@@ -305,7 +305,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   }
   const isTask = !!t.signal || t.template !== 'default'
   const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [{ t: LABEL, dim: true }, ...steps(GAUGE), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
-  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(ctxPercent / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
   const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]
@@ -316,6 +316,10 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     bottom: fitParts([gauge, tok, turn, cache], edge, '  '),
   }
 }
+
+// Whole cells only: Termius draws a thin eighth (▎) near-blank, a gap in a low gauge (capture 6).
+// Any use at all shows one cell.
+const wholeCells = (frac: number, n: number) => (frac > 0 ? Math.max(1, Math.round(frac * n)) / n : 0)
 
 // One square per to-do in its hue: solid when done, ◉ in progress, a grey □ while pending.
 const squareOf = (x: Todo): Seg => (x.status === 'completed' ? { t: '■', color: x.color } : x.status === 'in_progress' ? { t: '◉', color: x.color } : { t: '□', dim: true })

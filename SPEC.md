@@ -281,3 +281,6 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Edge color = the now card's tone; red when the last step failed and nothing runs (agent d2).
 - Checked: validate, tsc, 50 tests (gauge column + 8 cells, frame widths, fold, mounted 47×42 /
   47×21 / 100); text render at 44 cols eyeballed in-session.
+- Follow-up (2026-10-03, user "fix the gap and 121s"): the narrow ctx gauge draws whole cells only,
+  one cell at any use (Termius drew the `▎` eighth near-blank, capture 6); step and test-run
+  elapsed past a minute read `2m 01s` like the turn clock. 52 tests.
