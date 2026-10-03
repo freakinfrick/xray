@@ -272,7 +272,7 @@ function tray(cards: Drawn[], ws: number[], parts: Line[][]): Line {
 const known = (ps: (Line | undefined)[]): Line[] => ps.filter((p): p is Line => !!p)
 
 // The rows under the spinner at `cols` (≥ 60) wide: top edges, `rows` body rows, the tray.
-export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo): Line[] {
+export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = ''): Line[] {
   const head = nowCard(t, mode, narration, now)
   const now0: Card = { ...head, lines: head.lines.slice(1) }
   const todo = todoCard(t, ctx, now)
@@ -281,20 +281,22 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const task: Card = plain.title === 'progress' || !t.done.length ? plain : { ...plain, side: [[{ t: 'steps ', dim: true }, ...filmstrip(t, 24, now, false)], stepCounts(t)] }
   const tp = teleParts(t, ctx, now)
   const hasTodo = !!(todo.tiles?.length || todo.note)
+  // Round 17: the folder the status line showed sits first under the now card.
+  const here: Line | undefined = folder ? [{ t: folder, dim: true }] : undefined
   let cards: Card[]
   let parts: Line[][]
   if (cols >= THREE && hasTodo) {
     cards = [now0, todo, task]
-    parts = [known([tp.turn, tp.effort]), known([tp.ctx]), known([tp.tok, tp.cache])]
+    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx]), known([tp.tok, tp.cache])]
   } else if (todo.tiles?.length) {
     // Rule 5, round 17: one card fewer, and the to-dos keep theirs; the task card's first row becomes
     // the now card's fact row (the last step gives way, the band names what runs).
     const gist: Line = [{ t: `${task.title}  `, dim: true }, ...(task.lines[0] ?? [])]
     cards = [{ ...now0, foot: gist }, todo]
-    parts = [known([tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
+    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   } else {
     cards = [now0, task]
-    parts = [known([tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
+    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   }
   const f = frame(now)
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)[0]

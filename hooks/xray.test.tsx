@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where } from './cards'
 import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -1052,4 +1052,29 @@ test('round 17: more to-dos than fit slide a window over the list, kept in order
   expect(rows[0]).toMatch(/■ 5 .*◆ 6 .*□ 7/) // one done one kept before the live one, then the list in order
   expect(rows[1]).toMatch(/^✓4 /) // the hidden done ones count at the left
   expect(rows[1]).toMatch(/\+\d+ *$/) // the rest at the right
+})
+
+test('round 17: the folder reads as the status line showed it', async () => {
+  expect(where('/home/u/claude/mods', '/home/u')).toBe('~/claude/mods')
+  expect(where('/home/u', '/home/u')).toBe('~')
+  expect(where('/home/u/claude/mods/xray/.claude-plugin/types', '/home/u')).toBe('…/types') // long: the last part
+  expect(where('/home/u/claude/mods', '/home/u', true)).toBe('mods') // phone
+  expect(where('', '/home/u')).toBe('')
+})
+
+test('round 17: between turns the strip carries folder and context, health only when a check fails, and stays under /xray off', async ($, on) => {
+  engine(on, { HOME: '/h' })
+  on('fs.exists', () => ({ value: false }) as never) // the ponytail skill is gone
+  on('fs.read', () => ({ value: '## 7.2 Grammar (caveman compression)' }) as never)
+  await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
+  let ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / 10%/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ponytail skill missing/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /style rules/ })).toBeUndefined() // that check passed: nothing drawn
+  await ui.unmount()
+  await $.command.run({ command: 'xray', args: 'off', origin: { kind: 'composer' } } as never)
+  ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined() // the cards hide, the status figures stay
+  await ui.unmount()
 })

@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, compact, deviceGlyph, lastTurn, type Line, type Mode } from './cards'
+import { TONE_COLOR, compact, deviceGlyph, lastTurn, where, type Line, type Mode } from './cards'
+import { bar } from './glyphs'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
@@ -46,6 +47,8 @@ type Live = {
   isWriting: boolean // custom cards: a small model may lay out the task card
   ledger: Entry[] // the taste ledger, from the store
   cwd: string
+  home: string
+  health: string[] // what the status line's PT / ADHD-CM dots checked, named only when missing (round 17)
   history: Event[] // this project's finished test runs, from the store (round 16 memory)
   isBursting: boolean // round 16 transitions: a short ~6 fps redraw after an event is under way
   isMobile: boolean // a phone keeps the 1 Hz tick: no bursts over SSH
@@ -164,13 +167,15 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', history: [], isBursting: false, isMobile: false, memo: { tones: {} } }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} } }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
     s.cwd = e.cwd ?? ''
+    s.home = (await $.env.get('HOME')) ?? ''
+    s.health = await health($, s.home)
     s.isMobile = (await deviceClass($)) === 'mobile'
     const past = await $.store.get(storeKey(s.cwd))
     s.history = Array.isArray(past) ? (past as Event[]) : []
@@ -335,7 +340,7 @@ export const register: Register = (on, options) => {
     // Under 60 columns, rounds 8–11: one framed card; with few rows (phone keyboard up) its body folds to one row.
     if ((e.viewport?.columns ?? 100) < NARROW) {
       const w = Math.max(24, (e.viewport?.columns ?? 47) - 3) // never fill the last column
-      const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT)
+      const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT, where(s.cwd, s.home, true))
       const color = TONE_COLOR[k.tone]
       const dim = k.tone === 'quiet'
       const ink = (l: Line, key: string) => l.map((g, i) => (
@@ -390,7 +395,7 @@ export const register: Register = (on, options) => {
     }
     // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2) // never fill the last column
-    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo)
+    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo, where(s.cwd, s.home))
 
     return (
       <Box flexDirection="column">
@@ -435,25 +440,50 @@ export const register: Register = (on, options) => {
     )
   })
 
+  // Between turns the strip carries what the status line did (round 17, pick 2a): device, folder, the
+  // context gauge, and a health check only when it fails. It stays under /xray off; the cards go.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (isOff(s) || s.turn) return next(e)
-    const l = await read($, last)
-    if (!l) return next(e)
+    if (s.isEnvOff || s.turn) return next(e)
+    const l = s.isHidden ? null : await read($, last)
     const { Box, Text } = $.ui.resolve(e)
-    const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
-    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
-    const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
     // The device mod is optional: absent, the strip draws as it did.
     const cls = await deviceClass($)
     const glyph = deviceGlyph(cls)
     // On a phone (47 cols) the tail was cut mid-word; the strip stops at the headline there.
     const hasTail = cls !== 'mobile'
+    const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
+    const folder = where(s.cwd, s.home, !hasTail)
+    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : 'green')] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
+    const lead = (
+      <Text>
+        {glyph ? <Text>{`${glyph} `}</Text> : null}
+        {folder ? <Text>{`${folder}  `}</Text> : null}
+        {gauge.map((g, i) => (
+          <Text key={`c${i}`} color={g.color} dimColor={g.dim}>
+            {g.t}
+          </Text>
+        ))}
+        {s.health.map((x, i) => (
+          <Text key={`h${i}`} color="red">{`  ${MARK_WARN} ${x}`}</Text>
+        ))}
+      </Text>
+    )
+    if (!l) {
+      return (
+        <Box paddingX={1}>
+          <Text wrap="truncate-end">{lead}</Text>
+        </Box>
+      )
+    }
+    const color = l.tone === 'ok' ? 'green' : l.tone === 'fail' ? 'red' : undefined
+    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
+    const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
 
     return (
       <Box paddingX={1}>
         <Text wrap="truncate-end">
-          {glyph ? <Text>{`${glyph} `}</Text> : null}
-          <Text dimColor>last turn </Text>
+          {lead}
+          <Text dimColor>{'   last turn '}</Text>
           <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
           <Text color={color}>{` ${l.headline}`}</Text>
           {hasTail && l.memo?.length ? <Text dimColor>{`  ·  ${l.memo.join('  ·  ')}`}</Text> : null}
@@ -472,4 +502,15 @@ export const register: Register = (on, options) => {
       </Box>
     )
   })
+}
+
+// The two checks the status line's dots made (PT, ADHD-CM), as words when one fails.
+const MARK_WARN = '▲'
+async function health($: EngineInterface, home: string): Promise<string[]> {
+  if (!home) return []
+  const out: string[] = []
+  if (!(await $.fs.exists(`${home}/.claude/skills/ponytail/SKILL.md`).catch(() => false))) out.push('ponytail skill missing')
+  const rules = await $.fs.read(`${home}/.claude/CLAUDE.md`).catch(() => '')
+  if (typeof rules !== 'string' || !rules.includes('caveman compression')) out.push('style rules missing from CLAUDE.md')
+  return out
 }

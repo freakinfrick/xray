@@ -312,6 +312,14 @@ const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅�
 const DEVICE_GLYPH: Record<string, string> = { mobile: '📱', desktop: '🖥', local: '⌂' }
 export const deviceGlyph = (cls: string | undefined): string | undefined => (cls ? DEVICE_GLYPH[cls] : undefined)
 
+// The folder as the status line showed it (round 17 folds that line into xray): home as ~, and only the
+// last part on a phone or once the path runs long.
+export function where(cwd: string, home: string, short = false): string {
+  if (!cwd) return ''
+  const p = home && (cwd === home || cwd.startsWith(home + '/')) ? '~' + cwd.slice(home.length) : cwd
+  return p !== '~' && (short || p.length > 24) ? (short ? '' : '…/') + (p.split('/').pop() ?? p) : p
+}
+
 export function lastTurn(t: Turn, now: number): LastTurn {
   const card = taskCard(t, now)
   const words = (card.lines[0] ?? []).filter(s => !s.inv && !GLYPHS_ONLY.test(s.t))
@@ -373,7 +381,7 @@ export type Compact = { tone: Tone; status: string; more?: string; pulse?: Seg; 
 
 const LABEL = 'steps ' // so both gauges start in one column: '│ ' + 6 cells = '╰─ ' + 'ctx  '
 
-export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercent: number | null, now: number, width: number, isTicker: boolean): Compact {
+export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercent: number | null, now: number, width: number, isTicker: boolean, folder = ''): Compact {
   const card = nowCard(t, mode, narration, now)
   const [head = [], sub = []] = card.lines
   const live = t.running.size > 0
@@ -410,7 +418,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     more,
     pulse,
     body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, todo], inner, '  ')],
-    bottom: fitParts([gauge, tok, effort, turn, cache], edge, '  '),
+    bottom: fitParts([folder ? [{ t: folder, dim: true }] : undefined, gauge, tok, effort, turn, cache], edge, '  '),
   }
 }
 
