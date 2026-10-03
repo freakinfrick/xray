@@ -498,3 +498,7 @@ What is known (agent, 2026-10-03):
 - Still open: the phone (Termius) unseen for round 16–17; a carried list ≥ 80% done opens in the green
   "closing" mood before any step runs (per the round-16 rule).
 - Phone check deferred by the user (2026-10-03, "skip phone for now").
+- Phone check done (2026-10-03, Termius ~47 cols, dark-ansi, 5 captures IMG_2480–2484): one
+  framed card fits; to-do cells ◆□□ → ■■■ and the status line fit inside it; a long status carries
+  into a band row as designed; a finished 3/3 list goes green "✓ closing". Still unseen on the
+  phone: a carried list ≥ 80% done opening green before any step runs.
