@@ -80,8 +80,9 @@ function columns(c: Card, inner: number): Line[] {
 // To-do cells (round 17): each a few rows tall, left to right in list order. Row 0 holds the mark and the
 // place in the list, the rest the name wrapped at words (… only when its rows run out).
 const cellRowsOf = (c: Card, rows: number) => (c.foot && rows >= 4 ? rows - 1 : rows)
-// The width one cell asks for: its name over the rows under the mark, between CELL_MIN and CELL_MAX.
-const cellWant = (x: Tile, rows: number) => Math.max(CELL_MIN, Math.min(CELL_MAX, Math.ceil(x.text.length / Math.max(1, rows - 1)) + 3))
+// The width one cell asks for: its name over all its rows after the `■ 1 ` lead, between CELL_MIN and CELL_MAX.
+const leadOf = (x: Tile) => `${x.mark} ${x.n} `
+const cellWant = (x: Tile, rows: number) => Math.max(CELL_MIN, Math.min(CELL_MAX, Math.ceil(x.text.length / Math.max(1, rows)) + leadOf(x).length + 2))
 
 function words(text: string, width: number, rows: number): string[] {
   const out: string[] = []
@@ -101,15 +102,17 @@ function words(text: string, width: number, rows: number): string[] {
   return kept
 }
 
+// Round 19 (user): the name starts on the number's row and wraps over every row, the wrapped rows in
+// line with its first word.
 function cell(x: Tile, w: number, rows: number): Line[] {
-  const text = rows > 1 ? words(x.text, w - 2, rows - 1) : []
-  const head = rows > 1 ? `${x.mark} ${x.n}` : `${x.mark} ${words(x.text, w - 4, 1)[0] ?? ''}`
-  const lines = [head, ...text]
+  const lead = leadOf(x)
+  const text = words(x.text, Math.max(1, w - 2 - lead.length), rows)
   return Array.from({ length: rows }, (_, r) => {
-    const t = lines[r] ?? ''
-    if (x.fill) return [{ t: ' ' + t.padEnd(w - 1), ...x.look }]
-    if (r === 0) return [{ t: ' ' + t.padEnd(w - 1), color: x.look.color }]
-    return t ? [{ t: ' ' }, { t, ...x.look }, { t: ' '.repeat(Math.max(0, w - 1 - t.length)) }] : [{ t: ' '.repeat(w) }]
+    const t = text[r] ?? ''
+    const left = r === 0 ? lead : ' '.repeat(lead.length)
+    const rest = ' '.repeat(Math.max(0, w - 1 - left.length - t.length))
+    if (x.fill) return [{ t: ' ' + left + t + rest, ...x.look }]
+    return [{ t: ' ' + left, color: x.look.color }, ...(t ? [{ t, ...x.look }] : []), { t: rest }]
   })
 }
 
@@ -261,16 +264,31 @@ function topTitle(c: Drawn, w: number): Line {
   return [edge(c, `╭─ ${title} ` + '─'.repeat(Math.max(0, w - 6 - title.length - cells(note)))), ...note, edge(c, '─╮')]
 }
 
-// One bottom edge under every card, each card's figures under it: ╰─ a ───┴─┴─ b ───╯. Whole figures
-// only: the rightmost drop first when a card is too narrow for all of them.
-function tray(cards: Drawn[], ws: number[], parts: Line[][]): Line {
-  const out: Line = []
+// One bottom edge under every card: ╰─ a   b   c ───┴─┴───╯. Round 19: the figures sit together from the
+// left edge, in one order whatever the widths, so the eye finds them in one place (round 16 set each under
+// its own card, and they moved as the widths followed content). Whole figures only: the last drop first.
+// A ┴ junction under a figure gives way to it; the edge keeps each card's own ink.
+function tray(cards: Drawn[], ws: number[], figures: Line[]): Line {
+  const base: Seg[] = []
   cards.forEach((c, i) => {
     const w = ws[i] ?? MIN_W
-    const fits = fitParts(parts[i] ?? [], w - 5, '  ')
-    out.push(edge(c, (i ? '┴' : '╰') + (fits.length ? '─ ' : '─')), ...fits, edge(c, (fits.length ? ' ' : '') + '─'.repeat(Math.max(0, w - 3 - (fits.length ? 2 + cells(fits) : 0))) + (i === cards.length - 1 ? '╯' : '┴')))
-    if (i < cards.length - 1) out.push({ t: '─'.repeat(GUTTER), dim: true })
+    base.push(edge(c, i ? '┴' : '╰'), ...Array.from({ length: Math.max(0, w - 2) }, () => edge(c, '─')), edge(c, i === cards.length - 1 ? '╯' : '┴'))
+    if (i < cards.length - 1) base.push(...Array.from({ length: GUTTER }, () => ({ t: '─', dim: true })))
   })
+  const fits = fitParts(figures, base.length - 6, '   ')
+  if (!fits.length) return runs(base)
+  const from = 3 + cells(fits) + 1
+  return [{ ...base[0], t: '╰─ ' }, ...fits, { t: ' ' }, ...runs(base.slice(from))]
+}
+
+// Neighbouring cells of one look as one segment.
+function runs(segs: Seg[]): Line {
+  const out: Seg[] = []
+  for (const g of segs) {
+    const p = out[out.length - 1]
+    if (p && p.color === g.color && p.dim === g.dim && p.bg === g.bg && p.bold === g.bold) out[out.length - 1] = { ...p, t: p.t + g.t }
+    else out.push({ ...g })
+  }
   return out
 }
 
@@ -289,19 +307,16 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   // Round 17: the folder the status line showed sits first under the now card.
   const here: Line | undefined = folder ? [{ t: folder, dim: true }] : undefined
   let cards: Card[]
-  let parts: Line[][]
+  const parts = known([here, tp.turn, tp.effort, tp.ctx, tp.tok, tp.cache])
   if (cols >= THREE && hasTodo) {
     cards = [now0, todo, task]
-    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx]), known([tp.tok, tp.cache])]
   } else if (todo.tiles?.length) {
     // Rule 5, round 17: one card fewer, and the to-dos keep theirs; the task card's first row becomes
     // the now card's fact row (the last step gives way, the band names what runs).
     const gist: Line = [{ t: `${task.title}  `, dim: true }, ...(task.lines[0] ?? [])]
     cards = [{ ...now0, foot: gist }, todo]
-    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   } else {
     cards = [now0, task]
-    parts = [known([here, tp.turn, tp.effort]), known([tp.ctx, tp.tok, tp.cache])]
   }
   const f = frame(now)
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)[0]
@@ -319,7 +334,7 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
     return { ...c, walk, fade }
   })
   const at = cards.findIndex(c => !!c.tiles?.length)
-  const ws = allot(cards.map((c, i) => ideal(c, parts[i])), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined, at > 0 ? cellsNeed(cards[at] as Card) : 0)
+  const ws = allot(cards.map(c => ideal(c)), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined, at > 0 ? cellsNeed(cards[at] as Card) : 0)
   const top = band(head.lines[0] ?? [], t.running.size > 0)
   const bodies = cards.map((c, i) => body(c, (ws[i] ?? MIN_W) - 4, rows))
   const join = (f: (c: Card, i: number) => Line): Line => cards.flatMap((c, i) => (i ? [{ t: ' '.repeat(GUTTER) }, ...f(c, i)] : f(c, i)))

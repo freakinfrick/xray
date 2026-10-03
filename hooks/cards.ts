@@ -114,7 +114,7 @@ export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg
 // green, agents cyan, anything that failed red; the live step blinks in its kind's color at the tick.
 // To-do bookkeeping is left out. With `track`, exactly n cells on a dim ░ track (the phone's gauge,
 // aligned with ctx); without, up to n cells with the older steps folded into a dim +k.
-const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
+export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
   read: { t: '▌', color: 'blue' },
   edit: { t: '█', color: 'yellow' },
   run: { t: '█', color: 'magenta' },
@@ -355,20 +355,21 @@ const GAUGE = 8
 const EFFORT: Record<string, string> = { low: '○ low', medium: '◐ med', high: '● high', xhigh: '◉ xhigh', max: '◉ max' }
 export const effortTag = (e: string | number | undefined): string | undefined => (e === undefined ? undefined : typeof e === 'number' ? `◐ ${e}` : (EFFORT[e] ?? e))
 
-// Each figure on its own, so the tray can set each under the card it belongs to (round 16).
+// Each figure on its own, so the tray can pick the ones that fit (round 16). Round 19: the gauges draw in
+// the terminal's own ink at rest, so nothing under the cards wears a genome color; warnings keep theirs.
 export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } {
   const parts: { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } = { turn: [{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }] }
   // Past 85% the gauge walks (its last cell blinks at the tick): the one figure that needs you moves.
   const shown = ctxPercent !== null && ctxPercent >= 85 && frame(now) % 2 ? Math.max(0, ctxPercent - 100 / GAUGE) : ctxPercent
-  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : undefined), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
   const rates = done.slice(-8).map(r => r.output / ((r.endedAt - r.firstAt) / 1000))
-  if (out && gen) parts.tok = [{ t: 'tok/s ', dim: true }, ...(rates.length > 1 ? [spark(rates), { t: ' ' }] : []), { t: String(Math.round(out / (gen / 1000))) }]
+  if (out && gen) parts.tok = [{ t: 'tok/s ', dim: true }, ...(rates.length > 1 ? [spark(rates, null), { t: ' ' }] : []), { t: String(Math.round(out / (gen / 1000))) }]
   const last = t.requests[t.requests.length - 1]
   const sent = last ? last.input + last.cacheRead + last.cacheWrite : 0
-  if (last && sent) parts.cache = [{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, 'cyan'), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }]
+  if (last && sent) parts.cache = [{ t: 'cache ', dim: true }, ...bar(last.cacheRead / sent, GAUGE, undefined), { t: ` ${Math.round((last.cacheRead / sent) * 100)}%` }]
   const eff = effortTag(t.effort)
   if (eff) parts.effort = [{ t: eff, dim: true }]
   return parts
@@ -410,7 +411,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
   const progress: Line = taskCard(t, now).lines[0] ?? []
-  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : undefined), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
   const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]

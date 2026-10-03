@@ -11,7 +11,7 @@ export const frame = (now: number) => Math.floor(now / 1000)
 
 // A bar filled to the eighth of a cell. The split cell is `color` on the track's color when the track
 // is a color (a red rest after green), else on the terminal's own background before a dim ░ track.
-export function bar(frac: number, cells: number, color: string, track?: string): Line {
+export function bar(frac: number, cells: number, color: string | undefined, track?: string): Line {
   const x = Math.max(0, Math.min(1, Number.isFinite(frac) ? frac : 0)) * cells
   let full = Math.floor(x)
   let part = Math.round((x - full) * 8)
@@ -28,10 +28,10 @@ export function bar(frac: number, cells: number, color: string, track?: string):
 }
 
 // One block per value, scaled between the lowest and the highest shown.
-export function spark(xs: readonly number[], color = 'cyan'): Seg {
+export function spark(xs: readonly number[], color: string | null = 'cyan'): Seg {
   const lo = Math.min(...xs)
   const hi = Math.max(...xs)
-  return { t: xs.map(x => SPARK[hi > lo ? Math.round(((x - lo) / (hi - lo)) * 7) : 3]).join(''), color }
+  return { t: xs.map(x => SPARK[hi > lo ? Math.round(((x - lo) / (hi - lo)) * 7) : 3]).join(''), color: color ?? undefined }
 }
 
 // A solid tile: the glyph in the terminal's background color on `color`.

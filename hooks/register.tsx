@@ -10,6 +10,7 @@ import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep } from './parse'
 import { recall, record, storeKey, type Event } from './memory'
+import * as genome from './genome'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -59,8 +60,25 @@ type Live = {
   cache: Cache // round 18: the prompt cache's countdown
   isCacheOff: boolean // /xray cache off: no countdown, toast or table
   idleGen: number // the between-turns clock running now; a newer one retires it
+  genome: string[] // round 19: this session's finished turns as step letters (genome.ts)
+  genomeId: string // the session those belong to; /resume or /clear swaps it
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
+
+// Round 19: the session genome lives in the store per session id; read again whenever the id changes.
+async function loadGenome($: EngineInterface, s: Live) {
+  const id = await $.session.id().catch(() => '')
+  if (!id || id === s.genomeId) return
+  s.genomeId = id
+  s.genome = genome.load(await $.store.get(genome.keyOf(id)))
+}
+async function saveGenome($: EngineInterface, s: Live, turn: string) {
+  await loadGenome($, s)
+  if (!s.genomeId || !turn) return
+  s.genome = genome.append(s.genome, turn)
+  await $.store.set(genome.keyOf(s.genomeId), s.genome)
+  for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
+}
 
 // Round 18: between turns, the cache countdown's own clock. It wakes only when the strip's text changes
 // (each minute, each second in the last five) or the toast is due, and stops once the cache lapses.
@@ -222,7 +240,7 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0 }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, genome: [], genomeId: '' }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
@@ -242,6 +260,7 @@ export const register: Register = (on, options) => {
       s.cache = cached
       void idle($, s)
     }
+    await loadGenome($, s)
     const kept = await $.store.get('ledger')
     s.ledger = Array.isArray(kept) ? (kept as Entry[]) : []
     await $.command.register({ name: COMMAND, description: 'Open or close the xray detail panel; on|off shows or hides the cards; cache on|off the cache countdown; rate good|bad rates the custom card', argumentHint: '[on|off|cache on|off|rate good|bad <note>]', immediate: true })
@@ -298,6 +317,7 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     // Only a person's own prompt starts a turn; task notifications and scheduled triggers join the running one.
     if (isOff(s) || (e.origin.kind !== 'composer' && s.turn)) return next(e)
+    await loadGenome($, s)
     s.prev = s.turn ?? s.prev
     s.turn = newTurn(e.text, await $.clock.now())
     carryTodos(s.prev, s.turn)
@@ -389,6 +409,7 @@ export const register: Register = (on, options) => {
       const t = s.turn
       const now = await $.clock.now()
       endTurn(t)
+      await saveGenome($, s, genome.code(t))
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -477,6 +498,7 @@ export const register: Register = (on, options) => {
             </Text>
           ))}
           {edge(k.bottom, '╰', '╯', 'kz')}
+          {(e.viewport?.rows ?? Infinity) < SHORT ? null : genomeRows(genome.rows(s.genome, w, { live: s.turn ?? undefined, now, maxRows: 1 }), 'kg', Text)}
         </Box>
       )
     }
@@ -496,6 +518,7 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         ))}
+        {genomeRows(genome.rows(s.genome, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
       </Box>
     )
   })
@@ -506,6 +529,9 @@ export const register: Register = (on, options) => {
     // Text columns inside the paddingX={1} below; rows as the surface measured them.
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
     const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
+    // Round 19: the whole genome, nothing folded (cap 40 rows, newest kept).
+    const dna = genome.rows(s.genome, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
+    if (dna.length) sections.push({ title: `genome · ${genome.summary(s.genome)}`, rows: dna })
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -540,7 +566,7 @@ export const register: Register = (on, options) => {
     const hasTail = cls !== 'mobile'
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
     const folder = where(await here($, s), s.home, !hasTail)
-    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : 'green')] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
+    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
     const lead = (
       <Text>
         {glyph ? <Text>{`${glyph} `}</Text> : null}
@@ -560,10 +586,13 @@ export const register: Register = (on, options) => {
         ))}
       </Text>
     )
+    const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
+    const dna = s.isHidden ? null : genomeRows(genome.rows(s.genome, width, hasTail ? { label: GENOME_LABEL } : { maxRows: 1 }), 'ig', Text)
     if (!l) {
       return (
-        <Box paddingX={1}>
+        <Box paddingX={1} flexDirection="column">
           <Text wrap="truncate-end">{lead}</Text>
+          {dna}
         </Box>
       )
     }
@@ -572,7 +601,7 @@ export const register: Register = (on, options) => {
     const owed = (l.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
 
     return (
-      <Box paddingX={1}>
+      <Box paddingX={1} flexDirection="column">
         <Text wrap="truncate-end">
           {lead}
           <Text dimColor>{'   last turn '}</Text>
@@ -591,9 +620,24 @@ export const register: Register = (on, options) => {
             <Text color="green">nothing ✓</Text>
           )}
         </Text>
+        {dna}
       </Box>
     )
   })
+}
+
+// Round 19: the genome's rows, one Text each (exact widths from genome.ts).
+const GENOME_LABEL = 'genome '
+function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
+  return rows.map((l, r) => (
+    <Text key={`${key}${r}`} wrap="truncate-end">
+      {l.map((g, i) => (
+        <Text key={`${key}${r}s${i}`} color={g.color} dimColor={g.dim}>
+          {g.t}
+        </Text>
+      ))}
+    </Text>
+  ))
 }
 
 // The two checks the status line's dots made (PT, ADHD-CM), as words when one fails.

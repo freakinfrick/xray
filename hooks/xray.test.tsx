@@ -9,6 +9,7 @@ import { panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { checkVoice, narrationOf, isCheckCommand, isTestCommand, parseTestOutput, sayStep } from './parse'
 import { recall, record } from './memory'
+import * as genome from './genome'
 import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
@@ -206,8 +207,12 @@ test('the to-do card: one cell per to-do, live a patch in its hue, pending grey,
   // cells sit left to right in list order, each name wrapped inside its own cell
   const rows = tileRows(todoCard(t, 10).tiles ?? [], 60, 3).map(l => text(l))
   expect(rows.length === 3 && rows.every(r => r.length <= 60)).toBe(true) // fits; the card pads the rest
-  expect(rows[0]).toMatch(/■ 1 .*◆ 2 .*□ 3/)
-  expect(rows[1]).toMatch(/draw cards .*commit .*push/)
+  expect(rows[0]).toMatch(/■ 1 draw cards .*◆ 2 commit .*□ 3 push/) // round 19: the name starts on the number's row
+  // a long name wraps over every row, the wrapped rows in line with its first word
+  const long = tileRows([{ n: 1, mark: '◆', text: 'fix the flaky retry test in the cache module', status: 'in_progress', fill: false, look: {} }], 20, 3).map(l => text(l))
+  expect(long[0]).toMatch(/^ ◆ 1 fix the/)
+  expect(long[1]).toMatch(/^ {5}\S/)
+  expect(long[2]).toMatch(/^ {5}\S/)
   const next = newTurn('y', 10)
   carryTodos(t, next)
   expect(next.todos.map(x => x.text)).toEqual(['draw cards', 'commit', 'push']) // whole while any is open: the count stays true
@@ -880,7 +885,7 @@ test('round 16: three cards from 140 columns with a gap between them; below, the
   expect(wide[0]?.match(/╮ ╭/g)?.length).toBe(2) // three cards, one blank column between each
   expect(wide[0]).toContain('╭─ to-do · 3 of 5')
   expect(wide.some(r => r.includes('▸ fixing mul in sum.js'))).toBe(true)
-  expect(wide.at(-1)).toMatch(/^╰─ turn 9s .*┴─┴─ ctx .*┴─┴[─╌]*╯$/) // the tray: each card's figures under it
+  expect(wide.at(-1)).toMatch(/^╰─ turn 9s   ctx \S+ 17% ─+┴─┴─+┴─┴[─╌]*╯$/) // round 19: the tray's figures packed from the left
   const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
   expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
   expect(mid[0]).toContain('╭─ to-do · 3 of 5') // the to-dos keep their card
@@ -1213,4 +1218,49 @@ test('round 18: each turn files one row, and a miss names its cause', async () =
   expect(text(sec?.rows[1])).toContain('prefix changed')
   expect(text(sec?.rows.at(-1))).toBe('5 turns · 3 missed · 443k rewritten')
   expect(text(cacheRows(c, 0, 6, 40)?.rows[1])).not.toContain('prefix') // a narrow panel drops the reason, never wraps
+})
+
+// Round 19: the session genome.
+test('genome: a turn as letters, failed steps red whatever their kind, to-do bookkeeping left out', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Read', { file_path: 'a.ts' }, 0)
+  finishStep(t, 'a', 'Read', { file_path: 'a.ts' }, true, '', undefined, 1)
+  startStep(t, 'w', 'TodoWrite', { todos: [] }, 2)
+  finishStep(t, 'w', 'TodoWrite', {}, true, '', undefined, 3)
+  startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 4)
+  finishStep(t, 'e', 'Edit', { file_path: 'a.ts' }, true, '', undefined, 5)
+  startStep(t, 'b', 'Bash', { command: 'false' }, 6)
+  finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 7)
+  expect(genome.code(t)).toBe('rex')
+  expect(genome.append(['re'], '')).toEqual(['re'])
+  expect(genome.load(['a', 3, null, 'b'])).toEqual(['a', 'b'])
+  expect(genome.load('nope')).toEqual([])
+})
+
+test('genome: │ between turns, wraps at the width, folds the oldest whole turns past 3 rows', async () => {
+  const one = genome.rows(['rre', 'ct'], 40, { label: 'genome ' })
+  expect(one.map(l => text(l))).toEqual(['genome ▌▌█│██'])
+  expect(one[0]?.find(g => g.t.includes('│'))?.dim).toBe(true)
+  expect(one[0]?.find(g => g.t === '█' && g.color === 'red')).toBeUndefined()
+  const turns = Array.from({ length: 30 }, (_, i) => 'r'.repeat(10 + (i % 5)))
+  const rows = genome.rows(turns, 60, { label: 'genome ' }).map(l => text(l))
+  expect(rows.length).toBe(3)
+  expect(rows.every(r => r.length <= 60)).toBe(true)
+  expect(rows[0]).toMatch(/^genome \+\d+ turns /)
+  expect(rows[1]).toMatch(/^ {7}/) // later rows indent under the label
+  // the newest turn is always whole at the end
+  expect(rows[2]?.endsWith('│' + '▌'.repeat(14))).toBe(true)
+  expect(genome.rows([], 60)).toEqual([])
+})
+
+test('genome: the live turn blinks its running step at the end; the store keeps the newest sessions', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 0)
+  expect(text(genome.rows(['r'], 40, { live: t, now: 1000 })[0])).toBe('▌│█')
+  expect(text(genome.rows(['r'], 40, { live: t, now: 2000 })[0])).toBe('▌│▄')
+  const keys = ['isHidden', ...Array.from({ length: 45 }, (_, i) => `genome:s${i}`)]
+  const gone = genome.stale(keys, 'genome:s44')
+  expect(gone).toEqual(['genome:s0', 'genome:s1', 'genome:s2', 'genome:s3', 'genome:s4']) // 45 → 40 kept
+  expect(gone).not.toContain('isHidden')
+  expect(genome.summary(['ab', 'c'])).toBe('2 turns · 3 steps')
 })
