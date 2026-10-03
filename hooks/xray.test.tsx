@@ -999,13 +999,14 @@ test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flas
   startStep(t, 'u', 'TodoWrite', { todos: [{ content: 'run tests', status: 'completed' }, { content: 'fix sum', status: 'completed' }, { content: 're-run tests', status: 'completed' }, { content: 'fix mul', status: 'completed' }, { content: 're-run tests to verify', status: 'in_progress' }] }, 6_000)
   expect(t.todos[3]?.doneAt).toBe(6_000)
   expect(t.todos[0]?.doneAt).toBeUndefined() // done before, never flashes again
-  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]?.color).toBe('whiteBright')
-  expect(todoCard(t, 10, 7_000).chips?.[3]?.[0]?.color).toBe(t.todos[3]?.color)
+  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]).toMatchObject({ color: t.todos[3]?.color, bold: true })
+  expect(todoCard(t, 10, 6_100).chips?.[3]?.[0]?.inv).toBeUndefined()
+  expect(todoCard(t, 10, 7_000).chips?.[3]?.[0]).toMatchObject({ color: t.todos[3]?.color, inv: true })
   const memo = { tones: {} }
   const borderOf = (rows: ReturnType<typeof spinnerRows>, i: number) => rows[0]?.filter(s => s.t.includes('╭'))[i]
   spinnerRows(t, undefined, null, 10, 6_000, 188, 3, memo)
-  const tests = newTurn('x', 0) // a fresh turn's task card goes quiet → its tone changes
-  Object.assign(t, { runs: tests.runs, template: 'default' })
+  startStep(t, 'b9', 'Bash', { command: 'npm test' }, 6_040) // the tests card goes from failing to passing
+  finishStep(t, 'b9', 'Bash', { command: 'npm test' }, true, 'Tests: 3 passed, 3 total', undefined, 6_050)
   const fading = spinnerRows(t, undefined, null, 10, 6_100, 188, 3, memo)
   const settled = spinnerRows(t, undefined, null, 10, 7_000, 188, 3, memo)
   expect(borderOf(fading, 2)?.dim).toBe(true)
@@ -1017,4 +1018,15 @@ test('context past 85% walks its gauge at the tick; below, it holds', async () =
   const ctx = (pct: number, now: number) => text(teleParts(t, pct, now).ctx)
   expect(ctx(90, 1_000)).not.toBe(ctx(90, 2_000))
   expect(ctx(60, 1_000)).toBe(ctx(60, 2_000))
+})
+
+test('the walk keeps one rhythm across segment joins, and a card that moves place does not fade', async () => {
+  const f = midFix()
+  const tray = text(spinnerRows(f, 'tool-use', null, 10, 9_000, 188, 3).at(-1))
+  const span = tray.slice(tray.lastIndexOf('┴') + 1)
+  expect(span).not.toMatch(/──|╌╌/) // strictly alternating once walking
+  const memo = { tones: {} }
+  spinnerRows(f, undefined, null, 10, 9_000, 188, 3, memo) // three cards: now, to-do, tests
+  const two = spinnerRows(f, undefined, null, 10, 9_100, 118, 3, memo) // two cards: tests moves to place 1
+  expect(two[0]?.filter(s => s.t.includes('╭'))[1]?.dim).not.toBe(true)
 })

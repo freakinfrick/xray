@@ -121,12 +121,29 @@ export function allot(ideals: number[], cols: number): number[] {
 // the border passes through dim once before taking the new color).
 type Drawn = Card & { walk?: number; fade?: boolean }
 const ink = (c: Drawn): Seg => (c.fade ? { t: '', dim: true } : { t: '', color: TONE_COLOR[c.tone], dim: c.tone === 'quiet' })
-const walked = (t: string, f: number | undefined) => (f === undefined ? t : [...t].map((ch, i) => (ch === '─' && (i + f) % 2 ? '╌' : ch)).join(''))
-const edge = (c: Drawn, t: string): Seg => ({ ...ink(c), t: walked(t, c.walk) })
+const edge = (c: Drawn, t: string): Seg => ({ ...ink(c), t })
+
+// The walk is laid over a finished row by absolute column, so the dashes keep one rhythm across
+// segment joins: every other ─ inside a walking card's span turns ╌, shifting one cell per tick.
+function walkRow(row: Line, spans: { from: number; to: number; f: number }[]): Line {
+  if (!spans.length) return row
+  let col = 0
+  return row.map(s => {
+    const t = [...s.t].map((ch, i) => {
+      const at = col + i
+      const span = spans.find(x => at >= x.from && at < x.to)
+      return span && ch === '─' && (at + span.f) % 2 ? '╌' : ch
+    }).join('')
+    col += s.t.length
+    return t === s.t ? s : { ...s, t }
+  })
+}
 const FADE_MS = 480
 const SLOW = 3 // a live step past this many times its kind's usual length walks the now card
 const STALL_MS = 20_000 // nothing running, the model not working: the stand-in for "waiting on you"
-export type Memo = { tones: Record<number, { tone: Tone; at: number }> }
+export type Memo = { tones: Record<string, { tone: Tone; at: number }> }
+// A card's identity across frames: its title's first word ("tests · run 2" → tests), the now card by place.
+const keyOf = (c: Card, i: number) => (i ? (c.title.split(' ')[0] ?? c.title) : 'now')
 
 function topBand(c: Drawn, w: number, status: string, pulse?: Seg): Line {
   const p = pulse ? ` ${pulse.t}` : ''
@@ -186,9 +203,10 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const lastEnd = t.done[t.done.length - 1]?.endedAt ?? t.startedAt
   const isStalled = !live && mode !== 'thinking' && mode !== 'responding' && now - lastEnd >= STALL_MS
   cards = cards.map((c, i): Drawn => {
-    const seen = memo?.tones[i]
-    if (memo && seen?.tone !== c.tone) memo.tones[i] = { tone: c.tone, at: seen ? now : -Infinity }
-    const fade = !!memo && now - (memo.tones[i]?.at ?? -Infinity) < FADE_MS
+    const key = keyOf(c, i)
+    const seen = memo?.tones[key]
+    if (memo && seen?.tone !== c.tone) memo.tones[key] = { tone: c.tone, at: seen ? now : -Infinity }
+    const fade = !!memo && now - (memo.tones[key]?.at ?? -Infinity) < FADE_MS
     // The now card turns red when stuck but holds still; the failing card itself is what walks.
     const walk = (i > 0 && c.tone === 'fail') || (i === 0 && (isSlow || isStalled)) ? f : undefined
     return { ...c, walk, fade }
@@ -197,8 +215,12 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const top = band(head.lines[0] ?? [], t.running.size > 0)
   const bodies = cards.map((c, i) => body(c, (ws[i] ?? MIN_W) - 4, rows))
   const join = (f: (c: Card, i: number) => Line): Line => cards.flatMap((c, i) => (i ? [{ t: ' '.repeat(GUTTER) }, ...f(c, i)] : f(c, i)))
-  const out: Line[] = [join((c, i) => (i ? topTitle(c, ws[i] ?? MIN_W) : topBand(c, ws[i] ?? MIN_W, top.status, top.pulse)))]
+  const spans = (cards as Drawn[]).flatMap((c, i) => {
+    const from = ws.slice(0, i).reduce((a, w) => a + w + GUTTER, 0)
+    return c.walk === undefined ? [] : [{ from, to: from + (ws[i] ?? MIN_W), f: c.walk }]
+  })
+  const out: Line[] = [walkRow(join((c, i) => (i ? topTitle(c, ws[i] ?? MIN_W) : topBand(c, ws[i] ?? MIN_W, top.status, top.pulse))), spans)]
   for (let r = 0; r < rows; r++) out.push(join((c, i) => [edge(c, '│ '), ...pad(bodies[i]?.[r] ?? [], (ws[i] ?? MIN_W) - 4), edge(c, ' │')]))
-  out.push(tray(cards, ws, parts))
+  out.push(walkRow(tray(cards, ws, parts), spans))
   return out
 }

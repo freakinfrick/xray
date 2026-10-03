@@ -151,8 +151,9 @@ const NBSP = '\u00a0' // keeps a chip whole when its row wraps
 const FLASH_MS = 320
 function chip(x: Todo, now = Infinity): Line {
   const name = clip(x.text, 48).replace(/ /g, NBSP)
-  // Just done: one bright flash before it settles into its hue (round 16, direction 3).
-  if (x.status === 'completed' && x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < FLASH_MS) return [{ t: `${NBSP}${name}${NBSP}`, color: 'whiteBright', inv: true, bold: true }]
+  // Just done: its name pops bold in its own hue, then settles into the solid patch (round 16,
+  // direction 3). Its own hue reads on both palettes; white was paper on forest-light.
+  if (x.status === 'completed' && x.doneAt !== undefined && now - x.doneAt >= 0 && now - x.doneAt < FLASH_MS) return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, bold: true }]
   if (x.status === 'completed') return [{ t: `${NBSP}${name}${NBSP}`, color: x.color, inv: true }]
   if (x.status === 'in_progress') return [{ t: `${MARK.live} `, color: x.color }, { t: name, color: x.color, bold: true }]
   return [{ t: `${NBSP}${name}${NBSP}`, dim: true, inv: true }]
