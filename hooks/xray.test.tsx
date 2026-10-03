@@ -10,9 +10,10 @@ import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, n
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
+import { nameOf } from './names'
 import { addTurn, emptyRec, loadRec, mergeFiles } from './session'
 import { MOMENT_BG, celebrations, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
+import { agentStep, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
@@ -1399,4 +1400,25 @@ test('20b: the note row sits over the newest genome row; landmarks first, names 
   expect(row).not.toContain('at the shell') // would run past the edge: skipped, not cut
   expect(row.length).toBeLessThanOrEqual(40)
   expect(genome.annotate(turns, 60, [{ turn: 1, at: 0, glyph: '⚑', text: 'x'.repeat(80) }], { label: 'genome ' }).map(g => g.t).join('').trim()).toBe('⚑') // shrinks to its glyph
+})
+
+test('20d: a turn is named from its shape, first rule wins, and the names vary', async () => {
+  expect(nameOf('', [], 0)).toBe('talk only')
+  expect(nameOf('rtet', [false, true], 1)).toBe('red → green')
+  expect(nameOf('tttt', [false, false, true], 0)).toBe('test loop ×3')
+  expect(nameOf('ttt', [false, false, false], 0)).toBe('test loop ×3, red')
+  expect(nameOf('ret', [true], 1)).toBe('one-edit fix')
+  expect(nameOf('rrrrrr', [], 2)).toBe('long read')
+  expect(nameOf('rrrrrrrc', [], 7)).toBe('scouting 7 files')
+  expect(nameOf('eeeeeeeer', [], 1)).toBe('edit storm')
+  expect(nameOf('aac', [], 0)).toBe('agent fan-out ×2')
+  expect(nameOf('k', [], 0)).toBe('one command') // a commit is a command
+  expect(nameOf('ree', [], 1)).toBe('2 edits, untested')
+  const t = newTurn('x', 0)
+  startStep(t, 'r1', 'Read', { file_path: '/a/x.ts' }, 0)
+  finishStep(t, 'r1', 'Read', { file_path: '/a/x.ts' }, true, '', undefined, 1)
+  startStep(t, 'r2', 'Read', { file_path: '/a/x.ts' }, 2)
+  finishStep(t, 'r2', 'Read', { file_path: '/a/x.ts' }, true, '', undefined, 3)
+  bash(t, 'b', 'npm test', 'Tests: 1 failed, 1 total', 4)
+  expect([filesRead(t), countedRuns(t)]).toEqual([1, [false]])
 })

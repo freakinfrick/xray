@@ -18,8 +18,8 @@ function colorTodos(t: Turn) {
 }
 // kind: what the filmstrip colors a step by (round 16, direction 1).
 export type StepKind = 'read' | 'edit' | 'run' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
-// note: what a commit step committed (round 20a), "3f9c2ab subject".
-export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string }
+// note: what a commit step committed (round 20a), "3f9c2ab subject". file: the path a step read or wrote (20d/e).
+export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string; file?: string }
 const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const TODOS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop'])
@@ -197,7 +197,8 @@ export function planFromText(t: Turn, text: string) {
 
 export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number) {
   t.queued.delete(id)
-  t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input) })
+  const file = String(input.file_path ?? input.notebook_path ?? '') || undefined
+  t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input), ...(file ? { file } : {}) })
   if (tool === 'Bash') t.cmds.push({ cmd: String(input.command ?? '').trim(), startedAt: now })
   if (tool === 'Bash' && isTestCommand(String(input.command ?? ''))) t.runs.push({ pass: 0, fail: 0, total: 0, failing: [], running: true, startedAt: now })
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
@@ -297,5 +298,11 @@ export function pickTemplate(t: Turn) {
 }
 
 export const runningAgents = (t: Turn) => t.agents.filter(a => a.endedAt === undefined)
+
+// Round 20: the turn's counted test runs in order, true = passed (a run that printed no count counts by
+// its exit; one cut off by the turn's end doesn't count).
+export const countedRuns = (t: Turn): boolean[] => t.runs.filter(r => !r.running && !r.isStopped && (r.total > 0 || r.ok !== undefined)).map(r => (r.total ? r.fail === 0 : r.ok === true))
+// Distinct files the turn read.
+export const filesRead = (t: Turn): number => new Set(t.done.filter(x => x.kind === 'read' && x.file).map(x => x.file)).size
 
 export const openTodos = (t: Turn) => t.todos.filter(x => x.status !== 'completed')

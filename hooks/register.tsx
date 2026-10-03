@@ -11,9 +11,10 @@ import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
+import { nameOf } from './names'
 import { addTurn, emptyRec, loadRec, type SessionRec } from './session'
 import { MARK_GLYPH, MOMENT_BG, celebrations, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
+import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const keptTurn = atom({ plugin: 'xray', key: 'prev' } as const, null) // the last finished turn, for the panel after a reload
@@ -94,7 +95,7 @@ async function turnMoments($: EngineInterface, s: Live, t: Turn, letters: string
   const count: Count = typeof kept?.n === 'number' ? kept : { n: 0, since: now }
   if (s.cwd) await $.store.set(keyN, { ...count, n: count.n + letters.length })
   const keyD = `day:${s.cwd}`
-  const runs = t.runs.filter(r => !r.running && !r.isStopped && (r.total > 0 || r.ok !== undefined)).map(r => (r.total ? r.fail === 0 : r.ok === true))
+  const runs = countedRuns(t)
   const day = noteRuns((await $.store.get(keyD)) as Day | undefined, runs, now)
   if (s.cwd && runs.length) await $.store.set(keyD, day.day)
   return milestones({
@@ -449,7 +450,8 @@ export const register: Register = (on, options) => {
       await loadGenome($, s)
       const lm = landmarks(t, s.rec, s.ctx)
       const moments = [...celebrations(t), ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
-      await saveGenome($, s, letters, { marks: lm.marks, tests: lm.tests })
+      const name = nameOf(letters, countedRuns(t), filesRead(t))
+      await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests })
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -457,7 +459,7 @@ export const register: Register = (on, options) => {
       // (nothing) and the strip stayed away until something else redrew (round 17 live check).
       s.prev = t
       s.turn = null
-      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined, moment: pick(moments) }))
+      await update($, last, () => ({ ...lastTurn(t, now), memo: memo.length ? memo : undefined, moment: pick(moments), name }))
       await update($, keptTurn, () => saveTurn(t))
       $.ui.invalidate('ui.render')
       void idle($, s)
@@ -572,6 +574,16 @@ export const register: Register = (on, options) => {
     // Round 19: the whole genome, nothing folded (cap 40 rows, newest kept).
     const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
     if (dna.length) sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: dna })
+    // Round 20d: each turn by name, newest first (10 at most: the pane is 32 rows).
+    const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse()
+    if (named.length) {
+      const w = Math.min(24, Math.max(...named.slice(0, PANEL_TURNS).map(r => r.x.length), 1))
+      const rows: Line[] = named.slice(0, PANEL_TURNS).map(r => {
+        const dna = genome.rows([r.x], w + 1, { maxRows: 1 })[0] ?? []
+        return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...dna, { t: ' '.repeat(Math.max(0, w - cells(dna)) + 2) }, { t: r.name }]
+      })
+      sections.push({ title: `turns · ${named.length} · ${new Set(named.map(r => r.name.replace(/\d+/g, 'N'))).size} kinds`, rows })
+    }
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -621,7 +633,7 @@ export const register: Register = (on, options) => {
     // Round 20: the one tile slot sits where the memo does; on a phone it takes its own row.
     const moment: Line = l?.moment && hasTail ? [{ t: '  ' }, ...tile(l.moment)] : []
     const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
-    const turnCells = l ? 13 + (l.title ?? 'turn').length + 2 + 1 + l.headline.length + cells(moment) + memoText.length + owedCells : 0
+    const turnCells = l ? 13 + (l.name ?? l.title ?? 'turn').length + (l.name && hasTail ? (l.title ?? 'turn').length + 3 : 0) + 2 + 1 + l.headline.length + cells(moment) + memoText.length + owedCells : 0
     // Round 20f: the cache bar and the session's age are extras: they draw only while the genome on this
     // line still shows three turns (or all of them), since the genome is what the line is for.
     const age: Line = hasTail && s.rec.startedAt !== undefined ? [{ t: `  ${span(now - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }] : []
@@ -648,8 +660,9 @@ export const register: Register = (on, options) => {
           {ink(lead, 'ld', Text)}
           {l ? (
             <Text>
-              <Text dimColor>{'   last turn '}</Text>
-              <Text color={color} dimColor={!color} inverse>{` ${l.title ?? 'turn'} `}</Text>
+              <Text dimColor>{hasTail || !l.name ? '   last turn ' : '  '}</Text>
+              <Text color={color} dimColor={!color} inverse>{` ${l.name ?? l.title ?? 'turn'} `}</Text>
+              {l.name && hasTail ? <Text dimColor>{` ${l.title ?? 'turn'} ·`}</Text> : null}
               <Text color={color}>{` ${l.headline}`}</Text>
               {ink(moment, 'mo', Text)}
               {memoText ? <Text dimColor>{memoText}</Text> : null}
@@ -699,6 +712,7 @@ function withNotes(rec: SessionRec, width: number, opts: Parameters<typeof genom
   return row.length ? [...rows.slice(0, -1), row, ...rows.slice(-1)] : rows
 }
 const LONGEST_MIN = 12
+const PANEL_TURNS = 10
 
 // Round 19: the genome's rows, one Text each (exact widths from genome.ts).
 const GENOME_LABEL = 'genome '
