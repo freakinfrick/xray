@@ -224,8 +224,7 @@ test('the now card names the running step, and time only past 5 seconds', async 
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe(' ◆  running the tests ▂')
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s ▄')
   expect(nowCard(t, 'tool-use', null, 9000).lines[0]?.[0]?.inv).toBe(true)
-  expect(text(nowCard(t, 'tool-use', null, 9000).spare)).toBe('steps ▆ 0 done') // live step, blinking ▆/▄ at the tick
-  expect(text(nowCard(t, 'tool-use', null, 10_000).spare)).toBe('steps ▄ 0 done')
+  expect(nowCard(t, 'tool-use', null, 9000).spare).toBeUndefined() // the steps live in the progress card (round 13)
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[1])).toBe('» Running the suite.')
 })
 
@@ -275,8 +274,8 @@ test('after a prompt the cards draw under the spinner', async ($, on) => {
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   await $.prompt.submit(submit)
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
-  expect(await ui.find({ type: 'Text', text: /now/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /thinking/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ ◇ thinking $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /progress/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /turn \d+s/ })).toBeDefined()
   await ui.unmount()
 })
@@ -645,6 +644,8 @@ test('on a phone the card grows one row for a long narration, each row within th
 test('the steps and ctx gauges start in one column, both 8 cells', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'ls' }, 0)
+  expect(text(taskCard(t, 9000).lines[0])).toBe('steps █░░░░░░░ 0 done') // live step, blinking █/▄ at the tick
+  expect(text(taskCard(t, 10_000).lines[0])).toBe('steps ▄░░░░░░░ 0 done')
   finishStep(t, 'a', 'Bash', { command: 'ls' }, false, '', undefined, 10)
   const k = compact(t, undefined, null, 16, 30_000, 44, false)
   const steps = '│ ' + text(k.body[1])
@@ -687,9 +688,30 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   expect(await typing.find({ type: 'Text', text: /thinking/ })).toBeDefined()
   await typing.unmount()
   const wide = await at(100, 42)
-  expect(await wide.find({ type: 'Text', text: /now/ })).toBeDefined()
-  expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeDefined()
+  // Round 13: the wide cards wear the phone's look, the now card's head as a band, telemetry as one bottom edge.
+  expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
+  const wband = await wide.find({ type: 'Text', text: /^ ◇ thinking $/ })
+  expect((wband as { props?: Record<string, unknown> } | undefined)?.props?.backgroundColor).toBe('magenta')
+  expect(await wide.find({ type: 'Text', text: /╭─ to-do/ })).toBeDefined()
+  expect(await wide.find({ type: 'Text', text: /^╰─ $/ })).toBeDefined()
   await wide.unmount()
+})
+
+test('the progress card carries the step gauge, then the to-do squares and the one in progress', async () => {
+  const t = newTurn('x', 0)
+  startStep(t, 'a', 'Bash', { command: 'ls' }, 0)
+  expect(text(taskCard(t, 9000).lines[0])).toBe('steps █░░░░░░░ 0 done') // live step, blinking █/▄ at the tick
+  expect(text(taskCard(t, 10_000).lines[0])).toBe('steps ▄░░░░░░░ 0 done')
+  finishStep(t, 'a', 'Bash', { command: 'ls' }, true, '', undefined, 10)
+  startStep(t, 'b', 'Bash', { command: 'false' }, 20)
+  finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 30)
+  expect(text(taskCard(t, 1000).lines[0])).toBe('steps ██░░░░░░ 2 done · 1 failed')
+  expect(taskCard(t, 1000).lines[0]?.[2]?.color).toBe('red')
+  startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress', activeForm: 'drawing cards' }, { content: 'commit', status: 'pending' }] }, 40)
+  finishStep(t, 'w', 'TodoWrite', {}, true, '', undefined, 50)
+  const c = taskCard(t, 1000)
+  expect(text(c.lines[1])).toBe('to-do ■◉□ 1/3')
+  expect(text(c.lines[2])).toBe('drawing cards')
 })
 
 test('the narrow ctx gauge draws whole cells only, one at any use (no near-blank eighth)', async () => {

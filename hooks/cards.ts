@@ -51,18 +51,23 @@ export function nowCard(t: Turn, mode: Mode, narration: string | null, now: numb
   const head: Line = live.length ? [tile(' ◆ ', 'cyan'), { t: ' ' + what }] : [{ t: '◇ ' + what }]
   if (el > 5) head.push({ t: ` · ${clock(el * 1000)}`, dim: true })
   if (live.length) head.push({ t: ' ' + ('▂▄▆█'[f % 4] as string), color: 'cyan' })
-  return { title: 'now', tone, lines: [head, sub], spare: stepTrail(t, live.length > 0, f) }
+  return { title: 'now', tone, lines: [head, sub] }
 }
 
-const TRAIL = 10
+// The now card's head as the top edge's band (rounds 11, 13): the band is one tone, so the live tile
+// and dim timer fold into plain text; the live pulse is drawn after it in its own color.
+export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg } {
+  const tail = isLive ? head[head.length - 1] : undefined
+  const said = (tail ? head.slice(0, -1) : head).map(x => x.t).join('').replace(/\s+/g, ' ').trim()
+  return { status: said, pulse: tail ? { ...tail, t: tail.t.trim() } : undefined }
+}
 
-// The turn's steps as a row of blocks: green done, red failed, cyan running (blinking at the tick).
-function stepTrail(t: Turn, isRunning: boolean, f: number): Line | undefined {
-  if (!t.done.length && !isRunning) return undefined
-  const failed = t.done.filter(x => x.ok === false).length
-  const marks: Line = t.done.slice(-TRAIL).map(x => ({ t: '▆', color: x.ok === false ? 'red' : 'green' }))
-  if (isRunning) marks.push({ t: f % 2 ? '▆' : '▄', color: 'cyan' })
-  return [{ t: 'steps ', dim: true }, ...marks, { t: ` ${t.done.length} done${failed ? ` · ${failed} failed` : ''}`, dim: true }]
+// The steps as a gauge the ctx bar's shape: one █ per step on a dim ░ track, green done, red failed,
+// cyan running (blinking at the tick).
+function stepGauge(t: Turn, n: number, now: number): Line {
+  const live = t.running.size > 0
+  const m: Line = [...t.done.slice(-(live ? n - 1 : n)).map(x => ({ t: '█', color: x.ok === false ? 'red' : 'green' })), ...(live ? [{ t: frame(now) % 2 ? '█' : '▄', color: 'cyan' }] : [])]
+  return m.length < n ? [...m, { t: '░'.repeat(n - m.length), dim: true }] : m
 }
 
 const NBSP = '\u00a0' // keeps a chip whole when its row wraps
@@ -106,7 +111,7 @@ export function taskCard(t: Turn, now: number): Card {
     case 'agents':
       return agentsCard(t)
     default:
-      return progressCard(t)
+      return progressCard(t, now)
   }
 }
 
@@ -116,7 +121,7 @@ const sayRun = (r: Run) => (r.isStopped ? 'stopped' : !r.total ? (r.ok ? 'passed
 function testsCard(t: Turn, now: number): Card {
   const n = t.runs.length
   const r = t.runs[n - 1]
-  if (!r) return progressCard(t)
+  if (!r) return progressCard(t, now)
   const prev = t.runs.slice(0, -1).reverse().find(x => !x.running)
   if (r.running) {
     const el = secs(now - r.startedAt)
@@ -189,18 +194,31 @@ function agentsCard(t: Turn): Card {
   }
 }
 
-function progressCard(t: Turn): Card {
-  if (t.todos.length) {
-    const done = t.todos.filter(x => x.status === 'completed').length
-    const cur = t.todos.find(x => x.status === 'in_progress')
-    return { title: 'progress', tone: done === t.todos.length ? 'ok' : 'quiet', lines: [[...dots(t), { t: ` ${done} of ${t.todos.length} done` }], [{ t: cur ? cur.active : done === t.todos.length ? 'all done ✓' : '', dim: !cur }]] }
+// Row 1 the step gauge (round 13: moved here from the now card), row 2 the to-do squares, row 3 what
+// is in progress, or the files changed when there is no to-do list.
+function progressCard(t: Turn, now: number): Card {
+  const failed = t.done.filter(x => x.ok === false).length
+  const gauge: Line = [{ t: LABEL, dim: true }, ...stepGauge(t, GAUGE, now), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
+  const files: Line = [{ t: t.edited.size ? `${plural(t.edited.size, 'file')} changed` : '', dim: true }]
+  if (!t.todos.length) return { title: 'progress', tone: failed ? 'warn' : 'quiet', lines: [gauge, files] }
+  const done = t.todos.filter(x => x.status === 'completed').length
+  const cur = t.todos.find(x => x.status === 'in_progress')
+  return {
+    title: 'progress',
+    tone: done === t.todos.length ? 'ok' : failed ? 'warn' : 'quiet',
+    lines: [gauge, [{ t: 'to-do ', dim: true }, ...(squares(t) ?? [])], [{ t: cur ? cur.active : done === t.todos.length ? 'all done ✓' : '', dim: !cur }]],
   }
-  const steps = t.done.length
-  return { title: 'progress', tone: t.failures ? 'warn' : 'quiet', lines: [[{ t: plural(steps, 'step') + ' done' }, ...(t.failures ? [{ t: ` · ${t.failures} failed`, color: 'red' }] : [])], [{ t: t.edited.size ? `${plural(t.edited.size, 'file')} changed` : '', dim: true }]] }
 }
 
 function dots(t: Turn): Line {
   return t.todos.slice(0, 12).map(x => ({ t: x.status === 'completed' ? '●' : x.status === 'in_progress' ? '◉' : '○', color: x.status === 'pending' ? undefined : 'green', dim: x.status === 'pending' }))
+}
+
+// One square per to-do in its hue, then k/N; undefined before any to-do list exists.
+function squares(t: Turn): Line | undefined {
+  if (!t.todos.length) return undefined
+  const done = t.todos.filter(x => x.status === 'completed').length
+  return [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }]
 }
 
 // A segment of bars, sparklines or marks only (dots and spaces aside): no words for a one-line summary.
@@ -297,35 +315,25 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const tone: Tone = !live && last?.ok === false ? 'fail' : card.tone
   const inner = width - 4 // │ text │
   const edge = width - 6 // ╭─ text ─╮, at least one ─ of fill
-  const band = width - 8 // ╭ ␣status␣ ▂ ─╮: the band's two pads, the pulse and one ─ of fill
+  const bandCells = width - 8 // ╭ ␣status␣ ▂ ─╮: the band's two pads, the pulse and one ─ of fill
   const failed = t.done.filter(x => x.ok === false).length
-  // The steps as a gauge the ctx bar's shape: one █ per step on the same dim ░ track.
-  const steps = (n: number): Line => {
-    const m: Line = [...t.done.slice(-(live ? n - 1 : n)).map(x => ({ t: '█', color: x.ok === false ? 'red' : 'green' })), ...(live ? [{ t: frame(now) % 2 ? '█' : '▄', color: 'cyan' }] : [])]
-    return m.length < n ? [...m, { t: '░'.repeat(n - m.length), dim: true }] : m
-  }
-  const done = t.todos.filter(x => x.status === 'completed').length
-  const squares: Line | undefined = t.todos.length ? [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }] : undefined
+  const todo = squares(t)
   const rate = tokRate(t)
   const tok: Line | undefined = rate === null ? undefined : [{ t: `${rate} t/s` }]
   const eff = effortTag(t.effort)
   const effort: Line | undefined = eff ? [{ t: eff, dim: true }] : undefined
   // The card grows at most one row so status texts are not cut: the status's overflow takes it first,
   // else the narration's (rounds 9–10).
-  // The band is one tone, so the status goes in as plain text: the live tile and dim timer fold into it.
-  const tail = live ? head[head.length - 1] : undefined
-  const pulse = tail ? { ...tail, t: tail.t.trim() } : undefined
-  const said = (tail ? head.slice(0, -1) : head).map(x => x.t).join('').replace(/\s+/g, ' ').trim()
-  const [first, rest] = wrapOnce([{ t: said }], band, inner)
+  const { status: said, pulse } = band(head, live)
+  const [first, rest] = wrapOnce([{ t: said }], bandCells, inner)
   const status = first.map(x => x.t).join('')
   const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
     const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
-    const counts: Line = [...steps(6), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
-    return { tone, status, more, pulse, body: [fitParts([counts, squares, ctx, tok, effort], inner, ' · ')], bottom: [] }
+    const counts: Line = [...stepGauge(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}✗` : ''}`, dim: true }]
+    return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
-  const isTask = !!t.signal || t.template !== 'default'
-  const progress: Line = isTask ? (taskCard(t, now).lines[0] ?? []) : [{ t: LABEL, dim: true }, ...steps(GAUGE), { t: ` ${t.done.length} done`, dim: true }, ...(failed ? [{ t: ` · ${failed} failed`, color: 'red' }] : [])]
+  const progress: Line = taskCard(t, now).lines[0] ?? []
   const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : 'green'), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
@@ -335,7 +343,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     status,
     more,
     pulse,
-    body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, squares], inner, '  ')],
+    body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, todo], inner, '  ')],
     bottom: fitParts([gauge, tok, effort, turn, cache], edge, '  '),
   }
 }
@@ -400,7 +408,7 @@ const clock = (ms: number) => {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
 }
 
-const clip = (s: string, n: number) => {
+export const clip = (s: string, n: number) => {
   const one = s.replace(/\s+/g, ' ').trim()
   return one.length > n ? one.slice(0, n - 1) + '…' : one
 }

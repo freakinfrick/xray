@@ -327,3 +327,22 @@ Permanent: `~/claude/mods/xray`, loaded via `env.CLAUDE_CODE_PLUGIN_DIRS` in
 - Where (agent call, easy to move): desktop = last part of the telemetry row; phone = bottom edge
   after t/s (drops before the turn clock and cache when short); keyboard up = end of the folded row.
 - Checked: validate, tsc, 56 tests. Not yet seen live.
+
+## Round 13 — to-dos that fire; the wide cards in the phone's look (2026-10-03)
+
+- User, verbatim: "i dont think the xray to-do list is firing as easily as i would like"; "also the
+  desktop version should be similar to the design of the mobile version"; "also the "steps" in the
+  "now" box is redundant, and the colorered stepper should go in the progress card".
+- Root cause of the to-dos: Claude Code 2.1.287 gives the task tools (TaskCreate/TaskUpdate) only
+  to older models (Opus/Sonnet 4.x, Haiku 4.5) unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set.
+  Opus 5.5 sessions had no to-do tool, so the nudge (gated on one) never ran and no list existed.
+  Every interactive session since 10-02 had 0 to-do calls; only Haiku test runs had them.
+  Fix: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in `~/.claude/settings.json` env (tools appear live).
+- Desktop, user pick "three cards, phone look": the now card's head is its top edge's band (tone
+  background, black text, live pulse after it), its body the narration alone; the step trail left
+  the now card; the progress card's row 1 is the phone's step gauge (█ on ░, red failed, cyan
+  live), row 2 the to-do squares, row 3 the one in progress; telemetry is one bottom edge
+  `╰─ ctx … turn … ─╯` closing all cards (the loose telemetry line is gone, 5 rows not 6).
+- Shared with the phone card: `band()`, `stepGauge()`, `squares()`; the phone's progress row is now
+  always the task card's row 1.
+- Checked: validate, tsc, 58 tests. Not yet seen live.

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
+import { TONE_COLOR, band, clip as clipTo, compact, deviceGlyph, fitRows, lastTurn, nowCard, taskCard, telemetry, todoCard, type Card, type Line, type Mode } from './cards'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
 import { panel } from './panel'
@@ -356,13 +356,30 @@ export const register: Register = (on, options) => {
         {s.t}
       </Text>
     ))
-    const body = cards.map((c, i) => fitRows(c.lines, Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS, c.spare))
+    // Round 13, the phone card's look on the wide cards: the now card's head is its top edge's band, so
+    // its body is the narration alone; one telemetry edge closes all the cards.
+    const top = band(cards[0]?.lines[0] ?? [], s.turn.running.size > 0)
+    const tele = telemetry(s.turn, s.ctx, now)
+    const lines = (c: Card, i: number) => (i ? c.lines : c.lines.slice(1))
+    const body = cards.map((c, i) => fitRows(lines(c, i), Math.max(1, (widths[i] ?? 20) - 4), BODY_ROWS, c.spare))
     const row = (r: number) => (
       <Box key={`r${r}`} flexDirection="row">
         {cards.map((c, i) => {
           const w = widths[i] ?? 20
           const color = TONE_COLOR[c.tone]
           const dim = c.tone === 'quiet'
+          if (r === 0 && i === 0) {
+            const pulse = top.pulse ? ` ${top.pulse.t}` : ''
+            const status = clipTo(top.status, Math.max(1, w - 6 - pulse.length))
+            return (
+              <Text key={`c${i}`} wrap="truncate-end">
+                <Text color={color} dimColor={dim}>{'╭'}</Text>
+                <Text backgroundColor={color ?? 'gray'} color="black">{` ${status} `}</Text>
+                {top.pulse ? <Text color={top.pulse.color}>{pulse}</Text> : null}
+                <Text color={color} dimColor={dim}>{' ' + '─'.repeat(Math.max(1, w - 5 - status.length - pulse.length)) + '╮'}</Text>
+              </Text>
+            )
+          }
           if (r === 0) {
             const head = `╭─ ${c.title} `
             const note = c.note ? c.note.map(x => x.t).join('') : ''
@@ -375,12 +392,6 @@ export const register: Register = (on, options) => {
               </Text>
             )
           }
-          if (r === BODY_ROWS + 1)
-            return (
-              <Text key={`c${i}`} color={color} dimColor={dim}>
-                {'╰' + '─'.repeat(Math.max(0, w - 2)) + '╯'}
-              </Text>
-            )
           return (
             <Box key={`c${i}`} flexDirection="row" width={w}>
               <Text color={color} dimColor={dim}>{'│ '}</Text>
@@ -397,10 +408,12 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {line}
-        {Array.from({ length: BODY_ROWS + 2 }, (_, r) => row(r))}
-        <Box paddingX={1} width={cols}>
-          <Text wrap="truncate-end">{segs(telemetry(s.turn, s.ctx, now), 'tm')}</Text>
-        </Box>
+        {Array.from({ length: BODY_ROWS + 1 }, (_, r) => row(r))}
+        <Text wrap="truncate-end">
+          <Text dimColor>{'╰─ '}</Text>
+          {segs(tele, 'tm')}
+          <Text dimColor>{' ' + '─'.repeat(Math.max(1, cols - 5 - tele.reduce((a, g) => a + g.t.length, 0))) + '╯'}</Text>
+        </Text>
       </Box>
     )
   })
