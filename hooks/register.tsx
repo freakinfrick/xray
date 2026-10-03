@@ -70,8 +70,16 @@ async function idle($: EngineInterface, s: Live) {
   if (s.isCacheOff || isOff(s)) return
   try {
     if (!s.turn && s.cache.anchor >= 0) {
-      const ttl = await readTtl($, s)
-      if (ttl) s.cache = { ...s.cache, ttl }
+      // The transcript line lands just after turn.complete (live check: a read at once found the first
+      // turn missing), so wait a beat, and retry a few times while nothing is known.
+      for (let i = 0; i < TTL_TRIES && gen === s.idleGen && !s.turn; i++) {
+        await $.clock.sleep(TTL_WAIT_MS)
+        const ttl = await readTtl($, s)
+        if (ttl) {
+          s.cache = { ...s.cache, ttl }
+          break
+        }
+      }
       await update($, keptCache, () => s.cache)
     }
     while (gen === s.idleGen && !s.turn && !s.isCacheOff && !isOff(s)) {
@@ -92,6 +100,8 @@ async function idle($: EngineInterface, s: Live) {
 }
 
 const TAIL_BYTES = '262144'
+const TTL_TRIES = 4
+const TTL_WAIT_MS = 1000
 
 // The lifetime of the newest write, from the end of this session's transcript (it can run to tens of MB).
 async function readTtl($: EngineInterface, s: Live): Promise<Cache['ttl']> {

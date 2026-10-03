@@ -547,3 +547,14 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
 - Phone strip: always — `⏱47m` after ctx %, yellow `⏱4:12`, red tile ` lapsed 151k `; the headline gets cut.
 - d1 panel table, d2 one toast, d3 rules: as offered (page `.explainers/2026-10-03-xray-round18.html`,
   generator `tools/mockup18.py`).
+
+### Round 18 — built (2026-10-03, c7d4191 → this commit)
+- `hooks/cache.ts` (pure, tested): lifetime from the transcript tail, per-turn rows with miss cause
+  (new session / model a → b / lapsed · idle X / prefix changed), strip words (1b) and phone `⏱` (2b),
+  `nextChange` drives a between-turns clock (`idle()` in register.tsx, generation-guarded), one toast.
+- User asked mid-build for an on/off toggle: `/xray cache on|off`, `$.store` key `isCacheOff`
+  (hides strip figure, toast and table).
+- Live check (tmux, haiku, phone form since the device mod read 📱): first turn's transcript line lands
+  AFTER `turn.complete`, so the read waits 1 s and retries up to 4×; then ` ⏱60m` shows on turn 1.
+  `/xray cache off|on` and the panel table (`cache · 1h · 60m left`, row #1 18k read 61%) seen live.
+- Unseen live: the toast itself (needs ~55 idle min) and the desktop words form (unit-tested only).
