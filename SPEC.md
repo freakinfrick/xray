@@ -654,3 +654,33 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   `isTestCommand` first, then f, a, b, d, c, e, one commit each, tests green each time, live check at end.
   Variants = agents' recommendations: a1+a3 (a2 folds into the to-do title only), b1 (as the shared row)
   + b3 (via the slot), c1 (via the slot) + c3, d1 + d2 (in the shared row) + d3, e2 + e3, f1 + f2 (via the slot).
+
+### Round 20 — built (2026-10-03, d54991f → this commit)
+- Fix first (d54991f): a test run = a test program at a command's head (heredoc bodies, quoted text
+  dropped); stored history cleaned on load; recall compares suites (`cmd 2>&1` = `cmd`).
+- 20f (59420a5): `genome:<id>` holds the session record (`session.ts`: turns, names, marks, files,
+  startedAt, tests; a round-19 list still loads). `moments.ts`: one ranked peach tile in the strip's memo
+  spot (own row on a phone). Milestones: 100/500/1000/2000th session step, 1000th per folder
+  (`steps:<cwd>`), first green today after reds (`day:<cwd>`), long haul ≥ 10 min, back after ≥ 1 h
+  (detected at prompt.submit, no idle timer), past midnight. Cache 8-cell draining bar + session age:
+  extras, dropped only when they'd cut the genome on the strip's line below min(3, what it shows without).
+- 20a (1050aab): red → green sweeps the tests bar over 500 ms (existing burst clock), title lit green
+  1.5 s; closed list → `to-do · N of N ✓` lit; commits = step kind `commit`, genome letter `k`, magenta `#`;
+  hash + subject unfold from the cell until the next step (`git commit -q` → subject from `-m`).
+- 20b (89a1570): marks per turn (commit ⚑ peach, green ✓ once after red, red again ✕, fan-out ⋔ ≥ 2 agents,
+  ctx ▲ 50/70 %), longest turn ⧗ derived; one note row above the genome's newest row (wide only; phone
+  and idle strip have none). Landmark = slot's lowest rank.
+- 20d (99bdca4): `names.ts`, 19 rules; idle tile = name, card title dim after it; names on the note row
+  at each turn's first cell; panel "turns" section (newest 10).
+- 20c (e680384): `records:<cwd>` fix/streak/fastest per suite, demo thresholds; panel "records".
+  Not built: "longest session this week" (needs session.end bookkeeping).
+- 20e (459f478): Step.file; per-file r/e/x cells in the record; now card's last-step row names the hot
+  file flush right (`sum.js ×3`); panel "files" section with short names that still tell apart.
+- Checked: `mods/check.sh xray` (validate, tsc, 102 tests) each commit. Live (tmux, haiku, 190 cols,
+  failing node --test fixture): sweep frames ░ → ███ → ██████████▌ → full with lit title; commit tile
+  unfolding `6db0e4d fi…` → whole; strip `red → green` tile + `✓ green after 1 failing run`; session
+  age; genome `#` cell; note row `⚑ 6db0e4d` over its cell; stored record, records, steps, day keys.
+  Unseen live: panel sections, phone tile row, milestones, records firing (need history), cache bar
+  (dropped by the extras rule on that line both times).
+- Known limit: on a short genome the note row is sparse: landmarks win, and names next to them are
+  skipped (never cut), e.g. turn names hidden by a commit label two cells away.
