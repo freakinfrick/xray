@@ -647,3 +647,10 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   All six, no variant notes → variants default to each agent's recommendation unless the integration
   interview says otherwise. Open before build: row budget (b1 markers, d2 names, e1 files each add a row),
   one shared moment slot vs independent tiles (a, c, f2, b3), build order (isTestCommand fix first).
+- **Integration interview (2026-10-03):** (1) one shared annotation row above the genome carries
+  landmarks + turn names, each aligned to its cells; files go to the /xray panel plus the hot file on the
+  `last:` row; at most one extra row. (2) One tile slot, ranked: celebration > record > milestone >
+  landmark; the rest still land in the markers and the panel. (3) Build here, sequentially: fix
+  `isTestCommand` first, then f, a, b, d, c, e, one commit each, tests green each time, live check at end.
+  Variants = agents' recommendations: a1+a3 (a2 folds into the to-do title only), b1 (as the shared row)
+  + b3 (via the slot), c1 (via the slot) + c3, d1 + d2 (in the shared row) + d3, e2 + e3, f1 + f2 (via the slot).
