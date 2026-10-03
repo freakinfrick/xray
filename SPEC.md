@@ -466,3 +466,22 @@ What is known (agent, 2026-10-03):
   through text, and steps to be completed shall have grey patch color fills/background". So 1a, with:
   done = strikethrough text (in its hue), pending = grey background patch, live = solid hue patch.
   Question 2 unanswered → recommended 2a (fold in, statusline script kept, prints only when mods off).
+- **Built 2026-10-03** (`feat/mods`, b2f2715 → this commit; statusline gate in ~/.claude b26bcd9):
+  1. to-dos as `tiles` (`Card.tiles`, `tileRows()` in layout.ts): live = bold black on its hue, pending =
+     black on grey, done = struck through in its hue (new `Seg.strike`), mark + place in row 0, the name
+     wrapped under it; window around the live one with `✓N` / `+N`; cells 13–24 wide. `allot(…, cellsAt,
+     cap)`: other cards keep their ideal, the prose card three rows' worth (≥ 40), cells the rest up to the
+     cap. Below 140 the task card's first row is the now card's fact row and the to-dos keep their card.
+  2. `carryTodos` keeps the whole list while any item is open (count stays true), drops it once all done;
+     batch needs a sample from the job's own output (`sample(…, 'job')`) or the same N twice.
+  3. folder (`where()`) first in the now card's tray and the phone's bottom edge; the strip between turns
+     leads with device, folder, ctx gauge (`$.session.usage`), and `▲ ponytail skill missing` /
+     `▲ style rules missing from CLAUDE.md` only on failure; it stays under `/xray off` (cards hide).
+     `statusline-command.sh` exits empty unless `CLAUDE_HUMAN_MODS=off`.
+  4. found live: the strip never drew at turn end (the `last` update ran while `s.turn` was still set);
+     fixed by clearing the turn first and invalidating.
+- Checked: `mods/check.sh xray` (78 tests). Live tmux, Haiku, 190×50 and 120×50: cells in order with
+  strike (SGR 9), live bg, grey bg seen in the escapes; the tests gist row at 120; tray `…/live turn 31s`;
+  strip `…/live ctx █▌ 18% last turn …` after a turn; old status line gone. Not yet seen: the phone
+  (Termius), forest-light. Seen live: a long name ("Write m.test.js with node:assert tests") ends in …
+  after two rows at 19 columns; the rule allows it, but the cells could take 3 name rows when tall.
