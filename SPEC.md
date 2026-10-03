@@ -643,3 +643,7 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   passing runs, so `isTestCommand` (track.ts) matches too loosely; records/streaks would be fake until fixed.
   `recall()` also treats `cmd` and `cmd 2>&1` as different commands.
 - Next: user picks from the page. No code before go.
+- **Picks (2026-10-03, from the page):** "20a ship; 20b ship; 20c ship; 20d ship; 20e ship; 20f ship".
+  All six, no variant notes → variants default to each agent's recommendation unless the integration
+  interview says otherwise. Open before build: row budget (b1 markers, d2 names, e1 files each add a row),
+  one shared moment slot vs independent tiles (a, c, f2, b3), build order (isTestCommand fix first).
