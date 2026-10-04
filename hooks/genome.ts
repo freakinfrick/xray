@@ -62,6 +62,15 @@ function liveCells(t: Turn, now: number): Seg[] {
 const COMMIT_CHARS = 40
 const UNFOLD_MS = 500
 
+// What kind of turn, from its letters alone: { } it sent agents, [ ] it changed something (an edit, a
+// command, a test run, a commit; failed steps count by trying), ( ) it only looked or talked.
+export type Bracket = 'looked' | 'changed' | 'delegated'
+export const BRACKET: Record<Bracket, [string, string]> = { looked: ['(', ')'], changed: ['[', ']'], delegated: ['{', '}'] }
+export const bracketOf = (letters: string): Bracket => (letters.includes('a') ? 'delegated' : /[ecktx]/.test(letters) ? 'changed' : 'looked')
+
+// The live turn's letters so far, running steps included, so its bracket is right from its first step.
+const liveLetters = (t: Turn) => code(t) + [...t.running.values()].map(x => CODE[x.kind ?? 'other']).join('')
+
 // A laid-out cell and where it came from: turn index (turns.length = the live turn) and step within it.
 type Placed = { seg: Seg; turn?: number; step?: number }
 type Opts = { live?: Turn; now?: number; maxRows?: number; label?: string }
@@ -76,9 +85,13 @@ function place(turns: readonly string[], width: number, opts: Opts): Placed[][] 
   const lay = (fold: number): Placed[][] => {
     const segs: Placed[] = fold ? [{ seg: { t: `+${fold} turn${fold > 1 ? 's' : ''} `, dim: true } }] : []
     const kept: { cells: Seg[]; turn: number }[] = [...turns.slice(fold).map((x, i) => ({ cells: [...x].map(cellOf), turn: fold + i })), ...(liveSegs.length ? [{ cells: liveSegs, turn: turns.length }] : [])]
-    kept.forEach(({ cells, turn }, i) => {
-      if (i) segs.push({ seg: { t: '│', dim: true } })
+    // Each turn in its bracket (2026-10-03, user): the bracket says what kind of turn it was; the live
+    // turn shows only its opening one until it ends.
+    kept.forEach(({ cells, turn }) => {
+      const [open, close] = BRACKET[bracketOf(turns[turn] ?? (live ? liveLetters(live) : ''))]
+      segs.push({ seg: { t: open, dim: true } })
       cells.forEach((seg, step) => segs.push({ seg, turn, step }))
+      if (turn < turns.length) segs.push({ seg: { t: close, dim: true } })
     })
     const out: Placed[][] = []
     let cur: Placed[] = []
@@ -182,7 +195,7 @@ export function shown(turns: readonly string[], room: number, label = 'genome ')
 // tokens (the note row's marks), packed into rows of `width`.
 const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['c', 'command'], ['k', 'commit'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['o', 'other']]
 export function key(width: number, extra: Line[] = []): Line[] {
-  const tokens: Line[] = [...KEYED.map(([c, w]) => [cellOf(c), { t: ` ${w}`, dim: true }]), [{ t: '│', dim: true }, { t: ' your reply', dim: true }], ...extra]
+  const tokens: Line[] = [...KEYED.map(([c, w]) => [cellOf(c), { t: ` ${w}`, dim: true }]), ...(Object.entries(BRACKET) as [Bracket, [string, string]][]).map(([k, [o, c]]): Line => [{ t: `${o}${c}`, dim: true }, { t: ` ${k}`, dim: true }]), ...extra]
   const rows: Line[] = []
   let cur: Line = []
   let n = 0

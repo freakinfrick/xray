@@ -581,7 +581,7 @@ export const register: Register = (on, options) => {
     const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
     if (dna.length) {
       const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
-      sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...dna, [], ...genome.key(cols ?? 80, marks)] })
+      sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...dna, [{ t: ' ' }], ...genome.key(cols ?? 80, marks)] }) // an empty row takes no height: the spacer holds a space
     }
     const best = recordRows(s.records)
     if (best.length) sections.push({ title: 'records · this folder', rows: best })
@@ -641,8 +641,10 @@ export const register: Register = (on, options) => {
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
-    const own = s.isHidden ? [] : genome.tail(s.rec.turns, width)
-    const ownRow = own.length ? genomeRows([[{ t: ' '.repeat(Math.max(0, width - own.reduce((a, g) => a + g.t.length, 0))) }, ...own]], 'ig', Text) : null
+    // Between turns the whole genome shows (user, 2026-10-03): on the strip's line only when every turn fits
+    // there; otherwise its own rows under the strip, wrapped, nothing folded.
+    const own = s.isHidden ? [] : genome.rows(s.rec.turns, width, { label: GENOME_LABEL, maxRows: Infinity })
+    const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
     const color = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
@@ -653,8 +655,8 @@ export const register: Register = (on, options) => {
     const moment: Line = l?.moment && hasTail ? [{ t: '  ' }, ...tile(l.moment)] : []
     const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
     const turnCells = l ? 13 + (l.name ?? l.title ?? 'turn').length + (l.name && hasTail ? (l.title ?? 'turn').length + 3 : 0) + 2 + 1 + l.headline.length + cells(moment) + memoText.length + owedCells : 0
-    // Round 20f: the cache bar and the session's age are extras: they draw only while the genome on this
-    // line still shows three turns (or all of them), since the genome is what the line is for.
+    // Round 20f: the cache bar and the session's age are extras: they give way when they would push the
+    // whole genome off this line, since the genome is what the line is for.
     const age: Line = hasTail && s.rec.startedAt !== undefined ? [{ t: `  ${span(now - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }] : []
     const cacheOf = (isBar: boolean) => (s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, isBar))
     const leadOf = (isExtra: boolean): Line => [...(glyph ? [{ t: `${glyph} ` }] : []), ...(folder ? [{ t: `${folder}  ` }] : []), ...gauge, ...cacheOf(isExtra), ...(isExtra ? age : []), ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
@@ -663,12 +665,14 @@ export const register: Register = (on, options) => {
     const roomOf = (lead: Line) => width - usedOf(lead) - 3 - EDGE_MARK
     const extra = leadOf(true)
     // They cost nothing when the genome is on its own row anyway (a long last-turn line pushes it there).
-    const bare = s.isHidden ? 0 : genome.shown(s.rec.turns, roomOf(leadOf(false)))
-    const isExtra = hasTail && (s.isHidden || genome.shown(s.rec.turns, roomOf(extra)) >= Math.min(3, bare))
+    const isWhole = (room: number) => genome.shown(s.rec.turns, room) >= s.rec.turns.length
+    const isExtra = hasTail && (s.isHidden || !isWhole(roomOf(leadOf(false))) || isWhole(roomOf(extra)))
     const lead = isExtra ? extra : leadOf(false)
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
-      const segs = genome.tail(s.rec.turns, width - used - 3 - EDGE_MARK)
+      const room = width - used - 3 - EDGE_MARK
+      if (genome.shown(s.rec.turns, room) < s.rec.turns.length) return null
+      const segs = genome.tail(s.rec.turns, room)
       if (!segs.length) return null
       return [<Text key="gtpad">{' '.repeat(Math.max(1, width - used - cells(segs) - EDGE_MARK))}</Text>, ...ink(segs, 'gt', Text)]
     }

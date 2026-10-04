@@ -1249,20 +1249,21 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 7)
   expect(genome.code(t)).toBe('rex')
   expect(genome.append(['re'], '')).toEqual(['re', '']) // a reply with no steps still gets its │
-  expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('▌▌││▌')
+  expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('[▌▌]()[▌]')
   expect(genome.rows(['', ''], 40)).toEqual([])
   // between turns: flush right on the strip's line, label last; too little room, nothing
-  expect(text(genome.tail(['re', 'c'], 30))).toBe('genome ▌▌│▌') // label left of the cells, moving with them
+  expect(text(genome.tail(['re', 'c'], 30))).toBe('genome [▌▌][▌]') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
-  expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*▌▌▌▌$/)
+  expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*\(▌▌▌▌\)$/)
   expect(genome.load(['a', 3, null, 'b'])).toEqual(['a', 'b'])
   expect(genome.load('nope')).toEqual([])
 })
 
-test('genome: │ between turns, wraps at the width, folds the oldest whole turns past 3 rows', async () => {
+test('genome: each turn in its kind\'s brackets, wraps at the width, folds the oldest whole turns past 3 rows', async () => {
   const one = genome.rows(['rre', 'ct'], 40, { label: 'genome ' })
-  expect(one.map(l => text(l))).toEqual(['genome ▌▌▌│▌▌'])
-  expect(one[0]?.find(g => g.t.includes('│'))?.dim).toBe(true)
+  expect(one.map(l => text(l))).toEqual(['genome [▌▌▌][▌▌]'])
+  expect(one[0]?.find(g => g.t.includes('['))?.dim).toBe(true)
+  expect([genome.bracketOf(''), genome.bracketOf('rro'), genome.bracketOf('rc'), genome.bracketOf('rea')]).toEqual(['looked', 'looked', 'changed', 'delegated'])
   expect(one[0]?.find(g => g.t === '█' && g.color === 'red')).toBeUndefined()
   const turns = Array.from({ length: 30 }, (_, i) => 'r'.repeat(10 + (i % 5)))
   const rows = genome.rows(turns, 60, { label: 'genome ' }).map(l => text(l))
@@ -1271,15 +1272,15 @@ test('genome: │ between turns, wraps at the width, folds the oldest whole turn
   expect(rows[0]).toMatch(/^genome \+\d+ turns /)
   expect(rows[1]).toMatch(/^ {7}/) // later rows indent under the label
   // the newest turn is always whole at the end
-  expect(rows[2]?.endsWith('│' + '▌'.repeat(14))).toBe(true)
+  expect(rows[2]?.endsWith('(' + '▌'.repeat(14) + ')')).toBe(true)
   expect(genome.rows([], 60)).toEqual([])
 })
 
 test('genome: the live turn blinks its running step at the end; the store keeps the newest sessions', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 0)
-  expect(text(genome.rows(['r'], 40, { live: t, now: 1000 })[0])).toBe('▌│▌')
-  expect(text(genome.rows(['r'], 40, { live: t, now: 2000 })[0])).toBe('▌│▄')
+  expect(text(genome.rows(['r'], 40, { live: t, now: 1000 })[0])).toBe('(▌)[▌')
+  expect(text(genome.rows(['r'], 40, { live: t, now: 2000 })[0])).toBe('(▌)[▄')
   const keys = ['isHidden', ...Array.from({ length: 45 }, (_, i) => `genome:s${i}`)]
   const gone = genome.stale(keys, 'genome:s44')
   expect(gone).toEqual(['genome:s0', 'genome:s1', 'genome:s2', 'genome:s3', 'genome:s4']) // 45 → 40 kept
@@ -1348,8 +1349,8 @@ test('20a: a commit is its own step kind, a # cell in the genome, its hash from 
   startStep(t, 'k', 'Bash', { command: 'git add a && git commit -m "fix: sum"' }, 0)
   finishStep(t, 'k', 'Bash', { command: 'git add a && git commit -m "fix: sum"' }, true, '[feat/x 3f9c2ab] fix: sum', undefined, 1000)
   expect(genome.code(t)).toBe('k')
-  expect(text(genome.rows([], 60, { live: t, now: 1000 })[0])).toBe('#  3') // the tile starts folded: one character of it
-  expect(text(genome.rows([], 60, { live: t, now: 2000 })[0])).toBe('#  3f9c2ab fix: sum ') // unfolded, held until the next step
+  expect(text(genome.rows([], 60, { live: t, now: 1000 })[0])).toBe('[#  3') // the tile starts folded: one character of it
+  expect(text(genome.rows([], 60, { live: t, now: 2000 })[0])).toBe('[#  3f9c2ab fix: sum ') // unfolded, held until the next step
   expect(celebrations(t)).toEqual([{ kind: 'celebrate', text: 'committed 3f9c2ab', fact: 'fix: sum' }])
 })
 
@@ -1395,8 +1396,8 @@ test('20b: the note row sits over the newest genome row; landmarks first, names 
   const turns = ['rrrrrrrr', 'eeeeeeeeeeee', 'ccc']
   const notes = [{ turn: 1, at: 2, glyph: '⚑', text: '3f9c2ab' }, { turn: 0, at: 0, text: 'long read' }, { turn: 2, at: 0, text: 'at the shell ×3' }]
   const row = text(genome.annotate(turns, 40, notes, { label: 'genome ' }))
-  expect(row.indexOf('⚑')).toBe(7 + 8 + 1 + 2) // label, turn 0, its │, then turn 1's third cell
-  expect(row.indexOf('long read')).toBe(7) // turn 0's first cell
+  expect(row.indexOf('⚑')).toBe(7 + 10 + 1 + 2) // label, turn 0 in its brackets, turn 1's [, then its third cell
+  expect(row.indexOf('long read')).toBe(8) // turn 0's first cell, just inside its (
   expect(row).not.toContain('at the shell') // would run past the edge: skipped, not cut
   expect(row.length).toBeLessThanOrEqual(40)
   expect(genome.annotate(turns, 60, [{ turn: 1, at: 0, glyph: '⚑', text: 'x'.repeat(80) }], { label: 'genome ' }).map(g => g.t).join('').trim()).toBe('⚑') // shrinks to its glyph
@@ -1473,7 +1474,7 @@ test('20e: files touched per turn as cells, short names that still tell apart, t
 
 test('the genome key: every cell in its own look with its word, packed to the width', async () => {
   const rows = genome.key(60).map(l => text(l))
-  expect(rows.join(' ')).toMatch(/▌ read .*▌ edit .*# commit .*│ your reply/)
+  expect(rows.join(' ')).toMatch(/▌ read .*▌ edit .*# commit .*\(\) looked .*\[\] changed .*\{\} delegated/)
   expect(rows.every(r => r.length <= 60)).toBe(true)
   expect(genome.key(200)).toHaveLength(1)
 })
