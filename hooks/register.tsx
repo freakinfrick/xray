@@ -577,12 +577,12 @@ export const register: Register = (on, options) => {
     // Text columns inside the paddingX={1} below; rows as the surface measured them.
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
     const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
-    // Round 19: the whole genome, nothing folded (cap 40 rows, newest kept).
-    const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: 40 })
-    if (dna.length) {
-      const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
-      sections.push({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...dna, [{ t: ' ' }], ...genome.key(cols ?? 80, marks)] }) // an empty row takes no height: the spacer holds a space
-    }
+    // The genome and its key lead the panel and always show (user, 2026-10-03): placed last, they fell
+    // below the pane's 32 rows on a busy turn. At most PANEL_DNA rows; older turns fold into +N.
+    const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: PANEL_DNA })
+    const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
+    // An empty row takes no height: the spacer holds a space.
+    sections.unshift({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...(dna.length ? dna : [[{ t: 'no steps yet this session', dim: true }]]), [{ t: ' ' }], ...genome.key(cols ?? 80, marks)] })
     const best = recordRows(s.records)
     if (best.length) sections.push({ title: 'records · this folder', rows: best })
     // Round 20e: the files this session touched, newest touch first, each touch a genome cell.
@@ -740,6 +740,7 @@ function withNotes(rec: SessionRec, cols: number, opts: Parameters<typeof genome
 }
 const LONGEST_MIN = 12
 const PANEL_TURNS = 10
+const PANEL_DNA = 12
 // The note row's marks in words, for the genome's key.
 const MARK_WORD = { commit: 'commit', green: 'back to green', red: 'red again', fanout: '2+ agents', ctx: 'context 50/70 %', longest: 'longest turn' } as const
 
