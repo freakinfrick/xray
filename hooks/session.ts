@@ -61,7 +61,7 @@ export function mergeFiles(old: readonly FileHeat[], add: readonly FileHeat[]): 
 export function fileTouches(t: Turn, now: number): FileHeat[] {
   const by = new Map<string, string>()
   for (const x of t.done) {
-    if (!x.file || (x.kind !== 'read' && x.kind !== 'edit')) continue
+    if (!x.file || (x.kind !== 'read' && x.kind !== 'edit' && x.kind !== 'memory')) continue
     by.set(x.file, (by.get(x.file) ?? '') + (x.ok === false ? 'x' : x.kind === 'read' ? 'r' : 'e'))
   }
   return [...by].map(([f, cells]) => ({ f, cells, at: now }))

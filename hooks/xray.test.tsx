@@ -1486,3 +1486,15 @@ test('the genome label sits at the right edge of the first row, never over a cel
   expect(long[0]?.endsWith(' genome')).toBe(true)
   expect(long.every(r => r.length <= 40)).toBe(true)
 })
+
+test('a write into a Claude memory folder is its own step: a bold § in the genome, and it counts as a change', async () => {
+  const t = newTurn('x', 0)
+  for (const [id, f] of [['m', '/home/u/.claude/projects/-home-u-x/memory/xray-mod.md'], ['e', '/home/u/x/memory/notes.md']] as const) {
+    startStep(t, id, 'Write', { file_path: f }, 0)
+    finishStep(t, id, 'Write', { file_path: f }, true, '', undefined, 1)
+  }
+  expect(genome.code(t)).toBe('me') // only the Claude memory folder counts
+  expect(genome.rows(['m'], 40)[0]?.find(g => g.t === '§')).toMatchObject({ color: 'whiteBright', bold: true })
+  expect(genome.bracketOf('rm')).toBe('changed')
+  expect(genome.key(200).map(l => text(l)).join('')).toContain('§ memory')
+})

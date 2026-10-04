@@ -17,15 +17,17 @@ function colorTodos(t: Turn) {
   }
 }
 // kind: what the filmstrip colors a step by (round 16, direction 1).
-export type StepKind = 'read' | 'edit' | 'run' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
+export type StepKind = 'read' | 'edit' | 'memory' | 'run' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
 // note: what a commit step committed (round 20a), "3f9c2ab subject". file: the path a step read or wrote (20d/e).
 export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string; file?: string }
 const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+const MEMORY_PATH = /\/\.claude\/projects\/[^/]+\/memory\//
 const TODOS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop'])
 export function stepKind(tool: string, input: Record<string, unknown>): StepKind {
   if (READS.has(tool)) return 'read'
-  if (EDITS.has(tool)) return 'edit'
+  // A write into a Claude memory folder (~/.claude/projects/*/memory/) is its own kind (user, 2026-10-03).
+  if (EDITS.has(tool)) return MEMORY_PATH.test(String(input.file_path ?? '')) ? 'memory' : 'edit'
   if (TODOS.has(tool)) return 'todo'
   if (tool === 'Agent' || tool === 'Task') return 'agent'
   if (tool === 'Bash') return isTestCommand(String(input.command ?? '')) ? 'test' : isCommitCommand(String(input.command ?? '')) ? 'commit' : 'run'

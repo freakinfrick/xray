@@ -120,11 +120,12 @@ export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg
 // green, agents cyan, anything that failed red; the live step blinks in its kind's color at the tick.
 // To-do bookkeeping is left out. With `track`, exactly n cells on a dim ░ track (the phone's gauge,
 // aligned with ctx); without, up to n cells with the older steps folded into a dim +k.
-export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
+export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; bold?: boolean }> = {
   read: { t: '▌', color: 'blue' },
   edit: { t: '▌', color: 'yellow' },
   run: { t: '▌', color: 'magenta', dim: true }, // quieter than the rest: commands are many and mostly routine
   test: { t: '▌', color: 'green' },
+  memory: { t: '§', color: 'whiteBright', bold: true }, // a memory saved: kept past this session, like a commit
   commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
   agent: { t: '▌', color: 'cyan' },
   todo: { t: '▌', dim: true },
