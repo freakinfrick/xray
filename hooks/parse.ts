@@ -40,6 +40,57 @@ export function commitNote(cmd: string, out: string): string {
 }
 export const isCheckCommand = (cmd: string) => !isTestCommand(cmd) && heads(cmd).some(x => CHECK_CMD.test(x))
 
+// What a shell line did, for the genome (user, 2026-10-04, pick 1c): 14 days of transcripts held 34%
+// read-only shell (sed -n, grep, cat), 20% inline scripts, 13% file changes, 6% herdr/conductor; all
+// of it was one grey `run`. Each head gets a kind and the strongest wins, so `cd x && grep | head` is a
+// read and `grep … > out` an edit. Shell keywords and echo/export weigh nothing; a line of only those is a run.
+export type ShellKind = 'read' | 'edit' | 'script' | 'orchestrate' | 'network' | 'wait' | 'run'
+// 'scaffold' (mkdir, touch) is an edit only when nothing but reads ran with it: `mkdir -p out && python3 -`
+// is the script.
+type HeadKind = ShellKind | 'scaffold'
+const RANK: HeadKind[] = ['read', 'scaffold', 'wait', 'run', 'network', 'orchestrate', 'script', 'edit']
+const word = (...w: string[]) => new RegExp(`^(?:${w.join('|')})(?:\\s|$)`)
+const SH_GLUE = word('for', 'if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'case', 'esac', 'while', 'in', 'echo', 'printf', 'export', 'cd', 'pushd', 'popd', 'set', 'unset', 'local', 'source', '\\.', 'true', 'false', ':', 'test', '\\[\\[?', '\\]', 'read', 'exit', 'return', 'break', 'continue', 'shopt', 'trap', '\\{', '\\}', '\\(', '\\)', '!')
+const SH_READ = word('sed', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'cat', 'bat', 'batcat', 'glow', 'ls', 'll', 'tree', 'wc', 'head', 'tail', 'find', 'fd', 'stat', 'file', 'du', 'df', 'diff', 'cmp', 'jq', 'yq', 'less', 'more', 'awk', 'pwd', 'which', 'type', 'whereis', 'command', 'realpath', 'readlink', 'basename', 'dirname', 'date', 'nvidia-smi', 'ps', 'pgrep', 'ss', 'netstat', 'lsof', 'journalctl', 'sort', 'uniq', 'cut', 'tr', 'column', 'xxd', 'od', 'hexdump', 'strings', 'md5sum', 'sha\\d+sum', 'free', 'uptime', 'id', 'whoami', 'hostname', 'uname', 'lscpu', 'lsblk', 'sensors', 'nproc', 'env', 'printenv', 'pdftotext', 'identify')
+const GIT = String.raw`git\s+(?:(?:-C\s+\S+|-c\s+\S+|--no-pager)\s+)*`
+const SH_READ_SUB = new RegExp(String.raw`^(?:${GIT}(?:status|log|diff|show|branch|blame|rev-parse|ls-files|ls-tree|grep|remote|describe|shortlog|reflog|cat-file|config\s+--get)|systemctl\s+(?:--user\s+)?(?:status|is-active|is-enabled|show|list-\S+|cat)|docker\s+(?:ps|logs|inspect|images|stats)|npm\s+(?:ls|view|outdated)|pip3?\s+(?:show|list|freeze)|crontab\s+-l)\b`)
+const SH_SCAFFOLD = word('mkdir', 'touch')
+const SH_EDIT = word('cp', 'mv', 'rm', 'rmdir', 'gio', 'chmod', 'chown', 'ln', 'tee', 'tar', 'unzip', 'zip', 'gzip', 'gunzip', 'rsync', 'truncate', 'patch', 'dd', 'trash')
+const SH_EDIT_SUB = new RegExp(String.raw`^(?:(?:sed|perl)\s+(?:-\S+\s+)*-\w*i|find\s.*\s-(?:delete|exec\s+(?:rm|mv|sed))\b|${GIT}(?:add|checkout|switch|mv|rm|stash|reset|restore|apply|merge|rebase|cherry-pick|tag|revert|am|worktree|init)\b)`)
+// > or >> into a file; 2>&1, 2>/dev/null and >/dev/null write nothing worth a cell. Only a read or a bare
+// echo/cat writing to a file is an edit by redirect; `python -u x.py > run.log` is still the run.
+const REDIRECT = /(?:^|[^<>&\d])>>?\s*(?!&|\/dev\/null)[^\s>]/
+const SH_SCRIPT = /^(?:python[\d.]*|node|tsx|ts-node|bun|deno|ruby|perl|bash|sh|zsh|php|Rscript)(?:\s+(?:-u\s+)?(?:-|-c|-e|-p|-E)?)?\s*$|^(?:python[\d.]*|node|bun|ruby|perl|bash|sh|zsh)\s+(?:-u\s+)?(?:-c|-e|-p|-E)\s/
+const SH_ORCH = /^(?:herdr|tmux|screen|conductor\.py)\b|^\S+\s+\S*conductor\.py\b|^claude\s+(?:-p|--print)\b|^(?:codex|pi|hermes)\s+(?:exec|-p)\b/
+const SH_NET = new RegExp(String.raw`^(?:curl|wget|gh|rclone|ssh|scp|sftp|tailscale|http|https|xh|nc|ping|dig|nslookup|traceroute|aria2c|yt-dlp)\b|^${GIT}(?:push|pull|fetch|clone|ls-remote)\b`)
+const SH_WAIT = word('sleep', 'until', 'wait', 'inotifywait')
+function headKind(h: string): HeadKind | undefined {
+  h = h.replace(/^(?:(?:do|then|else|elif|if|while|!|\{|\()\s+)+/, '')
+  const k = baseKind(h)
+  return REDIRECT.test(h) && (k === undefined || k === 'read') ? 'edit' : k
+}
+function baseKind(h: string): HeadKind | undefined {
+  if (SH_EDIT_SUB.test(h) || SH_EDIT.test(h)) return 'edit'
+  if (SH_SCAFFOLD.test(h)) return 'scaffold'
+  if (SH_SCRIPT.test(h)) return 'script'
+  if (SH_READ_SUB.test(h)) return 'read'
+  if (SH_ORCH.test(h)) return 'orchestrate'
+  if (SH_NET.test(h)) return 'network'
+  if (SH_WAIT.test(h)) return 'wait'
+  if (SH_GLUE.test(h) || /^\w+=\S*$/.test(h)) return undefined
+  if (SH_READ.test(h)) return 'read'
+  return 'run'
+}
+export function shellKind(cmd: string): ShellKind {
+  let best = -1
+  for (const h of heads(cmd)) {
+    const k = headKind(h)
+    if (k) best = Math.max(best, RANK.indexOf(k))
+  }
+  const k = RANK[best] ?? 'run'
+  return k === 'scaffold' ? 'edit' : k
+}
+
 const num = (re: RegExp, s: string) => {
   const m = s.match(re)
   return m ? Number(m[1]) : 0

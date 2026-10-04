@@ -124,6 +124,10 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; 
   read: { t: '▌', color: 'blue' },
   edit: { t: '▌', color: 'yellow' },
   run: { t: '▌', color: 'magenta', dim: true }, // quieter than the rest: commands are many and mostly routine
+  script: { t: '▌', color: '#ff5f00' }, // inline code the model wrote (python3 - <<EOF, node -e)
+  orchestrate: { t: '▌', color: '#00d7af' }, // herdr, tmux, conductor: driving other sessions, agent's kin
+  network: { t: '▌', color: '#af87ff' }, // curl, gh, ssh, git push/pull
+  wait: { t: '▏', dim: true }, // sleep, until: time passing, drawn thin
   test: { t: '▌', color: 'green' },
   memory: { t: '§', color: '#ff69b4', bold: true }, // a memory saved: kept past this session, like a commit
   commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark

@@ -696,3 +696,29 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   session id holds). A /resume or /clear swaps the id with no `session.start`, and at a fresh start the
   id read in `session.start` could miss the stored genome; either way the strip stayed empty (or showed
   the old session's) until the first prompt. Seen in the demo take; live-checked on a fresh start.
+
+### Shell kinds (2026-10-04, user pick 1c)
+- Ask: "improve the xray genome by parsing what *kind* of commands were run? that way not all bash
+  commands are recorded equally as grey glyphs". Measured first: 17,851 Bash calls over 14 days of
+  local transcripts were 34% read-only (sed -n, grep, cat, ls), 20% inline scripts, 13% file changes,
+  6% herdr/conductor, the rest builds, network, waits and glue; all of it was one dim `c`.
+- Picks offered: 1a reuse read/edit + `script`, 1b reuse read/edit only, 1c full set. User: "1c".
+- `parse.ts` `shellKind()`: each program of the line (`heads()`) gets a kind, the strongest wins:
+  edit > script > orchestrate > network > run > wait > scaffold > read. Shell keywords, echo/printf,
+  export, cd and `VAR=x` weigh nothing (a line of only those is a run). A redirect makes an edit only
+  from a read or glue (`grep … > out`, `cat > f <<EOF`); `python -u x.py > run.log` stays a run.
+  mkdir/touch ("scaffold") are an edit only when nothing but reads ran with them. test and commit are
+  still decided first.
+- Bash steps now take read (`r`, blue) and edit (`e`, yellow) like the tools, so mood "exploring",
+  bracket `( )` and the strip count shell reads. New kinds: script `s` `#ff5f00` orange, orchestrate
+  `h` `#00d7af` teal (herdr, tmux, conductor.py, `claude -p`), network `n` `#af87ff` lavender (curl,
+  gh, ssh, rclone, git push/pull/fetch/clone), wait `w` thin dim `▏` (sleep, until). `c` stays dim
+  magenta for the rest. Brackets: `h` counts as delegated `{ }`, `s` as changed `[ ]`, `n` `w` as looked.
+  Old genomes decode unchanged (no letter reused).
+- Corpus re-run through the real classifier: read 31.8%, script 20.9%, edit 16.6%, run 14.9%, test
+  5.3%, orchestrate 5.3%, commit 2.9%, network 1.8%, wait 0.6%. Sampled each bucket by eye.
+- Checked: `mods/check.sh xray` (validate, tsc, 108 tests). Live (tmux, haiku, 190 cols, six one-kind
+  commands): genome `{▌▌▌▏▌▌` then `[▌]`; at 256 colours read 68, script 208, network 147, wait thin
+  grey, edit 220, orchestrate 43. First pick `#ff8700` rendered 214, too near edit's 220; moved.
+- Known limit: at 16 colours (TERM without 256) script collapses to edit's yellow and orchestrate to
+  agent's cyan; network goes white. Bash reads still set no `Step.file`, so file heat misses them.

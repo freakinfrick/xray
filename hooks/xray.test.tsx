@@ -7,13 +7,13 @@ import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerP
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
-import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, testHead } from './parse'
+import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName } from './session'
 import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
-import { agentStep, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
+import { agentStep, stepKind, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
 const text = (l?: { t: string }[]) => (l ?? []).map(s => s.t).join('')
 
@@ -1234,6 +1234,48 @@ test('round 18: each turn files one row, and a miss names its cause', async () =
   expect(text(sec?.rows[1])).toContain('prefix changed')
   expect(text(sec?.rows.at(-1))).toBe('5 turns · 3 missed · 443k rewritten')
   expect(text(cacheRows(c, 0, 6, 40)?.rows[1])).not.toContain('prefix') // a narrow panel drops the reason, never wraps
+})
+
+// 2026-10-04: a shell line takes the kind of what it did, the strongest of its programs.
+test('shell kinds: reads, edits, scripts, orchestration, network, waits; the strongest program wins', async () => {
+  const cases: [string, string][] = [
+    ['sed -n 1,40p a.ts; grep -n foo b.ts | head', 'read'],
+    ['cd ~/x && git status && git --no-pager log -3', 'read'],
+    ['sed -i s/a/b/ a.ts', 'edit'],
+    ['grep foo a.ts > out.txt', 'edit'],
+    ['cat > notes.md <<EOF\nhi > there\nEOF', 'edit'],
+    ['git add a.ts', 'edit'],
+    ['mkdir -p out', 'edit'],
+    ['mkdir -p out && python3 - <<EOF\nprint(1)\nEOF', 'script'],
+    ['python3 -c "print(1)"', 'script'],
+    ['python -u build.py > run.log 2>&1', 'run'],
+    ['herdr pane read w1:p2 --lines 20 | tail -5', 'orchestrate'],
+    ['python3 ~/.claude/skills/conductor/conductor.py claim --run r', 'orchestrate'],
+    ['curl -s https://x.dev | jq .', 'network'],
+    ['git -C repo push origin main', 'network'],
+    ['until grep -q done log; do sleep 2; done; tail -3 log', 'wait'],
+    ['sleep 20; nvidia-smi', 'wait'],
+    ['cargo build 2>/dev/null', 'run'],
+    ['S=/tmp/x; echo $S', 'run'],
+  ]
+  for (const [cmd, k] of cases) expect([cmd, shellKind(cmd)]).toEqual([cmd, k])
+  expect(stepKind('Bash', { command: 'cat a.ts' })).toBe('read')
+  expect(stepKind('Bash', { command: 'git commit -m x' })).toBe('commit')
+  expect(stepKind('Bash', { command: 'pytest -q' })).toBe('test')
+})
+
+test('genome: shell kinds get their own letters, looks and brackets', async () => {
+  const t = newTurn('x', 0)
+  const cmds = ['cat a', 'python3 -c ""', 'curl -s u', 'sleep 1', 'make']
+  cmds.forEach((command, i) => {
+    startStep(t, `s${i}`, 'Bash', { command }, i * 2)
+    finishStep(t, `s${i}`, 'Bash', { command }, true, '', undefined, i * 2 + 1)
+  })
+  expect(genome.code(t)).toBe('rsnwc')
+  expect([genome.bracketOf('rnw'), genome.bracketOf('rs'), genome.bracketOf('rh')]).toEqual(['looked', 'changed', 'delegated'])
+  expect(text(genome.rows(['rsnwh'], 40)[0])).toBe('{▌▌▌▏▌}')
+  const legend = genome.key(200).map(l => text(l)).join(' ')
+  for (const w of ['script', 'orchestrate', 'network', 'wait']) expect(legend).toContain(w)
 })
 
 // Round 19: the session genome.

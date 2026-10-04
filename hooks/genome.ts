@@ -8,8 +8,8 @@ import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
 // One letter per step; a failed step is `x` whatever its kind. To-do bookkeeping is left out, as in the filmstrip.
-const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm', run: 'c', test: 't', commit: 'k', agent: 'a', todo: '', other: 'o' }
-const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', m: 'memory', c: 'run', t: 'test', k: 'commit', a: 'agent', o: 'other' }
+const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm', run: 'c', script: 's', orchestrate: 'h', network: 'n', wait: 'w', test: 't', commit: 'k', agent: 'a', todo: '', other: 'o' }
+const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', m: 'memory', c: 'run', s: 'script', h: 'orchestrate', n: 'network', w: 'wait', t: 'test', k: 'commit', a: 'agent', o: 'other' }
 
 export const MAX_ROWS = 3
 export const MAX_TURNS = 400 // per session, oldest dropped: a few KB at most
@@ -62,11 +62,12 @@ function liveCells(t: Turn, now: number): Seg[] {
 const COMMIT_CHARS = 40
 const UNFOLD_MS = 500
 
-// What kind of turn, from its letters alone: { } it sent agents, [ ] it changed something (an edit, a
-// memory saved, a command, a test run, a commit; failed steps count by trying), ( ) it only looked or talked.
+// What kind of turn, from its letters alone: { } it sent agents or drove other sessions, [ ] it changed
+// something (an edit, a memory saved, a command, a script, a test run, a commit; failed steps count by
+// trying), ( ) it only looked, fetched, waited or talked.
 export type Bracket = 'looked' | 'changed' | 'delegated'
 export const BRACKET: Record<Bracket, [string, string]> = { looked: ['(', ')'], changed: ['[', ']'], delegated: ['{', '}'] }
-export const bracketOf = (letters: string): Bracket => (letters.includes('a') ? 'delegated' : /[emcktx]/.test(letters) ? 'changed' : 'looked')
+export const bracketOf = (letters: string): Bracket => (/[ah]/.test(letters) ? 'delegated' : /[emcsktx]/.test(letters) ? 'changed' : 'looked')
 
 // The live turn's letters so far, running steps included, so its bracket is right from its first step.
 const liveLetters = (t: Turn) => code(t) + [...t.running.values()].map(x => CODE[x.kind ?? 'other']).join('')
@@ -196,7 +197,7 @@ export function shown(turns: readonly string[], room: number, label = 'genome ')
 
 // The key under the panel's genome: each cell in its own look and the word for it, then any extra
 // tokens (the note row's marks), packed into rows of `width`.
-const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['c', 'command'], ['k', 'commit'], ['m', 'memory'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['o', 'other']]
+const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['s', 'script'], ['c', 'command'], ['h', 'orchestrate'], ['n', 'network'], ['w', 'wait'], ['k', 'commit'], ['m', 'memory'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['o', 'other']]
 export function key(width: number, extra: Line[] = []): Line[] {
   const tokens: Line[] = [...KEYED.map(([c, w]) => [cellOf(c), { t: ` ${w}`, dim: true }]), ...(Object.entries(BRACKET) as [Bracket, [string, string]][]).map(([k, [o, c]]): Line => [{ t: `${o}${c}`, dim: true }, { t: ` ${k}`, dim: true }]), ...extra]
   const rows: Line[] = []

@@ -1,7 +1,7 @@
 // What the current turn has done, is doing, and still owes. Pure: events in, state out.
 
 import { detect, lastLine, lastMeasure, lastPair, type Recipe, type Signal } from './custom'
-import { commitNote, isCheckCommand, isCommitCommand, isTestCommand, parseTestOutput, sayStep, sourceOf, type TestRun } from './parse'
+import { commitNote, isCheckCommand, isCommitCommand, isTestCommand, parseTestOutput, sayStep, shellKind, sourceOf, type TestRun } from './parse'
 
 // doneAt: when it turned completed, for the one-time flash (round 16, direction 3).
 export type Todo = { id: string; text: string; active: string; status: 'pending' | 'in_progress' | 'completed'; color?: string; doneAt?: number }
@@ -16,8 +16,9 @@ function colorTodos(t: Turn) {
     x.color = TODO_COLORS.find(c => !taken.has(c)) ?? TODO_COLORS[t.todos.indexOf(x) % TODO_COLORS.length]
   }
 }
-// kind: what the filmstrip colors a step by (round 16, direction 1).
-export type StepKind = 'read' | 'edit' | 'memory' | 'run' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
+// kind: what the filmstrip colors a step by (round 16, direction 1). A Bash step takes the kind of what
+// it did (2026-10-04): read and edit like the tools, or script, orchestrate, network, wait, run (`shellKind`).
+export type StepKind = 'read' | 'edit' | 'memory' | 'run' | 'script' | 'orchestrate' | 'network' | 'wait' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
 // note: what a commit step committed (round 20a), "3f9c2ab subject". file: the path a step read or wrote (20d/e).
 export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string; file?: string }
 const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
@@ -30,7 +31,10 @@ export function stepKind(tool: string, input: Record<string, unknown>): StepKind
   if (EDITS.has(tool)) return MEMORY_PATH.test(String(input.file_path ?? '')) ? 'memory' : 'edit'
   if (TODOS.has(tool)) return 'todo'
   if (tool === 'Agent' || tool === 'Task') return 'agent'
-  if (tool === 'Bash') return isTestCommand(String(input.command ?? '')) ? 'test' : isCommitCommand(String(input.command ?? '')) ? 'commit' : 'run'
+  if (tool === 'Bash') {
+    const cmd = String(input.command ?? '')
+    return isTestCommand(cmd) ? 'test' : isCommitCommand(cmd) ? 'commit' : shellKind(cmd)
+  }
   return 'other'
 }
 // total 0 = the output had no summary to count; ok then says only whether the command passed.
