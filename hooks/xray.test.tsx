@@ -1566,6 +1566,7 @@ test('the session title carries the genome in brackets, folding old turns, and r
   expect(genome.titleOf(undefined, ['rr'])).toBeUndefined()
   expect(genome.titleOf('fix tests', ['', ''])).toBeUndefined()
   expect(genome.titleBase('a · b')).toBe('a · b')
+  expect(genome.titleOf('Tailscale drop ·  [0;2m( [0;34m▌ [0;34m▌ [0;2m) [0m', ['rr'])).toBe('Tailscale drop · (rr)')
   const many = Array.from({ length: 30 }, () => 'rre')
   const g = genome.titleGenome(many)
   expect(g.length).toBeLessThanOrEqual(genome.TITLE_MAX)

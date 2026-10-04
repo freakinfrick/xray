@@ -243,7 +243,10 @@ export function titleGenome(turns: readonly string[], max = TITLE_MAX): string {
 }
 // The title without a genome this mod put there before, so the person's own name (or /rename) stays the base.
 const OLD_GENOME = /\s·\s(?=[…(\[{])(?:…(?:[a-z]*[)\]}])?)?(?:[(\[{][a-z]*[)\]}])*$/
-export const titleBase = (title: string) => title.replace(OLD_GENOME, '')
+// A colour try (2026-10-04, reverted): a hook's sessionTitle has its ESC bytes turned to spaces, which left
+// ` · [0;2m( [0;34m▌…` titles behind. Stripped too, so those sessions heal on their next prompt.
+const SPOILED = /\s·\s+\[[\d;]*m[\s\S]*$/
+export const titleBase = (title: string) => title.replace(SPOILED, '').replace(OLD_GENOME, '')
 // The new title, or undefined to leave it alone: no name yet (setting one now would pin the base before
 // Claude Code names the session), no steps, or no change.
 export function titleOf(current: string | undefined, turns: readonly string[]): string | undefined {
