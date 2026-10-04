@@ -1478,3 +1478,11 @@ test('the genome key: every cell in its own look with its word, packed to the wi
   expect(rows.every(r => r.length <= 60)).toBe(true)
   expect(genome.key(200)).toHaveLength(1)
 })
+
+test('the genome label sits at the right edge of the first row, never over a cell', async () => {
+  const rows = genome.labelRight(genome.rows(['rre', 'ct'], 40 - 7), 40).map(l => text(l))
+  expect(rows).toEqual(['[▌▌▌][▌▌]' + ' '.repeat(40 - 9 - 6) + 'genome'])
+  const long = genome.labelRight(genome.rows(['r'.repeat(80)], 40 - 7, { maxRows: Infinity }), 40).map(l => text(l))
+  expect(long[0]?.endsWith(' genome')).toBe(true)
+  expect(long.every(r => r.length <= 40)).toBe(true)
+})

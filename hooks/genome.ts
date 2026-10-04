@@ -212,3 +212,13 @@ export function key(width: number, extra: Line[] = []): Line[] {
   }
   return cur.length ? [...rows, cur] : rows
 }
+
+// The label at the right edge of the first row (user, 2026-10-03: "right justified at the window edge,
+// like the [-]"). The rows are laid out `label + 1` narrower, so it never covers a cell.
+export const EDGE_LABEL = 'genome'
+export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Line[] {
+  if (!rows.length) return rows
+  const first = rows[0] ?? []
+  const used = first.reduce((a, g) => a + g.t.length, 0)
+  return [[...first, { t: ' '.repeat(Math.max(1, width - used - label.length)) }, { t: label, dim: true }], ...rows.slice(1)]
+}

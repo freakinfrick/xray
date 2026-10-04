@@ -566,7 +566,7 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         ))}
-        {genomeRows(withNotes(s.rec, cols, { live: s.turn ?? undefined, now, label: GENOME_LABEL }), 'wg', Text)}
+        {genomeRows(withNotes(s.rec, cols, { live: s.turn ?? undefined, now }), 'wg', Text)}
       </Box>
     )
   })
@@ -643,7 +643,7 @@ export const register: Register = (on, options) => {
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
     // Between turns the whole genome shows (user, 2026-10-03): on the strip's line only when every turn fits
     // there; otherwise its own rows under the strip, wrapped, nothing folded.
-    const own = s.isHidden ? [] : genome.rows(s.rec.turns, width, { label: GENOME_LABEL, maxRows: Infinity })
+    const own = s.isHidden ? [] : genome.labelRight(genome.rows(s.rec.turns, width - genome.EDGE_LABEL.length - 1, { maxRows: Infinity }), width)
     const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
@@ -724,8 +724,10 @@ function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resol
 
 // Round 20 (one shared row): the genome's rows with the note row just above the newest one: landmarks
 // over their step, turn names at each turn's first cell, the session's longest turn marked ⧗.
-function withNotes(rec: SessionRec, width: number, opts: Parameters<typeof genome.rows>[2]): Line[] {
-  const rows = genome.rows(rec.turns, width, opts)
+// The label rides the first genome row's right edge, so cells and notes lay out label + 1 narrower.
+function withNotes(rec: SessionRec, cols: number, opts: Parameters<typeof genome.rows>[2]): Line[] {
+  const width = cols - genome.EDGE_LABEL.length - 1
+  const rows = genome.labelRight(genome.rows(rec.turns, width, opts), cols)
   if (!rows.length) return rows
   const longest = rec.turns.reduce((best, x, i) => (x.length > (rec.turns[best]?.length ?? 0) ? i : best), 0)
   const notes: genome.Note[] = [
@@ -742,7 +744,6 @@ const PANEL_TURNS = 10
 const MARK_WORD = { commit: 'commit', green: 'back to green', red: 'red again', fanout: '2+ agents', ctx: 'context 50/70 %', longest: 'longest turn' } as const
 
 // Round 19: the genome's rows, one Text each (exact widths from genome.ts).
-const GENOME_LABEL = 'genome '
 const EDGE_MARK = 5 // Claude Code draws its own `[-]` at the strip line's right end (live check); the genome stops short of it
 function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
   return rows.map((l, r) => (
