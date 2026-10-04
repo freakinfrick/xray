@@ -1286,6 +1286,7 @@ test('genome: the live turn blinks its running step at the end; the store keeps 
   expect(gone).toEqual(['genome:s0', 'genome:s1', 'genome:s2', 'genome:s3', 'genome:s4']) // 45 → 40 kept
   expect(gone).not.toContain('isHidden')
   expect(genome.summary(['ab', 'c'])).toBe('2 turns · 3 steps')
+  expect(genome.summary(['r'])).toBe('1 turn · 1 step')
 })
 
 // Round 20: one stored record per session; the one tile slot; 20f milestones and strip extras.
