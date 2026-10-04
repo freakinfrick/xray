@@ -39,7 +39,7 @@ export function stale(keys: readonly string[], keep: string): string[] {
 
 export const cellsOf = (letters: string): Line => merge([...letters].map(cellOf))
 const cellOf = (c: string): Seg => {
-  if (c === 'x') return { t: '█', color: 'red' }
+  if (c === 'x') return { t: '▌', color: 'red' }
   const k = KIND[KIND_OF[c] ?? 'other']
   return { t: k.t, color: k.color, dim: k.dim }
 }

@@ -270,7 +270,7 @@ test('the now card names the running step, and time only past 5 seconds', async 
   expect(text(nowCard(t, 'thinking', null, 1000).lines[0])).toBe('◇ thinking')
   startStep(t, 'a', 'Bash', { command: 'npm test' }, 1000)
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 4000).lines[0])).toBe(' ◆  running the tests ▄')
-  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s █')
+  expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[0])).toBe(' ◆  running the tests · 8s ▌')
   expect(nowCard(t, 'tool-use', null, 9000).lines[0]?.[0]?.inv).toBe(true)
   expect(nowCard(t, 'tool-use', null, 9000).spare).toBeUndefined() // the steps live in the progress card (round 13)
   expect(text(nowCard(t, 'tool-use', 'Running the suite.', 9000).lines[1])).toBe('» Running the suite.')
@@ -699,7 +699,7 @@ test('on a phone the card grows one row for a long narration, each row within th
   // The narration takes the one spare row instead of being cut.
   expect(text(k.body[0])).toBe('» checking which of the model files')
   expect(text(k.body[1])).toBe('  exist on the disk right now')
-  expect(text(k.body[2])).toMatch(/^steps █{6}[█▄]░ 6 done {2}■◆□□□□ 1\/6$/)
+  expect(text(k.body[2])).toMatch(/^steps ▌{6}[▌▄]░ 6 done {2}■◆□□□□ 1\/6$/)
   expect(text(k.bottom)).toMatch(/^ctx {2}.{8} 41% {2}\d+ t\/s {2}30s$/)
   expect(k.tone).toBe('live')
 })
@@ -707,14 +707,14 @@ test('on a phone the card grows one row for a long narration, each row within th
 test('the steps and ctx gauges start in one column, both 8 cells', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'ls' }, 0)
-  expect(text(taskCard(t, 9000).lines[0])).toBe('steps █░░░░░░░ 0 done') // live step, blinking █/▄ at the tick
+  expect(text(taskCard(t, 9000).lines[0])).toBe('steps ▌░░░░░░░ 0 done') // live step, blinking ▌/▄ at the tick
   expect(text(taskCard(t, 10_000).lines[0])).toBe('steps ▄░░░░░░░ 0 done')
   finishStep(t, 'a', 'Bash', { command: 'ls' }, false, '', undefined, 10)
   const k = compact(t, undefined, null, 16, 30_000, 44, false)
   const steps = '│ ' + text(k.body[1])
   const ctx = '╰─ ' + text(k.bottom)
-  expect(steps.search(/[█▄░]/)).toBe(ctx.search(/[█▉▊▋▌▍▎▏░]/))
-  expect(steps.slice(8, 16)).toBe('█░░░░░░░')
+  expect(steps.search(/[█▌▄░]/)).toBe(ctx.search(/[█▉▊▋▌▍▎▏░]/))
+  expect(steps.slice(8, 16)).toBe('▌░░░░░░░')
   expect(text(k.body[1])).toContain('1 failed')
   expect(k.tone).toBe('fail')
 })
@@ -724,12 +724,12 @@ test('with the keyboard up the body folds to one row and the bottom edge is bare
   expect(k.body.length).toBe(1)
   expect(k.bottom).toEqual([])
   // 6000 t/s would push the row past 40 cells, so it goes whole.
-  expect(text(k.body[0])).toBe('██████ 6 · □□□□□□ 0/6 · ctx 6%')
+  expect(text(k.body[0])).toBe('▌▌▌▌▌▌ 6 · □□□□□□ 0/6 · ctx 6%')
   // Too narrow for every part: the rightmost go whole, the rest stay intact.
   // At 28 cells the status ('◇ waiting on the model · 29s') wraps too, so the folded row is second.
   const narrow = compact(busyTurn(), undefined, null, 6, 30_000, 28, true)
   expect(narrow.more).toBe('model · 29s')
-  expect(text(narrow.body[0])).toBe('██████ 6 · □□□□□□ 0/6')
+  expect(text(narrow.body[0])).toBe('▌▌▌▌▌▌ 6 · □□□□□□ 0/6')
 })
 
 test('the spinner draws one framed card at 47 columns, folded at 21 rows, the three cards at 100', async ($, on) => {
@@ -764,12 +764,12 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
 test('the progress card carries the step gauge, then the to-do squares and the one in progress', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'ls' }, 0)
-  expect(text(taskCard(t, 9000).lines[0])).toBe('steps █░░░░░░░ 0 done') // live step, blinking █/▄ at the tick
+  expect(text(taskCard(t, 9000).lines[0])).toBe('steps ▌░░░░░░░ 0 done') // live step, blinking ▌/▄ at the tick
   expect(text(taskCard(t, 10_000).lines[0])).toBe('steps ▄░░░░░░░ 0 done')
   finishStep(t, 'a', 'Bash', { command: 'ls' }, true, '', undefined, 10)
   startStep(t, 'b', 'Bash', { command: 'false' }, 20)
   finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 30)
-  expect(text(taskCard(t, 1000).lines[0])).toBe('steps ██░░░░░░ 2 done · 1 failed')
+  expect(text(taskCard(t, 1000).lines[0])).toBe('steps ▌▌░░░░░░ 2 done · 1 failed')
   expect(taskCard(t, 1000).lines[0]?.[2]?.color).toBe('red')
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'read spec', status: 'completed' }, { content: 'draw cards', status: 'in_progress', activeForm: 'drawing cards' }, { content: 'commit', status: 'pending' }] }, 40)
   finishStep(t, 'w', 'TodoWrite', {}, true, '', undefined, 50)
@@ -812,7 +812,7 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
   // The band carries the status as plain text: tile, timer and spaces folded, the pulse kept apart.
   expect(down.status).toBe('◆ rebuild the whole integration')
   expect(down.more).toBe('bundle for every device · 9s')
-  expect(down.pulse?.t).toMatch(/^[▂▄▆█]$/)
+  expect(down.pulse?.t).toMatch(/^[▂▄▆█▌]$/)
   for (const k of [down, up]) {
     expect(k.status.length).toBeLessThanOrEqual(36)
     expect(k.more).toBe(down.more)
@@ -830,7 +830,7 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
 test('step text is kept to 72 chars and the now card shows it whole, last: included', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'a', 'Bash', { command: 'make', description: 'Rebuild the whole integration bundle for every device' }, 0)
-  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device █')
+  expect(text(nowCard(t, 'tool-use', null, 1000).lines[0])).toBe(' ◆  rebuild the whole integration bundle for every device ▌')
   finishStep(t, 'a', 'Bash', { command: 'make' }, true, '', undefined, 500)
   expect(text(nowCard(t, undefined, null, 1000).lines[1])).toBe('last: rebuild the whole integration bundle for every device')
 })
@@ -959,11 +959,11 @@ test('round 16: the spinner takes one more body row on a tall terminal', async (
 test('the filmstrip colors each step by its kind, failures red, the live one blinking; to-do bookkeeping left out', async () => {
   const t = midFix()
   const strip = filmstrip(t, 24, 9_000, false)
-  expect(strip.map(s => `${s.t}:${s.color}`)).toEqual(['█:red', '█:yellow', '█:red'])
+  expect(strip.map(s => `${s.t}:${s.color}`)).toEqual(['▌:red', '▌:yellow', '▌:red'])
   startStep(t, 'r', 'Read', { file_path: 'sum.js' }, 9_000)
   const live = filmstrip(t, 24, 9_000, false)
   expect(live.at(-1)?.color).toBe('blue')
-  expect(filmstrip(t, 8, 9_000).map(s => s.t).join('')).toMatch(/^███[▌▄]░{4}$/) // the phone's 8-cell gauge on its track
+  expect(filmstrip(t, 8, 9_000).map(s => s.t).join('')).toMatch(/^▌▌▌[▌▄]░{4}$/) // the phone's 8-cell gauge on its track
   for (let i = 0; i < 30; i++) bash(t, `x${i}`, 'ls', '', 10_000 + i)
   const long = filmstrip(t, 12, 11_000, false)
   expect(long[0]?.t).toMatch(/^\+\d+ $/) // older steps fold into a count
@@ -1064,7 +1064,7 @@ test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flas
   const lastCell = (now: number) => filmstrip(t, 24, now, false).at(-1)?.t
   expect(lastCell(4_510)).toBe('▁')
   expect(lastCell(4_850)).toBe('▅')
-  expect(lastCell(5_200)).toBe('█')
+  expect(lastCell(5_200)).toBe('▌')
   startStep(t, 'u', 'TodoWrite', { todos: [{ content: 'run tests', status: 'completed' }, { content: 'fix sum', status: 'completed' }, { content: 're-run tests', status: 'completed' }, { content: 'fix mul', status: 'completed' }, { content: 're-run tests to verify', status: 'in_progress' }] }, 6_000)
   expect(t.todos[3]?.doneAt).toBe(6_000)
   expect(t.todos[0]?.doneAt).toBeUndefined() // done before, never flashes again
@@ -1249,10 +1249,10 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 7)
   expect(genome.code(t)).toBe('rex')
   expect(genome.append(['re'], '')).toEqual(['re', '']) // a reply with no steps still gets its │
-  expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('▌█││█')
+  expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('▌▌││▌')
   expect(genome.rows(['', ''], 40)).toEqual([])
   // between turns: flush right on the strip's line, label last; too little room, nothing
-  expect(text(genome.tail(['re', 'c'], 30))).toBe('genome ▌█│█') // label left of the cells, moving with them
+  expect(text(genome.tail(['re', 'c'], 30))).toBe('genome ▌▌│▌') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
   expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*▌▌▌▌$/)
   expect(genome.load(['a', 3, null, 'b'])).toEqual(['a', 'b'])
@@ -1261,7 +1261,7 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
 
 test('genome: │ between turns, wraps at the width, folds the oldest whole turns past 3 rows', async () => {
   const one = genome.rows(['rre', 'ct'], 40, { label: 'genome ' })
-  expect(one.map(l => text(l))).toEqual(['genome ▌▌█│██'])
+  expect(one.map(l => text(l))).toEqual(['genome ▌▌▌│▌▌'])
   expect(one[0]?.find(g => g.t.includes('│'))?.dim).toBe(true)
   expect(one[0]?.find(g => g.t === '█' && g.color === 'red')).toBeUndefined()
   const turns = Array.from({ length: 30 }, (_, i) => 'r'.repeat(10 + (i % 5)))
@@ -1278,7 +1278,7 @@ test('genome: │ between turns, wraps at the width, folds the oldest whole turn
 test('genome: the live turn blinks its running step at the end; the store keeps the newest sessions', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 0)
-  expect(text(genome.rows(['r'], 40, { live: t, now: 1000 })[0])).toBe('▌│█')
+  expect(text(genome.rows(['r'], 40, { live: t, now: 1000 })[0])).toBe('▌│▌')
   expect(text(genome.rows(['r'], 40, { live: t, now: 2000 })[0])).toBe('▌│▄')
   const keys = ['isHidden', ...Array.from({ length: 45 }, (_, i) => `genome:s${i}`)]
   const gone = genome.stale(keys, 'genome:s44')
@@ -1473,7 +1473,7 @@ test('20e: files touched per turn as cells, short names that still tell apart, t
 
 test('the genome key: every cell in its own look with its word, packed to the width', async () => {
   const rows = genome.key(60).map(l => text(l))
-  expect(rows.join(' ')).toMatch(/▌ read .*█ edit .*# commit .*│ your reply/)
+  expect(rows.join(' ')).toMatch(/▌ read .*▌ edit .*# commit .*│ your reply/)
   expect(rows.every(r => r.length <= 60)).toBe(true)
   expect(genome.key(200)).toHaveLength(1)
 })

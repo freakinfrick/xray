@@ -115,17 +115,18 @@ export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg
 }
 
 // The filmstrip (round 16, direction 1): one cell per step, colored by what it was, so the turn's shape
-// reads at a glance: reads as quiet half cells, edits yellow, commands magenta, a test run that passed
+// reads at a glance (2026-10-03 trial: every step a half cell, so the reply bars │ are the only full-height
+// marks; commands in dim magenta): reads blue, edits yellow, commands magenta, a test run that passed
 // green, agents cyan, anything that failed red; the live step blinks in its kind's color at the tick.
 // To-do bookkeeping is left out. With `track`, exactly n cells on a dim ░ track (the phone's gauge,
 // aligned with ctx); without, up to n cells with the older steps folded into a dim +k.
 export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean }> = {
   read: { t: '▌', color: 'blue' },
-  edit: { t: '█', color: 'yellow' },
-  run: { t: '█', color: 'magenta' },
-  test: { t: '█', color: 'green' },
+  edit: { t: '▌', color: 'yellow' },
+  run: { t: '▌', color: 'magenta', dim: true }, // quieter than the rest: commands are many and mostly routine
+  test: { t: '▌', color: 'green' },
   commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
-  agent: { t: '█', color: 'cyan' },
+  agent: { t: '▌', color: 'cyan' },
   todo: { t: '▌', dim: true },
   other: { t: '▌', dim: true },
 }
@@ -138,7 +139,7 @@ export function filmstrip(t: Turn, n: number, now: number, track = true): Line {
   const cells: Line = shown.map(x => {
     const k = KIND[x.kind ?? 'other']
     if (x.endedAt === undefined) return { t: frame(now) % 2 ? k.t : '▄', color: k.color ?? 'cyan' }
-    const done = x.ok === false ? { t: '█', color: 'red' } : { ...k }
+    const done = x.ok === false ? { t: '▌', color: 'red' } : { ...k }
     // A step that just finished lands once, ▁▃▅ then its cell (round 16, direction 3).
     const el = now - x.endedAt
     return el >= 0 && el < LAND_MS ? { ...done, t: LAND[Math.floor(el / (LAND_MS / LAND.length))] ?? done.t } : done
