@@ -177,3 +177,25 @@ export function shown(turns: readonly string[], room: number, label = 'genome ')
   const fold = r.find(g => g.t.startsWith('+'))
   return turns.length - (fold ? Number(fold.t.slice(1).split(' ')[0]) : 0)
 }
+
+// The key under the panel's genome: each cell in its own look and the word for it, then any extra
+// tokens (the note row's marks), packed into rows of `width`.
+const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['c', 'command'], ['k', 'commit'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['o', 'other']]
+export function key(width: number, extra: Line[] = []): Line[] {
+  const tokens: Line[] = [...KEYED.map(([c, w]) => [cellOf(c), { t: ` ${w}`, dim: true }]), [{ t: '│', dim: true }, { t: ' your reply', dim: true }], ...extra]
+  const rows: Line[] = []
+  let cur: Line = []
+  let n = 0
+  for (const tok of tokens) {
+    const w = tok.reduce((a, g) => a + g.t.length, 0)
+    if (cur.length && n + 3 + w > width) {
+      rows.push(cur)
+      cur = []
+      n = 0
+    }
+    if (cur.length) cur.push({ t: '   ' })
+    cur.push(...tok)
+    n += (n ? 3 : 0) + w
+  }
+  return cur.length ? [...rows, cur] : rows
+}

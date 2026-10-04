@@ -1470,3 +1470,10 @@ test('20e: files touched per turn as cells, short names that still tell apart, t
   const rows = spinnerRows(t, undefined, null, 17, 10, 188, 4).map(l => text(l))
   expect(rows.some(r => /last: .*sum\.js ×3 │/.test(r))).toBe(true)
 })
+
+test('the genome key: every cell in its own look with its word, packed to the width', async () => {
+  const rows = genome.key(60).map(l => text(l))
+  expect(rows.join(' ')).toMatch(/▌ read .*█ edit .*# commit .*│ your reply/)
+  expect(rows.every(r => r.length <= 60)).toBe(true)
+  expect(genome.key(200)).toHaveLength(1)
+})
