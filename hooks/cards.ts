@@ -125,7 +125,7 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; 
   edit: { t: '▌', color: 'yellow' },
   run: { t: '▌', color: 'magenta', dim: true }, // quieter than the rest: commands are many and mostly routine
   test: { t: '▌', color: 'green' },
-  memory: { t: '§', color: 'whiteBright', bold: true }, // a memory saved: kept past this session, like a commit
+  memory: { t: '§', color: '#ff69b4', bold: true }, // a memory saved: kept past this session, like a commit
   commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
   agent: { t: '▌', color: 'cyan' },
   todo: { t: '▌', dim: true },

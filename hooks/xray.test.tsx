@@ -1494,7 +1494,7 @@ test('a write into a Claude memory folder is its own step: a bold § in the geno
     finishStep(t, id, 'Write', { file_path: f }, true, '', undefined, 1)
   }
   expect(genome.code(t)).toBe('me') // only the Claude memory folder counts
-  expect(genome.rows(['m'], 40)[0]?.find(g => g.t === '§')).toMatchObject({ color: 'whiteBright', bold: true })
+  expect(genome.rows(['m'], 40)[0]?.find(g => g.t === '§')).toMatchObject({ color: '#ff69b4', bold: true })
   expect(genome.bracketOf('rm')).toBe('changed')
   expect(genome.key(200).map(l => text(l)).join('')).toContain('§ memory')
 })
