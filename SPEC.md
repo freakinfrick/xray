@@ -684,3 +684,11 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   (dropped by the extras rule on that line both times).
 - Known limit: on a short genome the note row is sparse: landmarks win, and names next to them are
   skipped (never cut), e.g. turn names hidden by a commit label two cells away.
+
+### After round 20 (2026-10-03, user asks, built 2bf82c7 → bc9b26a)
+- Panel genome key (2bf82c7), with a real blank row before it (an empty Line renders zero height).
+- Trial (24801b7): every step cell a half block `▌`; commands dim magenta. Revert that commit to undo.
+- Turns in brackets by kind (bc9b26a), replacing `│`: `( )` looked or talked, `[ ]` changed something
+  (e c t k x), `{ }` sent agents (wins); the live turn shows its opening bracket only (running steps count).
+- Between turns the WHOLE genome shows: on the strip's line only when every turn fits, else its own
+  wrapped rows with the label, nothing folded (no row cap: a 400-turn session could take ~20 rows).
