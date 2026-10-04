@@ -722,3 +722,19 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   grey, edit 220, orchestrate 43. First pick `#ff8700` rendered 214, too near edit's 220; moved.
 - Known limit: at 16 colours (TERM without 256) script collapses to edit's yellow and orchestrate to
   agent's cyan; network goes white. Bash reads still set no `Step.file`, so file heat misses them.
+
+### Genome in /resume titles (2026-10-04, user pick 1a)
+- Ask: "can we make the claude '/resume' menu show session xray genomes?". No mod hook draws inside the
+  picker; it lists sessions by title, and a mod can set the title only from `classic.UserPromptSubmit` /
+  `classic.SessionStart` (`sessionTitle`). Offered 1a title suffix, 1b own colour picker, 1c both. User: "1a".
+- Each prompt sets `<base> · (rr)[ret]{a}`: stored letters in their turn's bracket, empty replies skipped,
+  48 characters max (oldest whole turns fold into a leading `…`; one huge turn keeps its newest letters).
+- Base title: the hook's `session_title` carries only a custom title (probed: undefined on a fresh
+  session), so `readTitle` greps the transcript for the newest custom title, else the newest AI title.
+  `titleBase` strips xray's own old suffix, so the genome replaces itself and a /rename stays the base.
+  No title yet (first prompt), no steps, or no change: the title is left alone.
+- Lag: the turn that just ended shows from the next prompt (no title field on turn end or session end).
+  Off with `CLAUDE_HUMAN_MODS=off` (conductor panes keep their names); `/xray off` does not stop it.
+- Side effect: once set, the title is a custom title, so Claude Code's later AI retitles no longer show.
+- Checked: 110 tests; live (tmux, haiku): `Read notes.txt and list folder · (rr)[e]` in a fresh
+  `claude --resume` picker; after resuming and one more prompt, `· (rr)[e](r)`, one genome, not two.

@@ -163,6 +163,13 @@ async function readTtl($: EngineInterface, s: Live): Promise<Cache['ttl']> {
   return ran && ran.exitCode === 0 ? ttlFromTail(ran.stdout) : null
 }
 
+// The title /resume shows, from the transcript (the hook's session_title carries only a custom one):
+// the newest custom title, else the newest AI one. grep reads tens of MB in well under a second.
+async function readTitle($: EngineInterface, path: string): Promise<string | undefined> {
+  const ran = await $.process.run(['grep', '-E', '"type":"(custom|ai)-title"', path]).catch(() => null)
+  return ran && ran.exitCode === 0 ? genome.titleFromLines(ran.stdout) : undefined
+}
+
 // Once a second while a turn runs: fresh context figure and elapsed times.
 function tick($: EngineInterface, s: Live) {
   if (s.isTicking) return
@@ -348,6 +355,17 @@ export const register: Register = (on, options) => {
     if (isOff(s) || !e.tools.some(x => x === 'TodoWrite' || x === 'TaskCreate')) return r
 
     return { sections: [...r.sections, { id: 'xray-todos', text: TODO_NUDGE, scope: 'session' }] }
+  })
+
+  // The genome rides the session title so /resume's list shows it (1a, 2026-10-04). Only a classic hook
+  // can set a title, and only on a prompt or a session start: the turn just finished shows from the next prompt.
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    const r = await next(e)
+    if (s.isEnvOff) return r
+    await loadGenome($, s)
+    const title = genome.titleOf(e.session_title || (await readTitle($, e.transcript_path)), s.rec.turns)
+
+    return title ? { ...r, sessionTitle: title } : r
   })
 
   on('prompt.submit', async ($, e, next) => {

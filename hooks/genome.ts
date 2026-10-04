@@ -226,3 +226,43 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
   const used = first.reduce((a, g) => a + g.t.length, 0)
   return [[...first, { t: ' '.repeat(Math.max(1, width - used - label.length)) }, { t: label, dim: true }], ...rows.slice(1)]
 }
+
+// The genome in the session's title, so /resume's list shows it (user, 2026-10-04, pick 1a). Titles are
+// plain text, so each step is its stored letter inside its turn's bracket: `fix tests · (rr)[ret]{a}`.
+// Past `max` characters the oldest whole turns fold into a leading `…`; one huge turn keeps its newest letters.
+export const TITLE_SEP = ' · '
+export const TITLE_MAX = 48
+export function titleGenome(turns: readonly string[], max = TITLE_MAX): string {
+  const parts = turns.filter(x => x).map(x => { const [o, c] = BRACKET[bracketOf(x)]; return o + x + c })
+  let out = ''
+  for (const p of parts.reverse()) {
+    if (out.length + p.length > max - 1) return out ? '…' + out : '…' + p.slice(-(max - 1)) // keeps the closing bracket
+    out = p + out
+  }
+  return out
+}
+// The title without a genome this mod put there before, so the person's own name (or /rename) stays the base.
+const OLD_GENOME = /\s·\s(?=[…(\[{])(?:…(?:[a-z]*[)\]}])?)?(?:[(\[{][a-z]*[)\]}])*$/
+export const titleBase = (title: string) => title.replace(OLD_GENOME, '')
+// The new title, or undefined to leave it alone: no name yet (setting one now would pin the base before
+// Claude Code names the session), no steps, or no change.
+export function titleOf(current: string | undefined, turns: readonly string[]): string | undefined {
+  const base = current ? titleBase(current).trim() : ''
+  const dna = titleGenome(turns)
+  if (!base || !dna) return undefined
+  const next = base + TITLE_SEP + dna
+  return next === current ? undefined : next
+}
+// The newest custom title in transcript lines, else the newest AI title (the order /resume prefers them).
+export function titleFromLines(text: string): string | undefined {
+  let custom: string | undefined
+  let ai: string | undefined
+  for (const line of text.split('\n')) {
+    try {
+      const o = JSON.parse(line) as { type?: string; customTitle?: unknown; aiTitle?: unknown }
+      if (o.type === 'custom-title' && typeof o.customTitle === 'string') custom = o.customTitle
+      if (o.type === 'ai-title' && typeof o.aiTitle === 'string') ai = o.aiTitle
+    } catch {}
+  }
+  return custom || ai
+}
