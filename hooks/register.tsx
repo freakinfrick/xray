@@ -628,6 +628,9 @@ export const register: Register = (on, options) => {
   // context gauge, and a health check only when it fails. It stays under /xray off; the cards go.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (s.isEnvOff || s.turn) return next(e)
+    // A /resume or /clear swaps the session id and fires no session.start: read the genome here too,
+    // or the strip shows the old session's until the next prompt (a no-op while the id holds).
+    await loadGenome($, s)
     const l = s.isHidden ? null : await read($, last)
     const { Box, Text } = $.ui.resolve(e)
     // The device mod is optional: absent, the strip draws as it did.

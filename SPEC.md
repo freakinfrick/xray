@@ -692,3 +692,7 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
   (e c t k x), `{ }` sent agents (wins); the live turn shows its opening bracket only (running steps count).
 - Between turns the WHOLE genome shows: on the strip's line only when every turn fits, else its own
   wrapped rows with the label, nothing folded (no row cap: a 400-turn session could take ~20 rows).
+- Fix (2026-10-03): the between-turns strip reads the genome itself (`loadGenome`, a no-op while the
+  session id holds). A /resume or /clear swaps the id with no `session.start`, and at a fresh start the
+  id read in `session.start` could miss the stored genome; either way the strip stayed empty (or showed
+  the old session's) until the first prompt. Seen in the demo take; live-checked on a fresh start.

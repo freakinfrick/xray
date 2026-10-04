@@ -300,10 +300,10 @@ const spinnerProps = { word: 'Sauteing', message: null, suffix: '…', mode: 'th
 const submit = { text: 'fix the tests', wait: false, origin: { kind: 'composer' } } as const
 
 // The engine beneath the plugin, for the events a session start and a prompt pass through.
-function engine(on: On, env: Record<string, string>, complete = () => ({ value: { isAnswered: false, reason: 'aborted' } }) as never) {
+function engine(on: On, env: Record<string, string>, complete = () => ({ value: { isAnswered: false, reason: 'aborted' } }) as never, store: Record<string, unknown> = {}) {
   mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
-  mock.store(on)
+  mock.store(on, store)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: {} }) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
@@ -1274,6 +1274,22 @@ test('genome: each turn in its kind\'s brackets, wraps at the width, folds the o
   // the newest turn is always whole at the end
   expect(rows[2]?.endsWith('(' + '▌'.repeat(14) + ')')).toBe(true)
   expect(genome.rows([], 60)).toEqual([])
+})
+
+test('genome: a /resume or /clear swaps the session id with no session.start; the strip shows the new session\'s genome before any prompt', async ($, on) => {
+  let id = 'a'
+  engine(on, { HOME: '/h' }, undefined, { 'genome:b': { turns: ['cc', 'e'], names: [], marks: [], files: [], startedAt: 0 } })
+  on('session.id', () => ({ value: id }) as never)
+  on('fs.exists', () => ({ value: true }) as never)
+  on('fs.read', () => ({ value: 'caveman compression' }) as never)
+  await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
+  let ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /genome/ })).toBeUndefined() // session a has no steps yet
+  await ui.unmount()
+  id = 'b'
+  ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  expect(await ui.find({ type: 'Text', text: /genome/ })).toBeDefined()
+  await ui.unmount()
 })
 
 test('genome: the live turn blinks its running step at the end; the store keeps the newest sessions', async () => {
