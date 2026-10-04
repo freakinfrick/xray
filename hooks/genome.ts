@@ -227,26 +227,47 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
   return [[...first, { t: ' '.repeat(Math.max(1, width - used - label.length)) }, { t: label, dim: true }], ...rows.slice(1)]
 }
 
-// The genome in the session's title, so /resume's list shows it (user, 2026-10-04, pick 1a). Titles are
-// plain text, so each step is its stored letter inside its turn's bracket: `fix tests · (rr)[ret]{a}`.
-// Past `max` characters the oldest whole turns fold into a leading `…`; one huge turn keeps its newest letters.
+// The genome in the session's title, so /resume's list shows it (user, 2026-10-04, picks 1a, then colour).
+// Each step is its real cell in its kind's colour inside a dim bracket, as on screen: the picker draws ANSI
+// from a title line in the transcript, and the terminal tab title drops the codes. A hook's sessionTitle
+// can't carry it (its ESC bytes become spaces), so register.tsx appends the line itself.
+// Past `max` cells the oldest whole turns fold into a leading `…`; one huge turn keeps its newest cells.
 export const TITLE_SEP = ' · '
 export const TITLE_MAX = 48
-export function titleGenome(turns: readonly string[], max = TITLE_MAX): string {
-  const parts = turns.filter(x => x).map(x => { const [o, c] = BRACKET[bracketOf(x)]; return o + x + c })
-  let out = ''
-  for (const p of parts.reverse()) {
-    if (out.length + p.length > max - 1) return out ? '…' + out : '…' + p.slice(-(max - 1)) // keeps the closing bracket
-    out = p + out
-  }
-  return out
+const ESC = '\x1b['
+const NAMED: Record<string, number> = { black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37, gray: 90, grey: 90 }
+export function sgr(seg: Seg): string {
+  const codes = ['0']
+  if (seg.bold) codes.push('1')
+  if (seg.dim) codes.push('2')
+  const c = seg.color
+  const hex = c ? /^#([0-9a-f]{6})$/i.exec(c)?.[1] : undefined
+  if (hex) codes.push(`38;2;${parseInt(hex.slice(0, 2), 16)};${parseInt(hex.slice(2, 4), 16)};${parseInt(hex.slice(4), 16)}`)
+  else if (c && NAMED[c]) codes.push(String(NAMED[c]))
+  return `${ESC}${codes.join(';')}m${seg.t}`
 }
-// The title without a genome this mod put there before, so the person's own name (or /rename) stays the base.
-const OLD_GENOME = /\s·\s(?=[…(\[{])(?:…(?:[a-z]*[)\]}])?)?(?:[(\[{][a-z]*[)\]}])*$/
-// A colour try (2026-10-04, reverted): a hook's sessionTitle has its ESC bytes turned to spaces, which left
-// ` · [0;2m( [0;34m▌…` titles behind. Stripped too, so those sessions heal on their next prompt.
-const SPOILED = /\s·\s+\[[\d;]*m[\s\S]*$/
-export const titleBase = (title: string) => title.replace(SPOILED, '').replace(OLD_GENOME, '')
+export function titleGenome(turns: readonly string[], max = TITLE_MAX): string {
+  const turnCells = turns.filter(x => x).map(x => {
+    const [o, c] = BRACKET[bracketOf(x)]
+    return [{ t: o, dim: true }, ...[...x].map(cellOf), { t: c, dim: true }] as Seg[]
+  })
+  let kept: Seg[] = []
+  for (const cells of turnCells.reverse()) {
+    if (kept.length + cells.length > max - 1) {
+      kept = [{ t: '…', dim: true }, ...(kept.length ? kept : cells.slice(-(max - 1)))]
+      break
+    }
+    kept = [...cells, ...kept]
+  }
+  return kept.length ? kept.map(sgr).join('') + `${ESC}0m` : ''
+}
+// The title without a genome this mod put there before, so the person's own name (or /rename) stays the
+// base: the coloured one, the plain letters of ea41a1d, and ` · [0;2m( …` left by a hook that turned ESC
+// into spaces (2026-10-04).
+const OLD_GENOME = /\s·\s(?:\s*\x1b\[[\s\S]*|\s+\[[\d;]*m[\s\S]*|(?=[…(\[{])(?:…(?:[a-z]*[)\]}])?)?(?:[(\[{][a-z]*[)\]}])*)$/
+export const titleBase = (title: string) => title.replace(OLD_GENOME, '')
+// The line Claude Code itself writes for a title, appended to the session's transcript.
+export const titleLine = (title: string, sessionId: string) => JSON.stringify({ type: 'custom-title', customTitle: title, sessionId }) + '\n'
 // The new title, or undefined to leave it alone: no name yet (setting one now would pin the base before
 // Claude Code names the session), no steps, or no change.
 export function titleOf(current: string | undefined, turns: readonly string[]): string | undefined {

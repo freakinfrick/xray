@@ -738,3 +738,12 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
 - Side effect: once set, the title is a custom title, so Claude Code's later AI retitles no longer show.
 - Checked: 110 tests; live (tmux, haiku): `Read notes.txt and list folder · (rr)[e]` in a fresh
   `claude --resume` picker; after resuming and one more prompt, `· (rr)[e](r)`, one genome, not two.
+- **Colour (2026-10-04, user pick 1a after the letters version):** the picker draws ANSI from a
+  `custom-title` line in the transcript and the tab title drops the codes, but a hook's `sessionTitle`
+  turns ESC into spaces (shipped by mistake for ~10 min, spoiled two titles, reverted; the spoiled form
+  is stripped). So xray now appends the line itself (`writeTitle`: same JSON Claude Code writes) at each
+  turn's end and at session end; the classic hooks only supply `transcript_path`. Cells are `KIND`'s
+  glyphs and colours (hex as 24-bit), brackets dim. Lag gone: the turn shows as soon as it ends.
+- Checked: 110 tests; live (tmux, haiku): fresh picker draws `(▌▌)[▌]` blue/yellow with dim brackets;
+  resumed, one turn, /exit: the newest line `(▌▌)[▌](▌)` stays last (Claude Code wrote no stale copy).
+- Risk: depends on Claude Code's undocumented transcript line `{type:'custom-title',customTitle,sessionId}`.

@@ -1558,23 +1558,28 @@ test('a write into a Claude memory folder is its own step: a bold § in the geno
   expect(genome.key(200).map(l => text(l)).join('')).toContain('§ memory')
 })
 
-test('the session title carries the genome in brackets, folding old turns, and replaces its own old one', () => {
-  expect(genome.titleGenome(['rr', '', 'ret', 'ah'])).toBe('(rr)[ret]{ah}')
-  expect(genome.titleOf('fix tests', ['rr', 'e'])).toBe('fix tests · (rr)[e]')
-  expect(genome.titleOf('fix tests · (rr)', ['rr', 'e'])).toBe('fix tests · (rr)[e]')
-  expect(genome.titleOf('fix tests · (rr)[e]', ['rr', 'e'])).toBeUndefined()
+test('the session title carries the coloured genome in brackets, folding old turns, and replaces its own old one', () => {
+  const plain = (x: string) => x.replace(/\x1b\[[\d;]*m/g, '')
+  expect(plain(genome.titleGenome(['rr', '', 'ret', 'ah']))).toBe('(▌▌)[▌▌▌]{▌▌}')
+  expect(genome.titleGenome(['re'])).toContain('\x1b[0;34m▌\x1b[0;33m▌')
+  expect(genome.sgr({ t: 's', color: '#ff5f00' })).toBe('\x1b[0;38;2;255;95;0ms')
+  const t1 = genome.titleOf('fix tests', ['rr', 'e'])!
+  expect(plain(t1)).toBe('fix tests · (▌▌)[▌]')
+  expect(plain(genome.titleOf(t1, ['rr', 'e', 'r'])!)).toBe('fix tests · (▌▌)[▌](▌)')
+  expect(genome.titleOf(t1, ['rr', 'e'])).toBeUndefined()
+  expect(plain(genome.titleOf('fix tests · (rr)[e]', ['rr'])!)).toBe('fix tests · (▌▌)') // the letters of ea41a1d give way
+  expect(plain(genome.titleOf('Tailscale drop ·  [0;2m( [0;34m▌ [0;2m) [0m', ['rr'])!)).toBe('Tailscale drop · (▌▌)') // ESC turned to spaces
   expect(genome.titleOf(undefined, ['rr'])).toBeUndefined()
   expect(genome.titleOf('fix tests', ['', ''])).toBeUndefined()
   expect(genome.titleBase('a · b')).toBe('a · b')
-  expect(genome.titleOf('Tailscale drop ·  [0;2m( [0;34m▌ [0;34m▌ [0;2m) [0m', ['rr'])).toBe('Tailscale drop · (rr)')
-  const many = Array.from({ length: 30 }, () => 'rre')
-  const g = genome.titleGenome(many)
+  const g = plain(genome.titleGenome(Array.from({ length: 30 }, () => 'rre')))
   expect(g.length).toBeLessThanOrEqual(genome.TITLE_MAX)
-  expect(g.startsWith('…[rre]')).toBe(true)
-  expect(genome.titleBase('fix · ' + g)).toBe('fix')
-  const huge = genome.titleGenome(['r'.repeat(100)])
-  expect(huge).toBe('…' + 'r'.repeat(genome.TITLE_MAX - 2) + ')')
-  expect(genome.titleBase('fix · ' + huge)).toBe('fix')
+  expect(g.startsWith('…[▌▌▌]')).toBe(true)
+  const huge = plain(genome.titleGenome(['r'.repeat(100)]))
+  expect(huge.length).toBe(genome.TITLE_MAX)
+  expect(huge.endsWith('▌)')).toBe(true)
+  expect(genome.titleBase('fix · ' + genome.titleGenome(['r'.repeat(100)]))).toBe('fix')
+  expect(JSON.parse(genome.titleLine(t1, 'abc'))).toEqual({ type: 'custom-title', customTitle: t1, sessionId: 'abc' })
 })
 
 test('the title base is the newest custom title, else the newest AI title', () => {

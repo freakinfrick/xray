@@ -66,6 +66,7 @@ type Live = {
   records?: Records // round 20c: this folder's bests (records:<cwd>), for the panel
   rec: SessionRec // round 19-20: this session's turns as step letters, names, marks, files (session.ts)
   genomeId: string // the session those belong to; /resume or /clear swaps it
+  transcript?: string // this session's transcript, from the classic hooks; the genome's title line goes there
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -163,11 +164,16 @@ async function readTtl($: EngineInterface, s: Live): Promise<Cache['ttl']> {
   return ran && ran.exitCode === 0 ? ttlFromTail(ran.stdout) : null
 }
 
-// The title /resume shows, from the transcript (the hook's session_title carries only a custom one):
-// the newest custom title, else the newest AI one. grep reads tens of MB in well under a second.
-async function readTitle($: EngineInterface, path: string): Promise<string | undefined> {
+// The title /resume shows, from the transcript: the newest custom title, else the newest AI one; then the
+// genome's line appended after it. Claude Code re-writes its own copy of the title when a session exits
+// (and loads it back on resume), so session.end writes once more. grep reads tens of MB in well under a second.
+async function writeTitle($: EngineInterface, s: Live) {
+  const path = s.transcript
+  if (!path || s.isEnvOff) return
   const ran = await $.process.run(['grep', '-E', '"type":"(custom|ai)-title"', path]).catch(() => null)
-  return ran && ran.exitCode === 0 ? genome.titleFromLines(ran.stdout) : undefined
+  const title = genome.titleOf(ran && ran.exitCode === 0 ? genome.titleFromLines(ran.stdout) : undefined, s.rec.turns)
+  if (!title) return
+  await $.process.run(['sh', '-c', 'printf %s "$1" >> "$2"', 'sh', genome.titleLine(title, await $.session.id()), path]).catch(() => null)
 }
 
 // Once a second while a turn runs: fresh context figure and elapsed times.
@@ -357,15 +363,15 @@ export const register: Register = (on, options) => {
     return { sections: [...r.sections, { id: 'xray-todos', text: TODO_NUDGE, scope: 'session' }] }
   })
 
-  // The genome rides the session title so /resume's list shows it (1a, 2026-10-04). Only a classic hook
-  // can set a title, and only on a prompt or a session start: the turn just finished shows from the next prompt.
+  // The genome rides the session title so /resume's list shows it, in colour (1a, 2026-10-04). The
+  // classic hooks only tell where the transcript is; the title line is written at each turn's end.
+  on('classic.SessionStart', async ($, e, next) => {
+    s.transcript = e.transcript_path
+    return next(e)
+  })
   on('classic.UserPromptSubmit', async ($, e, next) => {
-    const r = await next(e)
-    if (s.isEnvOff) return r
-    await loadGenome($, s)
-    const title = genome.titleOf(e.session_title || (await readTitle($, e.transcript_path)), s.rec.turns)
-
-    return title ? { ...r, sessionTitle: title } : r
+    s.transcript = e.transcript_path
+    return next(e)
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -476,6 +482,7 @@ export const register: Register = (on, options) => {
       const moments = [...celebrations(t), ...rec20.moments, ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
       const name = nameOf(letters, countedRuns(t), filesRead(t))
       await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests, files: fileTouches(t, now) })
+      await writeTitle($, s)
       const memo = recall(s.history, t)
       s.history = record(s.history, t)
       if (s.cwd) await $.store.set(storeKey(s.cwd), s.history)
@@ -493,6 +500,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
+    await writeTitle($, s).catch(() => undefined)
     // /clear: the same process goes on as a new conversation with a cold cache.
     if (e.reason === 'clear') {
       s.cache = emptyCache()
