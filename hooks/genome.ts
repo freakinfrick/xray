@@ -231,7 +231,7 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
 // Each step is its real cell in its kind's colour inside a dim bracket, as on screen: the picker draws ANSI
 // from a title line in the transcript, and the terminal tab title drops the codes. A hook's sessionTitle
 // can't carry it (its ESC bytes become spaces), so register.tsx appends the line itself.
-// Past `max` cells the oldest whole turns fold into a leading `…`; one huge turn keeps its newest cells.
+// Past `max` cells the oldest whole turns fold into a leading `…`; one huge turn keeps its bracket and newest cells.
 export const TITLE_SEP = ' · '
 export const TITLE_MAX = 48
 const ESC = '\x1b['
@@ -254,7 +254,8 @@ export function titleGenome(turns: readonly string[], max = TITLE_MAX): string {
   let kept: Seg[] = []
   for (const cells of turnCells.reverse()) {
     if (kept.length + cells.length > max - 1) {
-      kept = [{ t: '…', dim: true }, ...(kept.length ? kept : cells.slice(-(max - 1)))]
+      // One turn alone too long: its bracket opens, then `…` and its newest cells.
+      kept = kept.length ? [{ t: '…', dim: true }, ...kept] : [cells[0]!, { t: '…', dim: true }, ...cells.slice(-(max - 2))]
       break
     }
     kept = [...cells, ...kept]

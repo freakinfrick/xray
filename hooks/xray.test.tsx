@@ -1577,6 +1577,7 @@ test('the session title carries the coloured genome in brackets, folding old tur
   expect(g.startsWith('…[▌▌▌]')).toBe(true)
   const huge = plain(genome.titleGenome(['r'.repeat(100)]))
   expect(huge.length).toBe(genome.TITLE_MAX)
+  expect(huge.startsWith('(…▌')).toBe(true)
   expect(huge.endsWith('▌)')).toBe(true)
   expect(genome.titleBase('fix · ' + genome.titleGenome(['r'.repeat(100)]))).toBe('fix')
   expect(JSON.parse(genome.titleLine(t1, 'abc'))).toEqual({ type: 'custom-title', customTitle: t1, sessionId: 'abc' })
