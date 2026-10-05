@@ -10,6 +10,7 @@ import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, n
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
+import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName } from './session'
 import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
@@ -300,10 +301,10 @@ const spinnerProps = { word: 'Sauteing', message: null, suffix: '…', mode: 'th
 const submit = { text: 'fix the tests', wait: false, origin: { kind: 'composer' } } as const
 
 // The engine beneath the plugin, for the events a session start and a prompt pass through.
-function engine(on: On, env: Record<string, string>, complete = () => ({ value: { isAnswered: false, reason: 'aborted' } }) as never, store: Record<string, unknown> = {}) {
+function engine(on: On, env: Record<string, string>, complete = () => ({ value: { isAnswered: false, reason: 'aborted' } }) as never, store: Record<string, unknown> | null = {}) {
   mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
-  mock.store(on, store)
+  if (store) mock.store(on, store)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: {} }) as never)
   on('prompt.submit', ($, e) => ({ text: e.text }))
@@ -1602,4 +1603,75 @@ test('the title base is the newest custom title, else the newest AI title', () =
   expect(genome.titleFromLines([ai('one'), ai('two'), ''].join('\n'))).toBe('two')
   expect(genome.titleFromLines([custom('mine · (r)'), ai('later')].join('\n'))).toBe('mine · (r)')
   expect(genome.titleFromLines('not json\n')).toBeUndefined()
+})
+
+// Round 21: xray answers the task tools so core never opens its own list.
+test('the task store answers in core\'s output shapes', () => {
+  let st = tasks.emptyStore()
+  let r = tasks.answer(st, 'TaskCreate', { subject: 'Read sum.js', description: 'look', activeForm: 'Reading sum.js' })
+  expect(r.result).toEqual({ task: { id: '1', subject: 'Read sum.js' } })
+  st = r.store
+  st = tasks.answer(st, 'TaskCreate', { subject: 'Fix it', description: 'fix' }).store
+  r = tasks.answer(st, 'TaskUpdate', { taskId: 1, status: 'in_progress' })
+  expect(r.result).toEqual({ success: true, taskId: '1', updatedFields: ['status'], statusChange: { from: 'pending', to: 'in_progress' } })
+  st = r.store
+  st = tasks.answer(st, 'TaskUpdate', { taskId: '2', addBlockedBy: ['1'], metadata: { a: 1, b: 2 } }).store
+  st = tasks.answer(st, 'TaskUpdate', { taskId: '2', metadata: { a: null } }).store
+  expect(st.tasks[1]?.metadata).toEqual({ b: 2 })
+  expect(tasks.answer(st, 'TaskList', {}).result).toEqual({ tasks: [
+    { id: '1', subject: 'Read sum.js', status: 'in_progress', blockedBy: [] },
+    { id: '2', subject: 'Fix it', status: 'pending', blockedBy: ['1'] },
+  ] })
+  expect(tasks.answer(st, 'TaskGet', { taskId: '1' }).result).toEqual({ task: { id: '1', subject: 'Read sum.js', description: 'look', status: 'in_progress', blocks: ['2'], blockedBy: [] } })
+  expect(tasks.answer(st, 'TaskGet', { taskId: '9' }).result).toEqual({ task: null })
+  expect(tasks.answer(st, 'TaskUpdate', { taskId: '9', status: 'completed' }).result).toEqual({ success: false, taskId: '9', updatedFields: [], error: 'Task #9 not found' })
+  st = tasks.answer(st, 'TaskUpdate', { taskId: '1', status: 'deleted' }).store
+  expect(st.tasks.map(t => [t.id, t.blockedBy])).toEqual([['2', []]])
+  // ids never repeat after a delete
+  expect(tasks.answer(st, 'TaskCreate', { subject: 'x', description: '' }).result).toEqual({ task: { id: '3', subject: 'x' } })
+  expect(tasks.loadStore(undefined)).toEqual(tasks.emptyStore())
+  expect(tasks.loadStore({ next: 4, tasks: [] }).next).toBe(4)
+})
+
+test('task calls never reach core while xray is on, and the ids live in the store', async ($, on) => {
+  engine(on, {}, undefined, null)
+  // The store in the open, so the test can read what xray wrote.
+  const kv = new Map<string, unknown>()
+  on('store.get', ($, e) => ({ value: kv.get((e as { key: string }).key) }) as never)
+  on('store.set', ($, e) => {
+    kv.set((e as { key: string }).key, (e as { value: unknown }).value)
+    return { value: undefined } as never
+  })
+  on('store.keys', () => ({ value: [...kv.keys()] }) as never)
+  on('store.delete', ($, e) => {
+    kv.delete((e as { key: string }).key)
+    return { value: undefined } as never
+  })
+  on('session.id', () => ({ value: 's1' }) as never)
+  let core = 0
+  on('tool.call', () => {
+    core++
+    return { result: { task: { id: '99', subject: 'core' } } } as never
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit(submit)
+  const r = await $.tool.call({ tool: 'TaskCreate', subject: 'Read sum.js', description: 'x' } as never)
+  expect((r as { result?: unknown }).result).toEqual({ task: { id: '1', subject: 'Read sum.js' } })
+  expect(core).toBe(0)
+  expect((kv.get('tasks:s1') as tasks.Store).tasks.map(t => t.subject)).toEqual(['Read sum.js'])
+  const u = await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'completed' } as never)
+  expect((u as { result?: { success?: boolean } }).result?.success).toBe(true)
+  expect(core).toBe(0)
+})
+
+test('with CLAUDE_HUMAN_MODS=off core keeps the task tools', async ($, on) => {
+  engine(on, { CLAUDE_HUMAN_MODS: 'off' })
+  let core = 0
+  on('tool.call', () => {
+    core++
+    return { result: { task: { id: '1', subject: 'x' } } } as never
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'TaskCreate', subject: 'x', description: 'x' } as never)
+  expect(core).toBe(1)
 })

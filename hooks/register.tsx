@@ -11,6 +11,7 @@ import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
+import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, shortName, loadRec, type SessionRec } from './session'
 import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
@@ -67,6 +68,8 @@ type Live = {
   rec: SessionRec // round 19-20: this session's turns as step letters, names, marks, files (session.ts)
   genomeId: string // the session those belong to; /resume or /clear swaps it
   transcript?: string // this session's transcript, from the classic hooks; the genome's title line goes there
+  tasks: tasks.Store // round 21: the session's task list, answered by xray instead of core
+  tasksId: string // the session it belongs to
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -85,6 +88,24 @@ async function saveGenome($: EngineInterface, s: Live, letters: string, extra: P
   s.rec = addTurn(s.rec, letters, extra)
   await $.store.set(genome.keyOf(s.genomeId), s.rec)
   for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
+}
+
+// Round 21: a task tool call answered from xray's store, so core never opens its own list.
+async function answerTask($: EngineInterface, s: Live, tool: string, input: Record<string, unknown>) {
+  const id = await $.session.id().catch(() => '')
+  if (id !== s.tasksId) {
+    s.tasksId = id
+    s.tasks = tasks.loadStore(id ? await $.store.get(tasks.keyOf(id)) : undefined)
+  }
+  const r = tasks.answer(s.tasks, tool, input)
+  if (r.store !== s.tasks) {
+    s.tasks = r.store
+    if (id) {
+      await $.store.set(tasks.keyOf(id), s.tasks)
+      for (const k of tasks.stale(await $.store.keys(), tasks.keyOf(id))) await $.store.delete(k)
+    }
+  }
+  return { result: r.result }
 }
 
 // Round 20f: a finished turn's milestones, with the folder's step count and its day of test runs kept
@@ -269,6 +290,8 @@ async function burst($: EngineInterface, s: Live) {
       await $.clock.sleep(BURST_FRAME_MS)
       $.ui.invalidate('ui.render')
     }
+  } catch {
+    // unloaded mid-burst (a hot reload, the session's end): the sleep rejects, nothing left to draw
   } finally {
     s.isBursting = false
   }
@@ -288,7 +311,7 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '' }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '', tasks: tasks.emptyStore(), tasksId: '' }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
@@ -355,6 +378,10 @@ export const register: Register = (on, options) => {
     return { text: opened.isPlaced ? 'panel open. /xray or Esc closes it.' : 'panel waits for a wider terminal.' }
   })
 
+  // Round 21: core's "task tools haven't been used" reminder reads core's store, which xray now keeps
+  // empty; left on it would fire every turn. Answered once per process, so it stays off after /xray off.
+  on('prompt.attachment', { type: 'todo_reminder' }, async ($, e, next) => (isOff(s) ? next(e) : { text: null }))
+
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
     // Only worth asking for when the session has a to-do tool to keep the list with.
@@ -414,18 +441,20 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const t = s.turn
+    const input = e as unknown as Record<string, unknown>
+    // Round 21: subagents' task calls too, or core fills its list and draws it under the main spinner.
+    const run = (): ReturnType<typeof next> => (!isOff(s) && tasks.TASK_TOOLS.has(e.tool) ? (answerTask($, s, e.tool, input) as ReturnType<typeof next>) : next(e))
     if (t && !isOff(s) && e.agentId) {
-      agentStep(t, e.agentId, sayStep(e.tool, e as unknown as Record<string, unknown>))
+      agentStep(t, e.agentId, sayStep(e.tool, input))
       $.ui.invalidate('ui.render')
     }
-    if (!t || isOff(s) || e.agentId) return next(e)
-    const input = e as unknown as Record<string, unknown>
+    if (!t || isOff(s) || e.agentId) return run()
     const id = e.tool_use_id ?? `local-${t.done.length + t.running.size}`
     startStep(t, id, e.tool, input, await $.clock.now())
     $.ui.invalidate('ui.render')
     let ran: Awaited<ReturnType<typeof next>> | undefined
     try {
-      ran = await next(e)
+      ran = await run()
     } finally {
       const ok = ran !== undefined && ran.deny === undefined && !ran.isError
       const failedBefore = t.failures
