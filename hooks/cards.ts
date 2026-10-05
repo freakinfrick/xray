@@ -322,7 +322,7 @@ function dots(t: Turn): Line {
 }
 
 // One square per to-do in its hue, then k/N; undefined before any to-do list exists.
-function squares(t: Turn): Line | undefined {
+export function squares(t: Turn): Line | undefined {
   if (!t.todos.length) return undefined
   const done = t.todos.filter(x => x.status === 'completed').length
   return [...t.todos.slice(0, 12).map(squareOf), { t: ` ${done}/${t.todos.length}`, dim: true }]

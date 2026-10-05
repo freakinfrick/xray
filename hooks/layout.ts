@@ -5,11 +5,10 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tile, type Tone } from './cards'
-import { frame } from './glyphs'
+import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, squares, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tile, type Tone } from './cards'
+import { MARK, frame } from './glyphs'
 import type { Turn } from './track'
 
-export const THREE = 140 // columns: three cards from here; below, the task card folds into the now card (round 17)
 export const TALL = 40 // rows: from here the cards take one more body row (round 16 pick B)
 const GUTTER = 1
 const SUBGAP = 3 // between two subcolumns
@@ -266,30 +265,15 @@ function topBand(c: Drawn, w: number, status: string, pulse?: Seg): Line {
   return [edge(c, '╭'), { t: ` ${said} `, bg: color ?? 'gray', color: 'black' }, ...(pulse ? [{ t: p, color: pulse.color }] : []), edge(c, ' ' + '─'.repeat(Math.max(1, w - 5 - said.length - p.length)) + '╮')]
 }
 
-function topTitle(c: Drawn, w: number): Line {
-  const note = c.note ? [{ t: ' ' }, ...c.note, { t: ' ' }] : []
+// A title in the top edge, its note (the to-do squares, tags) right after it: ┏━ to-do ■◆□□ 2/4 ━━━┓.
+function topTitle(c: Drawn, w: number, g = { tl: '╭', tr: '╮', h: '─' }): Line {
+  const note = c.note?.length ? [...c.note, { t: ' ' }] : []
   const room = Math.max(1, w - 6 - cells(note))
   const title = c.title.length > room ? c.title.slice(0, room - 1) + '…' : c.title
+  const fill = g.h.repeat(Math.max(1, w - 5 - title.length - cells(note)))
   // Round 20a: a lit title is a patch in the tone's colour, black text, in the same cells.
-  if (c.isLit) return [edge(c, '╭─'), { t: ` ${title} `, bg: TONE_COLOR[c.tone] ?? 'gray', color: 'black' }, edge(c, '─'.repeat(Math.max(0, w - 6 - title.length - cells(note)))), ...note, edge(c, '─╮')]
-  return [edge(c, `╭─ ${title} ` + '─'.repeat(Math.max(0, w - 6 - title.length - cells(note)))), ...note, edge(c, '─╮')]
-}
-
-// One bottom edge under every card: ╰─ a   b   c ───┴─┴───╯. Round 19: the figures sit together from the
-// left edge, in one order whatever the widths, so the eye finds them in one place (round 16 set each under
-// its own card, and they moved as the widths followed content). Whole figures only: the last drop first.
-// A ┴ junction under a figure gives way to it; the edge keeps each card's own ink.
-function tray(cards: Drawn[], ws: number[], figures: Line[]): Line {
-  const base: Seg[] = []
-  cards.forEach((c, i) => {
-    const w = ws[i] ?? MIN_W
-    base.push(edge(c, i ? '┴' : '╰'), ...Array.from({ length: Math.max(0, w - 2) }, () => edge(c, '─')), edge(c, i === cards.length - 1 ? '╯' : '┴'))
-    if (i < cards.length - 1) base.push(...Array.from({ length: GUTTER }, () => ({ t: '─', dim: true })))
-  })
-  const fits = fitParts(figures, base.length - 6, '   ')
-  if (!fits.length) return runs(base)
-  const from = 3 + cells(fits) + 1
-  return [{ ...base[0], t: '╰─ ' }, ...fits, { t: ' ' }, ...runs(base.slice(from))]
+  const said: Seg = c.isLit ? { t: ` ${title} `, bg: TONE_COLOR[c.tone] ?? 'gray', color: 'black' } : { ...edge(c, ` ${title} `), bold: true }
+  return [edge(c, g.tl + g.h), said, ...note, edge(c, fill + g.tr)]
 }
 
 // Neighbouring cells of one look as one segment.
@@ -305,56 +289,90 @@ function runs(segs: Seg[]): Line {
 
 const known = (ps: (Line | undefined)[]): Line[] => ps.filter((p): p is Line => !!p)
 
-// The rows under the spinner at `cols` (≥ 60) wide: top edges, `rows` body rows, the tray.
+// Round 21 (pick 1): two cards with fixed places. Left, the now card: the live step's band in its top
+// edge, terse fact rows, a ┄ divider, the gauges on one row, the folder in its bottom edge. Right, always,
+// the to-do card: a heavy square frame (the main card), `to-do ■◆□□ 2/4` in its border, the cells on every
+// body row. Each fact once: no ▸ row (the band names the live step), no progress card, no shared tray.
+const HEAVY = { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' }
+const LIGHT = { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' }
+
+// The fact rows, most telling first: the task card's own fact (tests, files, sources, agents; the step
+// gauge otherwise), the narration when that setting is on, then the last finished step. Before any step,
+// the prompt. A task card lit for a beat (20a: back to green) lights its label here.
+function facts(t: Turn, head: Card, now: number): Line[] {
+  const task = taskCard(t, now)
+  const label: Seg = task.isLit ? { t: ` ${task.title} `, bg: TONE_COLOR[task.tone] ?? 'gray', color: 'black' } : { t: task.title, dim: true }
+  const fact: Line = task.title === 'progress'
+    ? [{ t: 'steps ', dim: true }, ...filmstrip(t, 24, now, false), { t: ' ' }, ...stepCounts(t)]
+    : [label, { t: '  ' }, ...(task.lines[0] ?? [])]
+  // The last real step: to-do bookkeeping is what the to-do card already shows.
+  const step = t.done.findLast(x => x.kind !== 'todo')
+  const lastRow: Line | undefined = step ? [{ t: 'last: ', dim: true }, { t: step.say + (step.ok === false ? ` ${MARK.fail}` : ''), dim: true }] : undefined
+  const said = head.foot ? head.lines[1] : undefined // nowCard puts the narration there when it has one
+  const rows = known([t.done.length ? fact : undefined, said, lastRow]).filter(l => cells(l))
+  return rows.length ? rows : [[{ t: '» ' + t.prompt, dim: true }]]
+}
+
 export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = ''): Line[] {
   const head = nowCard(t, mode, narration, now)
-  const now0: Card = { ...head, lines: head.lines.slice(1) }
-  const todo = todoCard(t, ctx, now)
-  // Rule 4: a task card without the step gauge takes the filmstrip as its second subcolumn.
-  const plain = taskCard(t, now)
-  const task: Card = plain.title === 'progress' || !t.done.length ? plain : { ...plain, side: [[{ t: 'steps ', dim: true }, ...filmstrip(t, 24, now, false)], stepCounts(t)] }
+  const todo0 = todoCard(t, ctx, now)
+  const sq = squares(t)
+  const todo: Card = { ...todo0, title: 'to-do', foot: undefined, note: [...(sq ?? []), ...(todo0.note ? [{ t: '  ', dim: true }, ...todo0.note] : [])] }
   const tp = teleParts(t, ctx, now)
-  const hasTodo = !!(todo.tiles?.length || todo.note)
-  // Round 17: the folder the status line showed sits first under the now card.
-  const here: Line | undefined = folder ? [{ t: folder, dim: true }] : undefined
-  let cards: Card[]
-  const parts = known([here, tp.turn, tp.effort, tp.ctx, tp.tok, tp.cache])
-  if (cols >= THREE && hasTodo) {
-    cards = [now0, todo, task]
-  } else if (todo.tiles?.length) {
-    // Rule 5, round 17: one card fewer, and the to-dos keep theirs; the task card's first row becomes
-    // the now card's fact row (the last step gives way, the band names what runs).
-    const gist: Line = [{ t: `${task.title}  `, dim: true }, ...(task.lines[0] ?? [])]
-    cards = [{ ...now0, foot: gist }, todo]
-  } else {
-    cards = [now0, task]
-  }
+  const gauges = fitParts(known([tp.ctx, tp.cache, tp.tok, tp.turn, tp.effort]), Infinity, ' · ')
+  const task = taskCard(t, now)
+  const tone: Tone = task.tone === 'fail' ? 'fail' : head.tone
+  const now0: Card = { ...head, tone, lines: facts(t, head, now), foot: undefined }
   const f = frame(now)
   const live = [...t.running.values()].sort((a, b) => a.startedAt - b.startedAt)[0]
   const usual = live ? t.done.filter(x => x.kind === live.kind && x.endedAt !== undefined).map(x => (x.endedAt ?? 0) - x.startedAt).sort((a, b) => a - b) : []
   const isSlow = !!live && usual.length >= 3 && now - live.startedAt >= Math.max(10_000, SLOW * (usual[Math.floor(usual.length / 2)] ?? 0))
   const lastEnd = t.done[t.done.length - 1]?.endedAt ?? t.startedAt
   const isStalled = !live && mode !== 'thinking' && mode !== 'responding' && now - lastEnd >= STALL_MS
-  cards = cards.map((c, i): Drawn => {
+  const cards = [now0, todo].map((c, i): Drawn => {
     const key = keyOf(c, i)
     const seen = memo?.tones[key]
     if (memo && seen?.tone !== c.tone) memo.tones[key] = { tone: c.tone, at: seen ? now : -Infinity }
     const fade = !!memo && now - (memo.tones[key]?.at ?? -Infinity) < FADE_MS
-    // The now card turns red when stuck but holds still; the failing card itself is what walks.
-    const walk = (i > 0 && c.tone === 'fail') || (i === 0 && (isSlow || isStalled)) ? f : undefined
+    // The now card walks when stuck, slow or stalled: the one card that needs you moves.
+    const walk = i === 0 && (c.tone === 'fail' || isSlow || isStalled) ? f : undefined
     return { ...c, walk, fade }
   })
-  const at = cards.findIndex(c => !!c.tiles?.length)
-  const ws = allot(cards.map(c => ideal(c)), cols, at > 0 ? at : undefined, at > 0 ? cellsCap(cards[at] as Card) : undefined, at > 0 ? cellsNeed(cards[at] as Card) : 0)
+  // Widths: the cells ask for their cap, the now card keeps room for its facts and gauges.
+  const nowWant = Math.max(cells(gauges) + 4, ...now0.lines.map(l => cells(l) + 4), NOW_TODO)
+  const ws = allot([nowWant, ideal(todo)], cols, todo.tiles?.length ? 1 : undefined, cellsCap(todo), cellsNeed(todo))
+  const [wn, wt] = [ws[0] ?? MIN_W, ws[1] ?? MIN_W]
+  const inner = wn - 4
+  // Body: facts over rows - 2, then the divider and the gauges (whole figures only, the last drops first).
+  const factRows = Math.max(0, rows - 2)
+  const nowBody: Line[] = [...keep(now0.lines.map(l => clipLine(l, inner)), factRows, inner)]
+  while (nowBody.length < factRows) nowBody.push([])
+  const shown = fitParts(known([tp.ctx, tp.cache, tp.tok, tp.turn, tp.effort]), inner, ' · ')
+  const hot = head.hot
+  const lastAt = nowBody.findIndex(l => (l[0]?.t ?? '').startsWith('last: '))
+  if (hot && lastAt >= 0 && cells(nowBody[lastAt] ?? []) + 3 + cells(hot) <= inner) nowBody[lastAt] = [...(nowBody[lastAt] ?? []), { t: ' '.repeat(inner - cells(nowBody[lastAt] ?? []) - cells(hot)) }, ...hot]
+  const todoBody = body(todo, wt - 4, rows)
+  const nowCardD = cards[0] as Drawn
+  const todoCardD = cards[1] as Drawn
   const top = band(head.lines[0] ?? [], t.running.size > 0)
-  const bodies = cards.map((c, i) => body(c, (ws[i] ?? MIN_W) - 4, rows))
-  const join = (f: (c: Card, i: number) => Line): Line => cards.flatMap((c, i) => (i ? [{ t: ' '.repeat(GUTTER) }, ...f(c, i)] : f(c, i)))
-  const spans = (cards as Drawn[]).flatMap((c, i) => {
-    const from = ws.slice(0, i).reduce((a, w) => a + w + GUTTER, 0)
-    return c.walk === undefined ? [] : [{ from, to: from + (ws[i] ?? MIN_W), f: c.walk }]
-  })
-  const out: Line[] = [walkRow(join((c, i) => (i ? topTitle(c, ws[i] ?? MIN_W) : topBand(c, ws[i] ?? MIN_W, top.status, top.pulse))), spans)]
-  for (let r = 0; r < rows; r++) out.push(join((c, i) => [edge(c, '│ '), ...pad(bodies[i]?.[r] ?? [], (ws[i] ?? MIN_W) - 4), edge(c, ' │')]))
-  out.push(walkRow(tray(cards, ws, parts), spans))
+  const out: Line[] = []
+  out.push([...walkRow(topBand(nowCardD, wn, top.status, top.pulse), nowCardD.walk === undefined ? [] : [{ from: 0, to: wn, f: nowCardD.walk }]), { t: ' '.repeat(GUTTER) }, ...topTitle(todoCardD, wt, HEAVY)])
+  for (let r = 0; r < rows; r++) {
+    const left: Line = r < factRows
+      ? [edge(nowCardD, '│ '), ...pad(nowBody[r] ?? [], inner), edge(nowCardD, ' │')]
+      : r === factRows
+        ? [edge(nowCardD, '│'), { t: '┄'.repeat(wn - 2), dim: true }, edge(nowCardD, '│')]
+        : [edge(nowCardD, '│ '), ...pad(shown, inner), edge(nowCardD, ' │')]
+    out.push([...left, { t: ' '.repeat(GUTTER) }, edge(todoCardD, HEAVY.v + ' '), ...pad(todoBody[r] ?? [], wt - 4), edge(todoCardD, ' ' + HEAVY.v)])
+  }
+  out.push([...bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT), { t: ' '.repeat(GUTTER) }, ...bottom(todoCardD, wt, [], HEAVY)])
   return out
+}
+
+// A card's own bottom edge, an optional figure riding it: ╰─ …/live ───╯.
+function bottom(c: Drawn, w: number, fig: Line, g: typeof LIGHT): Line {
+  const room = w - 6
+  const f = cells(fig) <= room ? fig : []
+  if (!f.length) return [edge(c, g.bl + g.h.repeat(Math.max(0, w - 2)) + g.br)]
+  return [edge(c, g.bl + g.h + ' '), ...f, edge(c, ' ' + g.h.repeat(Math.max(1, w - 5 - cells(f))) + g.br)]
 }

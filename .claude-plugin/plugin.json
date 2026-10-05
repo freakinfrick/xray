@@ -10,8 +10,8 @@
     "narration": {
       "type": "string",
       "title": "xray: narration line",
-      "description": "A one-sentence » line from a small model (Haiku) at task start and on the first failure, at most once a minute. Off = cards show measured state only, no extra model calls.",
-      "default": "on",
+      "description": "A one-sentence » line from a small model (Haiku) at task start and on the first failure, at most once a minute, as the now card's last fact row. Off (default since round 21: terse facts over prose) = measured state only, no extra model calls.",
+      "default": "off",
       "options": [
         "on",
         "off"

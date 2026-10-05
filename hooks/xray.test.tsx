@@ -324,7 +324,8 @@ test('after a prompt the cards draw under the spinner', async ($, on) => {
   await $.prompt.submit(submit)
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps })
   expect(await ui.find({ type: 'Text', text: /^ ◇ thinking $/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /progress/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /to-do/ })).toBeDefined() // round 21: the to-do card, always on the right
+  expect(await ui.find({ type: 'Text', text: /progress/ })).toBeUndefined() // the progress card is gone
   expect(await ui.find({ type: 'Text', text: /turn \d+s/ })).toBeDefined()
   await ui.unmount()
 })
@@ -364,7 +365,7 @@ test('a task notification mid-turn does not wipe the turn', async ($, on) => {
   await ui.unmount()
 })
 
-test('a narration call that returns nothing does not mute narration for a minute', async ($, on) => {
+test('a narration call that returns nothing does not mute narration for a minute', { options: { narration: 'on' } }, async ($, on) => {
   let calls = 0
   engine(on, {}, () => {
     calls += 1
@@ -376,7 +377,7 @@ test('a narration call that returns nothing does not mute narration for a minute
   expect(calls).toBe(2)
 })
 
-test('a narrator that answers "-" (nothing to say) shows nothing and holds its minute', async ($, on) => {
+test('a narrator that answers "-" (nothing to say) shows nothing and holds its minute', { options: { narration: 'on' } }, async ($, on) => {
   let calls = 0
   engine(on, {}, () => {
     calls += 1
@@ -896,32 +897,34 @@ test('round 16: every row is exactly as wide as asked, at 190, 120 and 60 column
   }
 })
 
-test('round 16: three cards from 140 columns with a gap between them; below, the task card rides in the now card (round 17)', async () => {
+test('round 21: two cards in fixed places, to-dos always on the right in a heavy frame; each fact once', async () => {
   const t = midFix()
+  for (const cols of [188, 118, 72]) {
+    const rows = spinnerRows(t, undefined, NARR, 17, 9_000, cols, 4).map(l => text(l))
+    expect(rows.every(r => r.length === cols)).toBe(true)
+    expect(rows[0]).toMatch(/^╭ .*╮ ┏━ to-do ■■■◆□ 3\/5 ━+┓$/) // now left, to-do right, squares in the border
+    expect(rows.at(-1)).toMatch(/^╰─.*╯ ┗━+┛$/) // each card closes its own edge: no shared tray
+    expect(rows.some(r => r.includes('▸'))).toBe(false) // the band names the live step; no ▸ row
+    expect(rows.some(r => r.includes('progress'))).toBe(false)
+    expect(rows[3]).toMatch(/^│┄+│ /) // the divider, then the gauges
+    expect(rows[4]).toMatch(/^│ ctx \S+ 17% · /)
+  }
   const wide = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
-  expect(wide[0]?.match(/╮ ╭/g)?.length).toBe(2) // three cards, one blank column between each
-  expect(wide[0]).toContain('╭─ to-do · 3 of 5')
-  expect(wide.some(r => r.includes('▸ fixing mul in sum.js'))).toBe(true)
-  expect(wide.at(-1)).toMatch(/^╰─ turn 9s   ctx \S+ 17% ─+┴─┴─+┴─┴[─╌]*╯$/) // round 19: the tray's figures packed from the left
-  const mid = spinnerRows(t, undefined, NARR, 17, 9_000, 118, 4).map(l => text(l))
-  expect(mid[0]?.match(/╮ ╭/g)?.length).toBe(1)
-  expect(mid[0]).toContain('╭─ to-do · 3 of 5') // the to-dos keep their card
-  expect(mid[1]).toMatch(/■ 1 .*◆ 4 .*□ 5/) // all five cells: the now card gives way to its floor for them
-  expect(mid.some(r => /│ tests · run 2  .*pass/.test(r))).toBe(true) // the task card's first row is the now card's fact
+  expect(wide[1]).toMatch(/■ 1 .*◆ 4 .*□ 5/) // all five cells
+  expect(wide[1]).toMatch(/^│ tests · run 2  .*pass/) // the task card's fact is the now card's first row
 })
 
-test('round 16: narration wraps whole and the last step keeps its own row; beside to-do cells the prose takes three rows', async () => {
+test('round 21: fact rows, most telling first: the task fact, the narration when on, the last step', async () => {
   const t = midFix()
-  const out = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 4).map(l => text(l))
-  const nowCol = (r: string) => r.slice(0, r.indexOf('│', 1) + 1)
-  const rows = out.slice(1, 5).map(nowCol).map(r => r.slice(2, -2).trimEnd())
-  expect(rows.join(' ').replace(/\s+/g, ' ')).toContain('the assert wants 6 and it returns 5.')
-  expect(rows.at(-1)).toMatch(/^last: /) // the fact row last, the story whole above it
-  expect(rows.slice(0, 3).every(r => r !== '')).toBe(true) // three rows of prose, the now card no wider than that needs
-  expect(rows[0]?.length ?? 0).toBeLessThan(50)
-  // at 3 rows the blank goes first; the fact row stays
-  const three = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 3).map(l => text(l)).slice(1, 4).map(nowCol)
-  expect(three[2]).toMatch(/last: /)
+  const nowCol = (r: string) => r.slice(2, r.indexOf('│', 1) - 1).trimEnd()
+  const four = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 5).map(l => text(l)).slice(1, 4).map(nowCol)
+  expect(four[0]).toMatch(/^tests · run 2  /)
+  expect(four[1]).toMatch(/^» /) // the narration, one row
+  expect(four[2]).toMatch(/^last: /)
+  const plain = spinnerRows(t, undefined, null, 17, 9_000, 188, 4).map(l => text(l)).slice(1, 3).map(nowCol)
+  expect(plain[1]).toMatch(/^last: /) // narration off: the last step takes its row
+  const one = spinnerRows(t, undefined, NARR, 17, 9_000, 188, 3).map(l => text(l)).slice(1, 2).map(nowCol)
+  expect(one[0]).toMatch(/^tests · run 2  /) // one fact row: the task fact
 })
 
 test('round 16: a card asks for its content width; the prose card takes what is left', async () => {
@@ -949,12 +952,12 @@ test('round 16: the spinner takes one more body row on a tall terminal', async (
   await $.prompt.submit(submit)
   const at = async (rows: number) => {
     const m = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps, viewport: { columns: 120, rows } })
-    const n = (await m.findAll({ type: 'Text', text: /^│ $/ })).length
+    const n = (await m.findAll({ type: 'Text', text: /^┃ $/ })).length
     await m.unmount()
     return n
   }
-  expect(await at(50)).toBe(2 * 4) // two cards × 4 body rows
-  expect(await at(35)).toBe(2 * 3)
+  expect(await at(50)).toBe(4) // the to-do card's body rows
+  expect(await at(35)).toBe(3)
 })
 
 test('the filmstrip colors each step by its kind, failures red, the live one blinking; to-do bookkeeping left out', async () => {
@@ -987,8 +990,10 @@ test('mood comes from measured steps: exploring, focused, stuck, closing, thinki
   finishStep(f, 'b3', 'Bash', { command: 'npm test' }, false, 'Tests: 3 failed, 0 passed, 3 total', undefined, 9_500)
   expect(mood(f, undefined, 10_000)?.word).toBe('stuck')
   const stuck = spinnerRows(f, undefined, null, 10, 10_000, 188, 3).map(l => text(l))
-  expect(stuck[0]?.slice(0, 60)).not.toContain('╌') // stuck: the now card is red but still
-  expect(stuck[0]).toContain('╌') // the failing tests card walks
+  // round 21: the now card reports the failure, so it turns red and is the one that walks
+  const nowTop = stuck[0]?.slice(0, stuck[0].indexOf('┏'))
+  expect(nowTop).toContain('╌')
+  expect(stuck[0]?.slice(stuck[0].indexOf('┏'))).not.toContain('╌')
   expect(text(nowCard(f, undefined, null, 10_000).lines[0])).toMatch(/^✕ stuck · /)
   expect(nowCard(f, undefined, null, 10_000).tone).toBe('fail')
   startStep(f, 'b4', 'Bash', { command: 'npm test' }, 11_000)
@@ -1051,13 +1056,12 @@ test('motion budget: calm cards hold still; only a failing card walks its border
   expect(still(5_000)[0]).toBe(still(6_000)[0])
   expect(still(5_000).at(-1)?.replace(/\d+s/, '')).toBe(still(6_000).at(-1)?.replace(/\d+s/, '')) // only the clock's figure changes
   expect(still(5_000).join('')).not.toContain('╌')
-  const f = midFix() // the tests card is failing
+  const f = midFix() // the tests are failing: the now card reports it
   const a = spinnerRows(f, 'tool-use', null, 10, 9_000, 188, 3).map(l => text(l))
   const b = spinnerRows(f, 'tool-use', null, 10, 10_000, 188, 3).map(l => text(l))
-  expect(a.at(-1)).not.toBe(b.at(-1))
-  const nowPart = (r?: string) => r?.slice(0, 40).replace(/turn \d+s ─?/, '')
-  expect(nowPart(a.at(-1))).not.toContain('╌') // the now card does not walk
-  expect(nowPart(b.at(-1))).not.toContain('╌')
+  expect(a[0]).not.toBe(b[0]) // the now card walks, one frame to the next
+  const todoPart = (r?: string) => r?.slice(r.indexOf('┏'))
+  expect(todoPart(a[0])).toBe(todoPart(b[0])) // the to-do card holds still
 })
 
 test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flashes once, a tone change fades through dim', async () => {
@@ -1072,14 +1076,14 @@ test('one-time transitions: a step lands ▁▃▅ then holds, a done to-do flas
   expect(todoCard(t, 10, 6_100).tiles?.[3]?.look).toEqual({ color: t.todos[3]?.color, bold: true })
   expect(todoCard(t, 10, 7_000).tiles?.[3]?.look).toEqual({ color: t.todos[3]?.color, strike: true })
   const memo = { tones: {} }
-  const borderOf = (rows: ReturnType<typeof spinnerRows>, i: number) => rows[0]?.filter(s => s.t.includes('╭'))[i]
+  const borderOf = (rows: ReturnType<typeof spinnerRows>) => rows[0]?.find(s => s.t.includes('╭'))
   spinnerRows(t, undefined, null, 10, 6_000, 188, 3, memo)
-  startStep(t, 'b9', 'Bash', { command: 'npm test' }, 6_040) // the tests card goes from failing to passing
+  startStep(t, 'b9', 'Bash', { command: 'npm test' }, 6_040) // the tests go from failing to passing: the now card leaves red
   finishStep(t, 'b9', 'Bash', { command: 'npm test' }, true, 'Tests: 3 passed, 3 total', undefined, 6_050)
   const fading = spinnerRows(t, undefined, null, 10, 6_100, 188, 3, memo)
   const settled = spinnerRows(t, undefined, null, 10, 7_000, 188, 3, memo)
-  expect(borderOf(fading, 2)?.dim).toBe(true)
-  expect(borderOf(settled, 2)?.color).toBe(TONE_COLOR[taskCard(t, 7_000).tone])
+  expect(borderOf(fading)?.dim).toBe(true)
+  expect(borderOf(settled)?.dim).not.toBe(true)
 })
 
 test('context past 85% walks its gauge at the tick; below, it holds', async () => {
@@ -1089,16 +1093,17 @@ test('context past 85% walks its gauge at the tick; below, it holds', async () =
   expect(ctx(60, 1_000)).toBe(ctx(60, 2_000))
 })
 
-test('the walk keeps one rhythm across segment joins, and a card that moves place does not fade', async () => {
+test('the walk keeps one rhythm, and the cards never trade places', async () => {
   const f = midFix()
-  const tray = text(spinnerRows(f, 'tool-use', null, 10, 9_000, 188, 3).at(-1))
-  const span = tray.slice(tray.lastIndexOf('┴') + 1)
+  const top = text(spinnerRows(f, 'tool-use', null, 10, 9_000, 188, 3)[0])
+  const span = top.slice(top.indexOf('─'), top.indexOf('╮'))
   expect(span).not.toMatch(/──|╌╌/) // strictly alternating once walking
-  const memo = { tones: {} }
-  f.todos = [] // a to-do card with only a border note gives way below 140 columns
-  spinnerRows(f, undefined, null, 72, 9_000, 188, 3, memo) // three cards: now, to-do (▲ context), tests
-  const two = spinnerRows(f, undefined, null, 72, 9_100, 118, 3, memo) // two cards: tests moves to place 1
-  expect(two[0]?.filter(s => s.t.includes('╭'))[1]?.dim).not.toBe(true)
+  f.todos = [] // no list: the to-do card keeps its place, slim
+  for (const cols of [188, 118, 72]) {
+    const r = text(spinnerRows(f, undefined, null, 72, 9_000, cols, 3)[0])
+    expect(r.startsWith('╭')).toBe(true)
+    expect(r).toMatch(/ ┏━ to-do .*┓$/)
+  }
 })
 
 test('round 17: more to-dos than fit slide a window over the list, kept in order, counts at both ends', async () => {
@@ -1439,7 +1444,7 @@ test('20a: tests back to green sweep the bar from empty and light the title; the
   expect(text(at(600).lines[0])).not.toContain('░') // full
   expect(at(5000).isLit).toBeFalsy()
   expect(celebrations(t)[0]).toEqual({ kind: 'celebrate', text: 'green', fact: 'after 1 failing run' })
-  const lit = spinnerRows(t, undefined, null, 17, end + 100, 188, 4).map(l => l.find(g => g.bg === 'green' && g.t.includes('tests')))
+  const lit = spinnerRows(t, undefined, null, 17, end + 100, 188, 4).map(l => l.find(g => g.bg === 'green' && g.t.includes('tests'))) // round 21: the fact row's label
   expect(lit.some(Boolean)).toBe(true)
   startStep(t, 'w', 'TodoWrite', { todos: [{ content: 'a', status: 'in_progress' }] }, 6000)
   startStep(t, 'w2', 'TodoWrite', { todos: [{ content: 'a', status: 'completed' }] }, 7000)
