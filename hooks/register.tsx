@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, compact, deviceGlyph, lastTurn, where, type Line, type Mode } from './cards'
+import { TONE_COLOR, compact, lastTurn, where, type Line, type Mode } from './cards'
 import { bar } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
@@ -638,6 +638,13 @@ export const register: Register = (on, options) => {
     const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
     // An empty row takes no height: the spacer holds a space.
     sections.unshift({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...(dna.length ? dna : [[{ t: 'no steps yet this session', dim: true }]]), [{ t: ' ' }], ...genome.key(cols ?? 80, marks)] })
+    // Round 21: what left the idle strip lives here: how the last turn went, where this is, how long.
+    const l = s.turn ? null : await read($, last)
+    const tone = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
+    const at = await $.clock.now()
+    const lastRows: Line[] = l ? [[{ t: ` ${l.name ?? l.title ?? 'turn'} `, bg: tone ?? 'gray', color: 'black' }, { t: ` ${l.title ?? 'turn'} · `, dim: true }, { t: l.headline, color: tone }], ...(l.moment ? [tile(l.moment)] : []), ...(l.memo ?? []).map((m): Line => [{ t: m, dim: true }])] : []
+    const hereRows: Line[] = [[{ t: where(await here($, s), s.home) }], ...(s.rec.startedAt !== undefined ? [[{ t: `${span(at - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }]] : [])]
+    sections.splice(1, 0, ...(lastRows.length ? [{ title: 'last turn', rows: lastRows }] : []), { title: 'here', rows: hereRows })
     const best = recordRows(s.records)
     if (best.length) sections.push({ title: 'records · this folder', rows: best })
     // Round 20e: the files this session touched, newest touch first, each touch a genome cell.
@@ -688,13 +695,9 @@ export const register: Register = (on, options) => {
     await loadGenome($, s)
     const l = s.isHidden ? null : await read($, last)
     const { Box, Text } = $.ui.resolve(e)
-    // The device mod is optional: absent, the strip draws as it did.
-    const cls = await deviceClass($)
-    const glyph = deviceGlyph(cls)
-    // On a phone (47 cols) the tail was cut mid-word; the strip stops at the headline there.
-    const hasTail = cls !== 'mobile'
+    // The device mod is optional: absent, the strip draws the desktop form. A phone gets the short form.
+    const hasTail = (await deviceClass($)) !== 'mobile'
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
-    const folder = where(await here($, s), s.home, !hasTail)
     const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
@@ -706,27 +709,15 @@ export const register: Register = (on, options) => {
     const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
-    const color = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
-    // How the turn ended on a tile in its tone; each owed to-do on a tile in its own hue.
+    // Round 21 (pick): the strip keeps ctx, cache, still owed and the genome, in that order, each in one
+    // place; the folder, the last turn, its moment and memo, the session's age moved to /xray. A failing
+    // health check still shows (red, only when missing).
     const owed = (l?.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
-    const memoText = hasTail && l?.memo?.length ? `  ·  ${l.memo.join('  ·  ')}` : ''
-    // Round 20: the one tile slot sits where the memo does; on a phone it takes its own row.
-    const moment: Line = l?.moment && hasTail ? [{ t: '  ' }, ...tile(l.moment)] : []
-    const owedCells = !hasTail ? 0 : 14 + (owed.length ? owed.reduce((a, x) => a + x.t.length + 2, 0) + owed.length - 1 : 'nothing ✓'.length)
-    const turnCells = l ? 13 + (l.name ?? l.title ?? 'turn').length + (l.name && hasTail ? (l.title ?? 'turn').length + 3 : 0) + 2 + 1 + l.headline.length + cells(moment) + memoText.length + owedCells : 0
-    // Round 20f: the cache bar and the session's age are extras: they give way when they would push the
-    // whole genome off this line, since the genome is what the line is for.
-    const age: Line = hasTail && s.rec.startedAt !== undefined ? [{ t: `  ${span(now - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }] : []
-    const cacheOf = (isBar: boolean) => (s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, isBar))
-    const leadOf = (isExtra: boolean): Line => [...(glyph ? [{ t: `${glyph} ` }] : []), ...(folder ? [{ t: `${folder}  ` }] : []), ...gauge, ...cacheOf(isExtra), ...(isExtra ? age : []), ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
-    // The strip's width in cells, to know the room left for the genome on its line (glyph = 2 cells).
-    const usedOf = (lead: Line) => cells(lead) + (glyph ? 1 : 0) + turnCells
-    const roomOf = (lead: Line) => width - usedOf(lead) - 3 - EDGE_MARK
-    const extra = leadOf(true)
-    // They cost nothing when the genome is on its own row anyway (a long last-turn line pushes it there).
-    const isWhole = (room: number) => genome.shown(s.rec.turns, room) >= s.rec.turns.length
-    const isExtra = hasTail && (s.isHidden || !isWhole(roomOf(leadOf(false))) || isWhole(roomOf(extra)))
-    const lead = isExtra ? extra : leadOf(false)
+    const owedLine: Line = !l ? [] : hasTail
+      ? [{ t: '   still owed ', dim: true }, ...(owed.length ? owed.flatMap((x, i): Line => [...(i ? [{ t: ' ' }] : []), { t: ` ${x.t} `, bg: x.color ?? 'cyan', color: 'black' }]) : [{ t: 'nothing ✓', color: 'green' }])]
+      : [{ t: '  owed ', dim: true }, owed.length ? { t: String(owed.length), color: 'yellow' } : { t: '0 ✓', color: 'green' }]
+    const cache: Line = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, hasTail)
+    const lead: Line = [...gauge, ...cache, ...owedLine, ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
       const room = width - used - 3 - EDGE_MARK
@@ -735,37 +726,14 @@ export const register: Register = (on, options) => {
       if (!segs.length) return null
       return [<Text key="gtpad">{' '.repeat(Math.max(1, width - used - cells(segs) - EDGE_MARK))}</Text>, ...ink(segs, 'gt', Text)]
     }
-    const onLine = right(usedOf(lead))
-    const phoneMoment = l?.moment && !hasTail && !s.isHidden ? genomeRows([tile(l.moment, false)], 'im', Text) : null
+    const onLine = right(cells(lead))
 
     return (
       <Box paddingX={1} flexDirection="column">
         <Text wrap="truncate-end">
           {ink(lead, 'ld', Text)}
-          {l ? (
-            <Text>
-              <Text dimColor>{hasTail || !l.name ? '   last turn ' : '  '}</Text>
-              <Text color={color} dimColor={!color} inverse>{` ${l.name ?? l.title ?? 'turn'} `}</Text>
-              {l.name && hasTail ? <Text dimColor>{` ${l.title ?? 'turn'} ·`}</Text> : null}
-              <Text color={color}>{` ${l.headline}`}</Text>
-              {ink(moment, 'mo', Text)}
-              {memoText ? <Text dimColor>{memoText}</Text> : null}
-              {hasTail ? <Text dimColor>{'   still owed '}</Text> : null}
-              {!hasTail ? null : owed.length ? (
-                owed.map((x, i) => (
-                  <Text key={`o${i}`}>
-                    {i ? ' ' : ''}
-                    <Text color={x.color ?? 'cyan'} inverse>{` ${x.t} `}</Text>
-                  </Text>
-                ))
-              ) : (
-                <Text color="green">nothing ✓</Text>
-              )}
-            </Text>
-          ) : null}
           {onLine}
         </Text>
-        {phoneMoment}
         {onLine ? null : ownRow}
       </Box>
     )

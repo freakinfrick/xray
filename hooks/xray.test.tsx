@@ -599,12 +599,12 @@ const fakeDevice = {
   },
 }
 
-test('the idle strip leads with 📱 when the device mod says mobile', { plugins: [fakeDevice] }, async ($, on) => {
+test('round 21: on a phone the idle strip keeps its short form', { plugins: [fakeDevice] }, async ($, on) => {
   on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
-  expect(await ui.find({ type: 'Text', text: /📱/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /owed/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /last turn|📱/ })).toBeUndefined() // moved to /xray (pick)
   await ui.unmount()
 })
 
@@ -615,20 +615,19 @@ const fakeDesktop = {
   },
 }
 
-test('on a desktop the idle strip keeps its still-owed tail', { plugins: [fakeDesktop] }, async ($, on) => {
+test('round 21: on a desktop the idle strip keeps still owed, and the last turn moved to /xray', { plugins: [fakeDesktop] }, async ($, on) => {
   on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
-  expect(await ui.find({ type: 'Text', text: /🖥/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /last turn|🖥/ })).toBeUndefined()
   await ui.unmount()
 })
 
-test('without the device mod the idle strip draws as before, no glyph', async ($, on) => {
+test('without the device mod the idle strip draws the desktop form', async ($, on) => {
   on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
-  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /📱|🖥|⌂/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /📱|🖥|⌂/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -1125,37 +1124,37 @@ test('round 17: the folder reads as the status line showed it', async () => {
   expect(where('', '/home/u')).toBe('')
 })
 
-test('round 17: between turns the strip carries folder and context, health only when a check fails, and stays under /xray off', async ($, on) => {
+test('round 21: between turns the strip carries context, health only when a check fails, and stays under /xray off', async ($, on) => {
   engine(on, { HOME: '/h' })
   on('fs.exists', () => ({ value: false }) as never) // the ponytail skill is gone
   on('fs.read', () => ({ value: '## 7.2 Grammar (caveman compression)' }) as never)
   await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
   let ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
-  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: / 10%/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeUndefined() // the folder moved to /xray (pick)
   expect(await ui.find({ type: 'Text', text: /ponytail skill missing/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /style rules/ })).toBeUndefined() // that check passed: nothing drawn
   await ui.unmount()
   await $.command.run({ command: 'xray', args: 'off', origin: { kind: 'composer' } } as never)
   ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
-  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined() // the cards hide, the status figures stay
+  expect(await ui.find({ type: 'Text', text: / 10%/ })).toBeDefined() // the cards hide, the status figures stay
   await ui.unmount()
 })
 
-test('round 17: after a turn the strip leads with the folder, then how the turn ended', async ($, on) => {
+test('round 21: what left the strip is in /xray: the last turn, the folder', async ($, on) => {
   engine(on, { HOME: '/h' })
   on('fs.exists', () => ({ value: true }) as never)
   on('fs.read', () => ({ value: 'caveman compression' }) as never)
-  on('state.get', async () => ({ value: { value: LAST, version: 1 } }))
+  on('state.get', async (_$, e) => ({ value: { value: (e as { key: string }).key === 'last' ? LAST : null, version: 1 } }))
   await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
+  expect(await ui.find({ type: 'Text', text: /^last turn$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /all 11 pass/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /last turn/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /missing/ })).toBeUndefined()
   await ui.unmount()
 })
 
-test('round 17: the folder follows the session after a cd, as the status line did', async ($, on) => {
+test('round 17: the folder follows the session after a cd, as the status line did (now in /xray)', async ($, on) => {
   engine(on, { HOME: '/h' })
   on('fs.exists', () => ({ value: true }) as never)
   on('fs.read', () => ({ value: 'caveman compression' }) as never)
@@ -1163,7 +1162,7 @@ test('round 17: the folder follows the session after a cd, as the status line di
   on('session.cwd', () => ({ value: cwd }) as never)
   await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
   cwd = '/h/proj/sub'
-  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
   expect(await ui.find({ type: 'Text', text: /~\/proj\/sub/ })).toBeDefined()
   await ui.unmount()
 })
