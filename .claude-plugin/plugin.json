@@ -1,7 +1,7 @@
 {
   "name": "xray",
   "version": "0.1.0",
-  "description": "xray-spinners: glanceable cards under the spinner showing what Claude is doing, what is left on its plate, and how the task stands",
+  "description": "xray-spinners: two glanceable cards under the spinner, what Claude is doing and its to-do list, plus a session genome: every step, one colored cell",
   "types": "./types/index.d.ts",
   "author": {
     "name": "freakinfrick"

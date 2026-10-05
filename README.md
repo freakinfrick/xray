@@ -47,7 +47,7 @@ Claude Code offers the task tools only to some older ones, and the to-do card st
 - `narration` (default off): a one-line » from Haiku at task start and on the first failure, at
   most once a minute, as the now card's last fact row.
 - `customCards` (default on): for a git bisect, a benchmark loop, a k/N batch or a long rebuild,
-  Haiku picks which measured fact the now card shows.
+  Haiku lays out a task card from measured widgets; its first row leads the now card's facts.
 - `CLAUDE_HUMAN_MODS=off` in the environment turns xray off (used for unattended agent panes).
 
 ## Development
