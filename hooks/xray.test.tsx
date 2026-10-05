@@ -1334,6 +1334,19 @@ test('genome: a /resume or /clear swaps the session id with no session.start; th
   await ui.unmount()
 })
 
+test('genome: on a phone the idle strip keeps the genome to one row, oldest turns folded', { plugins: [fakeDevice] }, async ($, on) => {
+  engine(on, { HOME: '/h' }, undefined, { 'genome:p': { turns: Array.from({ length: 30 }, () => 'rrecx'), names: [], marks: [], files: [], startedAt: 0 } })
+  on('session.id', () => ({ value: 'p' }) as never)
+  await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
+  const at = async (columns: number) => {
+    const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never, viewport: { columns, rows: 40 } })
+    const n = (await ui.findAll({ type: 'Text', text: /\[▌/ })).filter(x => !/\[▌.*\[▌/.test(String(x.props?.children ?? ''))).length
+    await ui.unmount()
+    return n
+  }
+  expect(await at(47)).toBe(1)
+})
+
 test('genome: the live turn blinks its running step at the end; the store keeps the newest sessions', async () => {
   const t = newTurn('x', 0)
   startStep(t, 'e', 'Edit', { file_path: 'a.ts' }, 0)

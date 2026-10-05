@@ -671,8 +671,9 @@ export const register: Register = (on, options) => {
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
     // Between turns the whole genome shows (user, 2026-10-03): on the strip's line only when every turn fits
-    // there; otherwise its own rows under the strip, wrapped, nothing folded.
-    const own = s.isHidden ? [] : genome.labelRight(genome.rows(s.rec.turns, width - genome.EDGE_LABEL.length - 1, { maxRows: Infinity }), width)
+    // there; otherwise its own rows under the strip, wrapped, nothing folded. On a phone one row, the oldest
+    // turns folded (user, 2026-10-04): wrapped, it pushed the prompt down the screen.
+    const own = s.isHidden ? [] : genome.labelRight(genome.rows(s.rec.turns, width - genome.EDGE_LABEL.length - 1, { maxRows: hasTail ? Infinity : 1 }), width)
     const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
