@@ -1,6 +1,5 @@
 """Round 21 taste probe: pairs that differ on ONE visual idea each, same content. Every line measured."""
 import json, sys, html
-sys.path.insert(0, '~/claude/mods/xray/tools')
 from mockup import W, pad, wrap, to_html
 
 SW = 54  # swatch width

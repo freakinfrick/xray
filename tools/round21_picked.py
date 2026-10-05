@@ -1,7 +1,6 @@
 """Round 21b: layouts drawn from the taste probe. Two variants differ only in grouping (one card + divider
 vs two cards). Every line measured."""
 import json, sys
-sys.path.insert(0, '~/claude/mods/xray/tools')
 from mockup import W, pad, to_html, check, hjoin
 
 TODOS = [('done', 'Read sum.js'), ('live', 'Read the test'), ('todo', 'Fix the off-by-one bug'), ('todo', 'Run node --test')]

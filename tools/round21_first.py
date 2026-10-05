@@ -1,6 +1,5 @@
 """Round 21 mockups: three ways to give xray a hierarchy and fixed slots. Every line measured."""
 import json, sys
-sys.path.insert(0, '~/claude/mods/xray/tools')
 from mockup import W, pad, wrap, card, closed, hjoin, to_html, check
 
 # ── the live fixture turn, paused at to-do 2 of 4 ──
