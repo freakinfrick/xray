@@ -378,9 +378,10 @@ export const register: Register = (on, options) => {
     return { text: opened.isPlaced ? 'panel open. /xray or Esc closes it.' : 'panel waits for a wider terminal.' }
   })
 
-  // Round 21: core's "task tools haven't been used" reminder reads core's store, which xray now keeps
-  // empty; left on it would fire every turn. Answered once per process, so it stays off after /xray off.
-  on('prompt.attachment', { type: 'todo_reminder' }, async ($, e, next) => (isOff(s) ? next(e) : { text: null }))
+  // Round 21: core's "task tools haven't been used" reminder (`task_reminder`; `todo_reminder` is
+  // TodoWrite's) reads core's store, which xray keeps empty; left on it would fire every turn. Answered
+  // once per process, so it stays off after /xray off.
+  for (const type of ['task_reminder', 'todo_reminder'] as const) on('prompt.attachment', { type }, async ($, e, next) => (isOff(s) ? next(e) : { text: null }))
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)

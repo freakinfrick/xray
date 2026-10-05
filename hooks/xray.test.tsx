@@ -1687,3 +1687,20 @@ test('round 21: any pane under 60 columns gets the short idle strip, so still ow
   expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('round 21: core\'s task-tool reminder is left out while xray answers the task tools', async ($, on) => {
+  engine(on, {})
+  on('prompt.attachment', ($, e) => ({ text: (e as { text: string }).text }) as never)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const said = (type: string) => $.prompt.attachment({ type, text: "The task tools haven't been used recently." } as never)
+  expect((await said('task_reminder')).text).toBeNull()
+  expect((await said('todo_reminder')).text).toBeNull()
+  expect((await said('date_change')).text).toBe("The task tools haven't been used recently.")
+})
+
+test('with CLAUDE_HUMAN_MODS=off core\'s task-tool reminder stays', async ($, on) => {
+  engine(on, { CLAUDE_HUMAN_MODS: 'off' })
+  on('prompt.attachment', ($, e) => ({ text: (e as { text: string }).text }) as never)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  expect((await $.prompt.attachment({ type: 'task_reminder', text: 'x' } as never)).text).toBe('x')
+})
