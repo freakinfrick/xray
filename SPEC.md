@@ -799,3 +799,23 @@ the RIGHT at every width; "now" card on the left: terse fact rows, ┄ divider, 
 word labels); fail turns the now card's border red. Idle strip: ctx · cache · still owed · genome.
 Claude Code's to-do list hidden by xray answering the task tools. Narration → terse facts (setting stays).
 Mockup: `.explainers/2026-10-05-xray-round21b.html` (scratch generator `r21b.py`, copy into tools/ at build).
+
+### Round 21 — built (2026-10-05, cefb568 → c8e89a0, built in a worktree, fast-forwarded per step)
+1. To-do takeover (`hooks/tasks.ts`): xray answers TaskCreate/Update/List/Get in `tool.call` (subagents'
+   too) from a per-session store `tasks:<sessionId>`; core never runs them, so its list never opens.
+   Core's `todo_reminder` attachment is answered `{ text: null }` while xray is on. Live: no `⎿ ◼` list in
+   any capture, replies read as core's (`Task #1 created successfully: …`).
+2. Layout (`layout.ts spinnerRows`): now card left (band, fact rows, ┄ divider, gauges, folder in its
+   bottom edge), to-do card right at every width (heavy ┏━┓, `to-do ■◆□□ 2/4` in its border, cells on every
+   body row, slim "no to-do list yet" when empty). Gone: progress card, ▸ row, shared tray (`┴─┴` finding
+   closed). A failing run turns the now card red and walks it; 20a's green sweep lights the fact label.
+   Narration default `off` (plugin.json); when on it takes the second fact row.
+3. Idle strip: ctx · cache · still owed · genome (+ health only when failing). Last turn, moment, memo,
+   folder, age → `/xray` panel (`last turn`, `here` sections). Short form under 60 cols as well as on phones.
+4. Phone: one heavy card; live to-do patch + squares, narration (when on), task fact or the step gauge
+   aligned with ctx; gauges in the bottom edge.
+Also: `burst()` caught its unload rejection (a hot reload mid-burst left an unhandled rejection).
+Unseen live: heavy glyphs in Konsole and Termius (renderer draws one weight); `/resume` keeping task ids;
+a subagent's task calls; `/xray off` mid-session (core's store and xray's diverge: known limit).
+Still open: working-state genome row (`(▌▌` far left, `genome` far right at 190 cols); `taskCard`'s
+sub-cards now only feed one fact row (their side columns/foot rows are dead weight, not removed).
