@@ -432,7 +432,21 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     const counts: Line = [...filmstrip(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
-  const progress: Line = taskCard(t, now).lines[0] ?? []
+  // Round 21: row 1 the live to-do as a patch in its hue (the whole run painted, so the text keeps its
+  // column), its squares after it; row 2 one fact: the narration when on, the task's fact, the last step.
+  const task = taskCard(t, now)
+  const cur = t.todos.findIndex(x => x.status === 'in_progress')
+  const curTodo = t.todos[cur]
+  const room = inner - (todo ? cells(todo) + 1 : 0)
+  const patch = curTodo && room >= 8 ? ` ${MARK.live} ${cur + 1} ${curTodo.text}` : ''
+  const todoRow: Line | undefined = patch ? [{ t: (patch.length > room ? patch.slice(0, room - 1) + '…' : patch).padEnd(room), bg: curTodo?.color ?? 'cyan', color: 'black' }, { t: ' ' }, ...(todo ?? [])] : todo
+  // The fact: the task card's own (tests, files…), else the step gauge in line with the ctx gauge below
+  // (rounds 8–9: both start in one column, 8 cells, one ░ track).
+  const fact: Line = task.title !== 'progress' ? [{ t: task.title, dim: true }, { t: '  ' }, ...(task.lines[0] ?? [])] : (task.lines[0] ?? [])
+  // The narration (when on) or, before any step, the prompt: the one row that may wrap into a second
+  // (round 10: the card grows one row at most, the status's overflow first).
+  const told: Line | undefined = narration || !t.done.length ? sub : undefined
+  const story: Line[] = !told ? [] : more || todoRow ? [clipLine(told, inner)] : wrapOnce(told, inner, inner).filter((l): l is Line => !!l)
   const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : undefined), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
@@ -442,8 +456,8 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
     status,
     more,
     pulse,
-    body: [...(more ? [clipLine(sub, inner)] : wrapOnce(sub, inner, inner).filter((l): l is Line => !!l)), fitParts([progress, todo], inner, '  ')],
-    bottom: fitParts([folder ? [{ t: folder, dim: true }] : undefined, gauge, tok, effort, turn, cache], edge, '  '),
+    body: [...(todoRow ? [clipLine(todoRow, inner)] : []), ...story, ...(t.done.length ? [clipLine(fact, inner)] : [])],
+    bottom: fitParts([gauge, tok, effort, turn, cache, folder ? [{ t: folder, dim: true }] : undefined], edge, '  '),
   }
 }
 

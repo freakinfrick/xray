@@ -560,12 +560,12 @@ export const register: Register = (on, options) => {
         </Text>
       ))
       const cellsOf = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
-      // An edge carrying a line: ╭─ text ───╮, or bare when the line is empty.
+      // An edge carrying a line: ┏━ text ━━━┓ (round 21: the phone's one card is the main card, heavy), or bare when the line is empty.
       const edge = (l: Line, left: string, right: string, key: string) => (
         <Text key={key} wrap="truncate-end">
-          <Text color={color} dimColor={dim}>{l.length ? `${left}─ ` : left + '─'}</Text>
+          <Text color={color} dimColor={dim}>{l.length ? `${left}━ ` : left + '━'}</Text>
           {ink(l, key)}
-          <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '─'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
+          <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '━'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
         </Text>
       )
       // The status as a band: the tone color behind dark text (round 11). It starts right after the
@@ -581,26 +581,26 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           {line}
           <Text key="kt" wrap="truncate-end">
-            <Text color={color} dimColor={dim}>{'╭'}</Text>
+            <Text color={color} dimColor={dim}>{'┏'}</Text>
             {hi(k.status, 'kts')}
             {k.pulse ? <Text color={k.pulse.color}>{` ${k.pulse.t}`}</Text> : null}
-            <Text color={color} dimColor={dim}>{' ' + '─'.repeat(Math.max(1, w - 5 - k.status.length - pulseCells)) + '╮'}</Text>
+            <Text color={color} dimColor={dim}>{' ' + '━'.repeat(Math.max(1, w - 5 - k.status.length - pulseCells)) + '┓'}</Text>
           </Text>
           {k.more ? (
             <Text key="km" wrap="truncate-end">
-              <Text color={color} dimColor={dim}>{'│'}</Text>
+              <Text color={color} dimColor={dim}>{'┃'}</Text>
               {hi(k.more, 'kms')}
-              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - k.more.length)) + '│'}</Text>
+              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - k.more.length)) + '┃'}</Text>
             </Text>
           ) : null}
           {k.body.map((l, r) => (
             <Text key={`kb${r}`} wrap="truncate-end">
-              <Text color={color} dimColor={dim}>{'│ '}</Text>
+              <Text color={color} dimColor={dim}>{'┃ '}</Text>
               {ink(l, `kb${r}`)}
-              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cellsOf(l))) + ' │'}</Text>
+              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cellsOf(l))) + ' ┃'}</Text>
             </Text>
           ))}
-          {edge(k.bottom, '╰', '╯', 'kz')}
+          {edge(k.bottom, '┗', '┛', 'kz')}
           {(e.viewport?.rows ?? Infinity) < SHORT ? null : genomeRows(genome.rows(s.rec.turns, w, { live: s.turn ?? undefined, now, maxRows: 1 }), 'kg', Text)}
         </Box>
       )
@@ -695,8 +695,9 @@ export const register: Register = (on, options) => {
     await loadGenome($, s)
     const l = s.isHidden ? null : await read($, last)
     const { Box, Text } = $.ui.resolve(e)
-    // The device mod is optional: absent, the strip draws the desktop form. A phone gets the short form.
-    const hasTail = (await deviceClass($)) !== 'mobile'
+    // The device mod is optional: absent, the strip draws the desktop form. A phone, or any pane under
+    // NARROW columns, gets the short form (the long one ran its still-owed tail off the edge at 46).
+    const hasTail = (await deviceClass($)) !== 'mobile' && (e.viewport?.columns ?? 100) >= NARROW
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
     const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)

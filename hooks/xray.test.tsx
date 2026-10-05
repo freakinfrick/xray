@@ -686,7 +686,7 @@ test('with the keyboard up (few rows) the panel shows fewer of each', async () =
 })
 
 // Rounds 8–9: under 60 columns one framed card, `width` cells wide: edges hold ≤ width − 6, body rows ≤ width − 4.
-test('on a phone the card grows one row for a long narration, each row within the frame', async () => {
+test('round 21: on a phone the live to-do as a patch, the narration, the step gauge, each row within the frame', async () => {
   const t = busyTurn()
   startStep(t, 'live', 'Bash', { command: 'ls', description: 'List files' }, 900) // a short status: the spare row is the narration's
   t.todos[0] = { ...t.todos[0]!, status: 'completed' }
@@ -697,10 +697,10 @@ test('on a phone the card grows one row for a long narration, each row within th
   expect(k.more).toBeUndefined()
   expect(text(k.bottom).length).toBeLessThanOrEqual(38)
   for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
-  // The narration takes the one spare row instead of being cut.
-  expect(text(k.body[0])).toBe('» checking which of the model files')
-  expect(text(k.body[1])).toBe('  exist on the disk right now')
-  expect(text(k.body[2])).toMatch(/^steps ▌{6}[▌▄]░ 6 done {2}■◆□□□□ 1\/6$/)
+  expect(text(k.body[0])).toMatch(/^ ◆ 2 to-do number 1 +■◆□□□□ 1\/6$/) // the patch keeps its column; squares after it
+  expect(k.body[0]?.[0]?.bg).toBe(t.todos[1]?.color)
+  expect(text(k.body[1])).toMatch(/^» checking which of the model .*…$/) // beside a to-do row the narration keeps one row
+  expect(text(k.body[2])).toMatch(/^steps ▌{6}[▌▄]░ 6 done$/)
   expect(text(k.bottom)).toMatch(/^ctx {2}.{8} 41% {2}\d+ t\/s {2}30s$/)
   expect(k.tone).toBe('live')
 })
@@ -712,11 +712,11 @@ test('the steps and ctx gauges start in one column, both 8 cells', async () => {
   expect(text(taskCard(t, 10_000).lines[0])).toBe('steps ▄░░░░░░░ 0 done')
   finishStep(t, 'a', 'Bash', { command: 'ls' }, false, '', undefined, 10)
   const k = compact(t, undefined, null, 16, 30_000, 44, false)
-  const steps = '│ ' + text(k.body[1])
-  const ctx = '╰─ ' + text(k.bottom)
+  const steps = '┃ ' + text(k.body[0])
+  const ctx = '┗━ ' + text(k.bottom)
   expect(steps.search(/[█▌▄░]/)).toBe(ctx.search(/[█▉▊▋▌▍▎▏░]/))
   expect(steps.slice(8, 16)).toBe('▌░░░░░░░')
-  expect(text(k.body[1])).toContain('1 failed')
+  expect(text(k.body[0])).toContain('1 failed')
   expect(k.tone).toBe('fail')
 })
 
@@ -740,7 +740,7 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   const at = (columns: number, rows: number) => $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Spinner', props: spinnerProps, viewport: { columns, rows } })
   const phone = await at(47, 42)
   expect(await phone.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
-  expect(await phone.find({ type: 'Text', text: /^╭$/ })).toBeDefined()
+  expect(await phone.find({ type: 'Text', text: /^┏$/ })).toBeDefined() // round 21: the one card is the main card, heavy
   const band = await phone.find({ type: 'Text', text: /^ ◇ thinking $/ }) // the status band
   expect((band as { props?: Record<string, unknown> } | undefined)?.props?.backgroundColor).toBe('magenta')
   expect((band as { props?: Record<string, unknown> } | undefined)?.props?.inverse).toBeUndefined()
@@ -756,9 +756,9 @@ test('the spinner draws one framed card at 47 columns, folded at 21 rows, the th
   expect(await wide.find({ type: 'Text', text: /╭─ now/ })).toBeUndefined()
   const wband = await wide.find({ type: 'Text', text: /^ ◇ thinking $/ })
   expect((wband as { props?: Record<string, unknown> } | undefined)?.props?.backgroundColor).toBe('magenta')
-  // Round 16: under 140 columns, and with no to-dos at all, the to-do card folds away; the tray closes the cards.
-  expect(await wide.find({ type: 'Text', text: /╭─ to-do/ })).toBeUndefined()
-  expect(await wide.find({ type: 'Text', text: /^╰─ $/ })).toBeDefined()
+  // Round 21: the to-do card keeps its place on the right even with no list, in its heavy frame.
+  expect(await wide.find({ type: 'Text', text: /^┏━$/ })).toBeDefined()
+  expect(await wide.find({ type: 'Text', text: /no to-do list yet/ })).toBeDefined()
   await wide.unmount()
 })
 
@@ -820,11 +820,11 @@ test('a long status wraps into the spare row, keyboard up or down; the card grow
     for (const r of k.body) expect(text(r).length).toBeLessThanOrEqual(40)
   }
   // The status took the spare row: the narration is cut, the card grows by that one row only.
-  expect(down.body.length).toBe(2)
+  expect(down.body.length).toBe(1)
   expect(text(down.body[0])).toMatch(/^» a narration .*…$/)
   expect(up.body.length).toBe(1)
   // A short status and short narration: no extra row.
-  expect(compact(newTurn('x', 0), undefined, 'short', 20, 1000, 44, false).body.length).toBe(2)
+  expect(compact(newTurn('x', 0), undefined, 'short', 20, 1000, 44, false).body.length).toBe(1)
   expect(compact(newTurn('x', 0), undefined, null, 20, 1000, 44, true).body.length).toBe(1)
 })
 
@@ -1678,4 +1678,12 @@ test('with CLAUDE_HUMAN_MODS=off core keeps the task tools', async ($, on) => {
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'TaskCreate', subject: 'x', description: 'x' } as never)
   expect(core).toBe(1)
+})
+
+test('round 21: any pane under 60 columns gets the short idle strip, so still owed is never cut off', async ($, on) => {
+  on('state.get', async (_$, e) => ({ value: { value: (e as { key: string }).key === 'last' ? LAST : null, version: 1 } }))
+  const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never, viewport: { columns: 46, rows: 40 } })
+  expect(await ui.find({ type: 'Text', text: /owed/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /still owed/ })).toBeUndefined()
+  await ui.unmount()
 })
