@@ -803,7 +803,8 @@ Mockup: `.explainers/2026-10-05-xray-round21b.html` (scratch generator `r21b.py`
 ### Round 21 — built (2026-10-05, cefb568 → c8e89a0, built in a worktree, fast-forwarded per step)
 1. To-do takeover (`hooks/tasks.ts`): xray answers TaskCreate/Update/List/Get in `tool.call` (subagents'
    too) from a per-session store `tasks:<sessionId>`; core never runs them, so its list never opens.
-   Core's `todo_reminder` attachment is answered `{ text: null }` while xray is on. Live: no `⎿ ◼` list in
+   Core's `task_reminder` (and TodoWrite's `todo_reminder`) attachments are answered `{ text: null }` while
+   xray is on (e6f4e71; first build matched only `todo_reminder`, the wrong one). Live: no `⎿ ◼` list in
    any capture, replies read as core's (`Task #1 created successfully: …`).
 2. Layout (`layout.ts spinnerRows`): now card left (band, fact rows, ┄ divider, gauges, folder in its
    bottom edge), to-do card right at every width (heavy ┏━┓, `to-do ■◆□□ 2/4` in its border, cells on every
