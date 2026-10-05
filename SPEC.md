@@ -747,3 +747,55 @@ then go → build → `mods/check.sh xray` → live tmux check → commit.
 - Checked: 110 tests; live (tmux, haiku): fresh picker draws `(▌▌)[▌]` blue/yellow with dim brackets;
   resumed, one turn, /exit: the newest line `(▌▌)[▌](▌)` stays last (Claude Code wrote no stale copy).
 - Risk: depends on Claude Code's undocumented transcript line `{type:'custom-title',customTitle,sessionId}`.
+
+## Round 21 — declutter, hierarchy, own the to-do list (2026-10-05, mockups offered)
+
+User, verbatim: "im still not satisfied with how cluttered the xray feels, and info is not easily
+glanceable, additionally im not satisfied with the vanilla claude code and the to-do reel redundency".
+Interview answers: hide Claude Code's list by force, "i want to see only xray cells", no ctrl+t; keep the
+multi-card setup but "clean, clear, organized, had a real hierarchy, elements that matter constantly are
+sticky for consistant location finding"; idle strip keeps ctx + cache, still owed, genome (the rest moves
+to /xray); width "varies per herdr pane and device" (mock 190 / 120 / 44).
+
+Redundancy inventory (live tmux capture, 190 cols, Haiku, 4-step fixture):
+- current step "Reading sum.js": 4× (CC spinner, CC list ◼, to-do card ▸ row, progress card row 3)
+- the to-do list: 3× (CC `⎿ ◼ ◻` list, to-do card, progress card `to-do ◆□□□ 0/4`), count twice more
+  (to-do title `0 of 4`, progress `0/4`)
+- step narration: 2× (CC `Finding sum.js file` line, now card `last: find sum.js file`)
+- now card: 1 line of content in 4 rows; idle strip: 9 segments, no fixed slots
+- FINDING: the shared tray edge draws `┴─┴` across card gaps when the to-do card is wide (layout.ts tray)
+- FINDING: working genome row shows a lone `(▌▌` at the far left with `genome` far right at 190 cols
+
+Hiding CC's list — measured (CC 2.1.287): every TaskCreate/TaskUpdate core run emits
+`set_expanded_view: "tasks"`, so ctrl+t and `showExpandedTodos` are undone on the next call; the list is a
+sibling of the Spinner line (`st&&M&&F&&F.length>0 → UIn`), out of reach of `ui.render Spinner`.
+What works: `on('tool.call')` answering `{ result }` for the task tools, so core never runs. Probe mod
+(scratchpad, Haiku): CC's list never drew, xray's cells filled normally. Result must match the tool's
+output shape (`TaskCreate → { task: { id, subject } }`, `TaskUpdate → { success, taskId, updatedFields }`;
+a string is rejected). To build: xray keeps the task store and answers TaskCreate/Update/List/Get itself
+(ids, blockedBy, owner, deleted), CC's spinner loses activeForm (xray shows it), and the
+"task tools haven't been used" reminder (`prompt.attachment` todo_reminder) needs checking: CC may think
+the tools are idle and nag.
+User, after the page (2026-10-05): "actually i like the ink. its a good visual grab-block against a noise
+field of chars in the terminal sea". Frames and coloured blocks are anchors, not clutter: declutter by
+cutting repeats, never by cutting borders/patches. Recommendation moved from C to A (three inked bays).
+
+### Round 21 taste probe (2026-10-05, feedback-engine pair deck, 15 pairs, one axis each)
+Deck + labels: `~/claude/.explainers/xray-r21-probe/`. Fast (<5 s) = conviction, slow (>30 s) = torn.
+- Ink: heavy square frame over thin rounded (9.8 s); main card heavier than the rest (4.6 s); titles in the
+  border (2.8 s); outline over filled panel (3.8 s); a failure turns the BORDER red, not a patch (62 s, torn).
+  Frame vs bare: vote lost to a test mishap, but stated: "i like the ink", frames are grab-blocks.
+- Colour: many hues over one accent (32 s); live item as a colour PATCH (37 s) — note: "i like left but the
+  alignment gets ruined" → a patch must never shift the column of the text it covers.
+- Figures: bars + numbers (1.9 s); word labels over glyphs (3.6 s); inline flow over aligned grid (3.2 s).
+- Progress: symbols `■◆□□ 2/4` over a sentence (2.6 s). Voice: terse facts over prose narration (8.8 s).
+- Density: one fact per row, but "airy has too much whitespace" (56 s): rows yes, blank rows no.
+- Grouping: one card with a divider over two small cards (59 s, torn) — read with "likes multi-card".
+- Standing: the to-do cells stay square-ish and large, as today ("i really do like" them).
+
+### Round 21 pick (2026-10-05): "go 1; to-do on the right always though"
+Layout 1: to-do card (heavy square frame, today's filled cells, title `to-do ■◆□□ 2/4` in the border) on
+the RIGHT at every width; "now" card on the left: terse fact rows, ┄ divider, gauges inline (bars+numbers,
+word labels); fail turns the now card's border red. Idle strip: ctx · cache · still owed · genome.
+Claude Code's to-do list hidden by xray answering the task tools. Narration → terse facts (setting stays).
+Mockup: `.explainers/2026-10-05-xray-round21b.html` (scratch generator `r21b.py`, copy into tools/ at build).
