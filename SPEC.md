@@ -820,3 +820,8 @@ Unseen live: heavy glyphs in Konsole and Termius (renderer draws one weight); `/
 a subagent's task calls; `/xray off` mid-session (core's store and xray's diverge: known limit).
 Still open: working-state genome row (`(▌▌` far left, `genome` far right at 190 cols); `taskCard`'s
 sub-cards now only feed one fact row (their side columns/foot rows are dead weight, not removed).
+
+### Round 21 follow-up (2026-10-05): folder back on the idle strip
+- User, verbatim: "in between turns, the xray mod doesnt show the directory but it needs to".
+- Strip now leads with `where()`: full form on desktop, last part on phone / under NARROW. Still also
+  in the `/xray` panel's `here` section. Device glyph stays off the strip.

@@ -1131,7 +1131,7 @@ test('round 21: between turns the strip carries context, health only when a chec
   await $.session.start({ cwd: '/h/proj', surface: 'terminal', isInteractive: true })
   let ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } as never })
   expect(await ui.find({ type: 'Text', text: / 10%/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /~\/proj/ })).toBeUndefined() // the folder moved to /xray (pick)
+  expect(await ui.find({ type: 'Text', text: /^~\/proj/ })).toBeDefined() // the folder leads (user, 2026-10-05)
   expect(await ui.find({ type: 'Text', text: /ponytail skill missing/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /style rules/ })).toBeUndefined() // that check passed: nothing drawn
   await ui.unmount()

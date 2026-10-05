@@ -711,15 +711,17 @@ export const register: Register = (on, options) => {
     const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
-    // Round 21 (pick): the strip keeps ctx, cache, still owed and the genome, in that order, each in one
-    // place; the folder, the last turn, its moment and memo, the session's age moved to /xray. A failing
+    // Round 21 (pick): the strip keeps folder, ctx, cache, still owed and the genome, in that order; the
+    // last turn, its moment and memo, the session's age moved to /xray. A failing
     // health check still shows (red, only when missing).
     const owed = (l?.owed ?? []).map(x => (typeof x === 'string' ? { t: x } : x))
     const owedLine: Line = !l ? [] : hasTail
       ? [{ t: '   still owed ', dim: true }, ...(owed.length ? owed.flatMap((x, i): Line => [...(i ? [{ t: ' ' }] : []), { t: ` ${x.t} `, bg: x.color ?? 'cyan', color: 'black' }]) : [{ t: 'nothing ✓', color: 'green' }])]
       : [{ t: '  owed ', dim: true }, owed.length ? { t: String(owed.length), color: 'yellow' } : { t: '0 ✓', color: 'green' }]
     const cache: Line = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, hasTail)
-    const lead: Line = [...gauge, ...cache, ...owedLine, ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
+    // The folder leads again (user, 2026-10-05): between turns is where you look for which pane this is.
+    const dir = where(await here($, s), s.home, !hasTail)
+    const lead: Line = [...(dir ? [{ t: `${dir}  ` }] : []), ...gauge, ...cache, ...owedLine, ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
       const room = width - used - 3 - EDGE_MARK
