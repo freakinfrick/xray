@@ -88,7 +88,8 @@ export function ink(theme: Theme, l: Line, width = Infinity): string {
 }
 
 // omp's tools → the names and argument keys the core reads (track.ts stepKind/startStep/finishStep).
-// omp passes the call's one-line intent as `i`; it is the step's text when present.
+// omp's spinner line already shows each call's intent (`i`, the why), so a mapped tool keeps the core's
+// own words (the what: "editing calc.py"); only tools the core has no words for say their intent.
 export type Call = { tool: string; input: Record<string, unknown>; say?: string; kind?: 'script' | 'todo' | 'other' }
 export function toCall(name: string, args: unknown, intent?: string): Call {
   const a = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
@@ -96,24 +97,24 @@ export function toCall(name: string, args: unknown, intent?: string): Call {
   const path = { file_path: String(a.path ?? '') }
   switch (name) {
     case 'bash':
-      return { tool: 'Bash', input: { command: String(a.command ?? '') }, say }
+      return { tool: 'Bash', input: { command: String(a.command ?? '') } }
     case 'read':
-      return { tool: 'Read', input: path, say }
+      return { tool: 'Read', input: path }
     case 'grep':
-      return { tool: 'Grep', input: { pattern: String(a.pattern ?? ''), path: String(a.path ?? '') }, say }
+      return { tool: 'Grep', input: { pattern: String(a.pattern ?? ''), path: String(a.path ?? '') } }
     case 'glob':
-      return { tool: 'Glob', input: { pattern: String(a.path ?? '') }, say }
+      return { tool: 'Glob', input: { pattern: String(a.path ?? '') } }
     case 'edit':
-      return { tool: 'Edit', input: path, say }
+      return { tool: 'Edit', input: path }
     case 'write':
-      return { tool: 'Write', input: path, say }
+      return { tool: 'Write', input: path }
     case 'web_search':
-      return { tool: 'WebSearch', input: { query: String(a.query ?? '') }, say }
+      return { tool: 'WebSearch', input: { query: String(a.query ?? '') } }
     case 'web_fetch':
     case 'fetch':
-      return { tool: 'WebFetch', input: { url: String(a.url ?? '') }, say }
+      return { tool: 'WebFetch', input: { url: String(a.url ?? '') } }
     case 'task':
-      return { tool: 'Task', input: { description: say ?? '' }, say }
+      return { tool: 'Task', input: { description: say ?? '' } }
     // Code the model wrote and ran: the core's script kind (python3 - <<EOF).
     case 'eval':
       return { tool: 'eval', input: {}, say: say ?? (typeof a.title === 'string' ? a.title : 'eval'), kind: 'script' }

@@ -33,8 +33,6 @@ type Ctx = {
 type Pi = {
   on(event: string, fn: (e: any, ctx: Ctx) => unknown): void
   registerCommand(name: string, cmd: { description?: string; handler(args: string, ctx: Ctx): unknown }): void
-  getSessionName(): string | undefined
-  setSessionName(name: string): void
 }
 
 const KEY = 'xray'
@@ -51,7 +49,6 @@ type Live = {
   calls: Map<string, Call>
   rec: SessionRec
   id: string
-  ctx: number | null
   mode: Mode
   memo: Memo
   isHidden: boolean
@@ -81,7 +78,7 @@ function writeStore(all: Record<string, unknown>) {
 const isOn = (ctx: Ctx) => ctx.hasUI && ctx.mode === 'tui' && (ctx.agent?.kind ?? 'main') === 'main' && process.env.CLAUDE_HUMAN_MODS !== 'off'
 
 export default function xray(pi: Pi) {
-  const s: Live = { turn: null, prev: null, prompt: '', calls: new Map(), rec: emptyRec(), id: '', ctx: null, mode: undefined, memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
+  const s: Live = { turn: null, prev: null, prompt: '', calls: new Map(), rec: emptyRec(), id: '', mode: undefined, memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
   const redraw = () => s.tui?.requestRender()
 
   function load(ctx: Ctx) {
@@ -139,21 +136,20 @@ export default function xray(pi: Pi) {
     }
     const dna = genome.labelRight(genome.rows(s.rec.turns, cols - genome.EDGE_LABEL.length - 1, { live: t, now, maxRows: 1 }), cols)
     if (cols < NARROW) {
-      const k = compact(t, s.mode, null, s.ctx, now, cols - 2, false)
+      const k = compact(t, s.mode, null, null, now, cols - 2, false)
       const band: Line = [{ t: ` ${k.status} `, bg: TONE_COLOR[k.tone] ?? 'gray', color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
       return [band, ...k.body, k.bottom, ...dna]
     }
-    return [...spinnerRows(t, s.mode, null, s.ctx, now, cols, BODY_ROWS, s.memo, '', false), ...dna]
+    // No context gauge or folder: omp's status line already shows both.
+    return [...spinnerRows(t, s.mode, null, null, now, cols, BODY_ROWS, s.memo, '', false), ...dna]
   }
 
-  // Once a second while a turn runs: elapsed times and the context figure move without an event.
+  // Once a second while a turn runs: elapsed times move without an event.
   function tick(ctx: Ctx) {
     if (s.isTicking) return
     s.isTicking = true
     ctx.setInterval(() => {
-      if (!s.turn) return
-      s.ctx = ctx.getContextUsage()?.percent ?? s.ctx
-      redraw()
+      if (s.turn) redraw()
     }, 1000)
   }
 
@@ -174,7 +170,6 @@ export default function xray(pi: Pi) {
     s.turn = newTurn(s.prompt, Date.now())
     s.calls.clear()
     s.mode = 'requesting'
-    s.ctx = ctx.getContextUsage()?.percent ?? s.ctx
     tick(ctx)
     redraw()
   })
@@ -232,7 +227,7 @@ export default function xray(pi: Pi) {
     redraw()
   })
 
-  pi.on('agent_end', (e: { willContinue?: boolean }, ctx) => {
+  pi.on('agent_end', (e: { willContinue?: boolean }) => {
     const t = s.turn
     if (!t || e.willContinue) return
     const now = Date.now()
@@ -240,14 +235,10 @@ export default function xray(pi: Pi) {
     t.endedAt = now
     const letters = genome.code(t)
     save(letters, { name: nameOf(letters, countedRuns(t), filesRead(t)), files: fileTouches(t, now) })
-    // The genome rides the session's name, as it rides the /resume title in Claude Code. Left alone until
-    // omp (or the person) has named the session, so the base stays theirs.
-    const name = genome.titleOf(pi.getSessionName(), s.rec.turns)
-    if (name) pi.setSessionName(name)
+    // No genome in the session name (spec d6): omp strips ESC from names, so the colours showed as raw codes.
     s.prev = t
     s.turn = null
     s.mode = undefined
-    s.ctx = ctx.getContextUsage()?.percent ?? s.ctx
     redraw()
   })
 
@@ -270,7 +261,7 @@ export default function xray(pi: Pi) {
           render(width: number) {
             if (width === at) return last
             at = width
-            last = panelLines(ctx, width - 4).map(l => (l.length ? '  ' + ink(theme, l, width - 4) : ''))
+            last = framed(theme, panelLines(ctx, width - 4), width)
             return last
           },
           invalidate() {
@@ -315,8 +306,29 @@ export default function xray(pi: Pi) {
         }),
       })
     }
-    const out: Line[] = [[{ t: 'xray', bold: true }, { t: '  any key closes', dim: true }], []]
+    const out: Line[] = []
     for (const sec of sections) out.push([{ t: sec.title, bold: true }], ...sec.rows, [])
-    return out
+    return out.slice(0, -1)
+  }
+
+  // The panel in omp's own overlay chrome: a rounded box in the accent border colour, the name in its
+  // top edge, how to close it in the bottom one. Rows are padded to the width so no chat shows through.
+  function framed(theme: Theme, rows: Line[], width: number): string[] {
+    const box = theme.boxRound ?? { topLeft: '╭', topRight: '╮', bottomLeft: '╰', bottomRight: '╯', horizontal: '─', vertical: '│' }
+    let edge = ''
+    try {
+      edge = theme.getFgAnsi('borderAccent')
+    } catch {}
+    const paint = (t: string) => (edge ? edge + t + '\x1b[0m' : t)
+    const inner = Math.max(10, width - 4)
+    const fit = Math.max(1, (process.stdout.rows ?? 40) - 4)
+    const shown = rows.length > fit ? [...rows.slice(0, fit - 1), [{ t: `+${rows.length - fit + 1} rows`, dim: true }]] : rows
+    const title = ink(theme, [{ t: 'xray', bold: true }])
+    const hint = ink(theme, [{ t: 'any key closes', dim: true }])
+    return [
+      paint(box.topLeft + box.horizontal + ' ') + title + paint(' ' + box.horizontal.repeat(Math.max(1, width - 9)) + box.topRight),
+      ...shown.map(l => paint(box.vertical + ' ') + ink(theme, l, inner) + ' '.repeat(Math.max(0, inner - Math.min(cells(l), inner))) + paint(' ' + box.vertical)),
+      paint(box.bottomLeft + box.horizontal + ' ') + hint + paint(' ' + box.horizontal.repeat(Math.max(1, width - 19)) + box.bottomRight),
+    ]
   }
 }

@@ -37,9 +37,10 @@ test('a line is cut to the width it is given', () => {
 })
 
 test('omp tools map to the shapes the core classifies', () => {
-  expect(toCall('bash', { command: 'git commit -m x', i: 'Committing' })).toEqual({ tool: 'Bash', input: { command: 'git commit -m x' }, say: 'Committing' })
+  expect(toCall('bash', { command: 'git commit -m x', i: 'Committing' })).toEqual({ tool: 'Bash', input: { command: 'git commit -m x' } })
   expect(toCall('read', { path: 'a.ts' }).input).toEqual({ file_path: 'a.ts' })
-  expect(toCall('edit', { path: 'a.ts' }, 'Fixing a').say).toBe('Fixing a')
+  expect(toCall('edit', { path: 'a.ts' }, 'Fixing a').say).toBeUndefined() // the spinner line has the intent
+  expect(toCall('hub', { i: 'Checking jobs' }).say).toBe('Checking jobs')
   expect(toCall('eval', { title: 'Rename' }).kind).toBe('script')
   expect(toCall('todo', { op: 'init' }).kind).toBe('todo')
   expect(toCall('hub', {}).kind).toBe('other')

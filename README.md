@@ -50,7 +50,24 @@ Claude Code offers the task tools only to some older ones, and the to-do card st
   Haiku lays out a task card from measured widgets; its first row leads the now card's facts.
 - `CLAUDE_HUMAN_MODS=off` in the environment turns xray off (used for unattended agent panes).
 
+## oh-my-pi (omp)
+
+`omp/` ports xray to [oh-my-pi](https://github.com/can1357/oh-my-pi) (v18.3.5) as an extension on the
+same core, skinned with omp's theme: the now card under omp's spinner in its rounded frame and theme
+colours, the genome between turns, `/xray` as a framed overlay (`/xray on|off` hides the card). omp keeps
+its own to-do list and status line, so xray draws neither a to-do card nor a folder or context gauge.
+
+```sh
+ln -sfn /path/to/xray/omp ~/.omp/agent/extensions/xray   # or one run: omp -e /path/to/xray/omp/index.ts
+```
+
+No hot reload in omp: restart (`omp -c`) after a change. Design and decisions: `omp/SPEC.md`.
+
+TODO (omp): narration and custom task cards on omp's `smol` model role; the cache countdown, if omp
+ever exposes a cache TTL.
+
 ## Development
 
-`claude plugin validate .` and `claude plugin test` from this folder. Design history and every
+`claude plugin validate .` and `claude plugin test` from this folder (the omp tests run there too;
+`tsc -p omp` type-checks the port). Design history and every
 round of feedback: `SPEC.md`.
