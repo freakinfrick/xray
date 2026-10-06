@@ -13,9 +13,16 @@ freakinfrick/xray is reframed to match. Per-host specs: `omp/SPEC.md` (done), ne
    mode is not patched; xray simply doesn't show there.
 3. **Genome inside the card.** Single-card hosts (omp, pi, hermes, dsh-tui, grok): the genome moves
    into the now card, in the empty space right of the fact rows, wrapping there; no separate row
-   under the card. Claude Code (now card + to-do card): the now card grows downward to hold the genome
-   rows inside its frame at the bottom (agent's reading of "expand the card to capture the genome rows
-   in bottom"; confirm at plan review).
+   under the card. Claude Code (now card + to-do card): the genome stays below the cards as full-width
+   horizontal rows; the cards' border extends down to enclose them (user, 2026-10-06: "still below,
+   horizontal rows, card border just extends down to capture"). The now card's left edge and the
+   to-do card's right edge run on down, one bottom edge closes the shape:
+
+       ╭ now ──────────────╮ ┏━ to-do ■◆□□ 2/4 ━┓
+       │ facts             │ ┃ cells            ┃
+       ╰───────────────────╯ ┗━━━━━━━━━━━━━━━━━━┛   ← cards' own bottoms (or joined tees)
+       │ [▌▌▌#▌▌][▌▌▌▌ …  genome rows, full width  ┃
+       ╰──────────────────────────────────────────┛
 4. **dsh-tui:** in. Our dsh fork's NDJSON event stream (`packages/dsh-headless-resume`) gains call
    ids, full args/results and usage first (~30 lines), then dsh-tui draws the card natively.
 5. **Repo:** fold everything into the public freakinfrick/xray, README reframed as multi-harness.
