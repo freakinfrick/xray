@@ -74,7 +74,8 @@ export function xray(pi: Pi, host: Host) {
   const s: Live = { turn: null, prev: null, prompt: '', calls: new Map(), rec: emptyRec(), id: '', mode: undefined, memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
   const redraw = () => s.tui?.requestRender()
   const paint = (theme: Theme) => (host.tokens ? retoken(theme, host.tokens) : theme)
-  const dir = join(homedir(), host.dir, 'agent', 'xray')
+  // The host's agent dir: both omp and pi move it with PI_CODING_AGENT_DIR (isolated runs, profiles).
+  const dir = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), host.dir, 'agent'), 'xray')
   const store = join(dir, 'genomes.json')
   let timer: unknown = null
 
