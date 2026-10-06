@@ -96,6 +96,8 @@ No hot reload: restart omp after a change. omp and pi share one adapter (`pifami
 
 ## pi
 
+![xray in pi: the now card above pi's spinner, an hour-long genome inside it, then the /xray panel](docs/pi-demo.gif)
+
 The same adapter in [pi](https://github.com/earendil-works/pi) (`@earendil-works/pi-coding-agent`, omp's upstream).
 pi draws its spinner in the editor's top border, so the card sits directly above that line. Turns
 close on `agent_settled` (after retries and compaction), the band takes pi's theme colours, and
@@ -108,6 +110,8 @@ ln -sfn /path/to/xray/pi ~/.pi/agent/extensions/xray
 `/reload` picks up edits. Decisions: [`pi/SPEC.md`](pi/SPEC.md).
 
 ## Hermes (`--tui`)
+
+![xray in Hermes --tui: the now card docked above the status bar, an hour-long genome inside it, then the /xray panel](docs/hermes-demo.gif)
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent)'s full-screen Ink TUI only; classic prompt_toolkit mode shows nothing. A small python
 plugin appends hermes' own tool events (its tool names and args) to a JSONL per TUI process; the TUI
@@ -125,6 +129,8 @@ ln -s "$PWD/plugin"   ~/.hermes/plugins/xray   # then add `- xray` under plugins
 A rebuilt `xray.mjs` hot-loads; plugin changes need a TUI restart. Spec: [`hermes/SPEC.md`](hermes/SPEC.md).
 
 ## Grok Build
+
+![xray in Grok Build: the status line is the whole card, an hour-long genome inside it](docs/grok-demo.gif)
 
 Grok has no widget or overlay API, so xray lives in its status-line row: command hooks append each
 event to `~/.grok/xray/<session>.jsonl`, and a status-line command replays it into the now card with
@@ -147,6 +153,8 @@ command = "node '/path/to/xray/grok/dist/status.mjs'"
 `dist/` is built with esbuild (`ESBUILD=/path/to/esbuild`). Spec: [`grok/SPEC.md`](grok/SPEC.md).
 
 ## dsh-tui
+
+![xray in dsh-tui: the now card under the status line, an hour-long genome inside it, then the /xray view](docs/dsh-demo.gif)
 
 dsh-tui (an Ink TUI over the DeepSeek Harness) carries its own adapter: it feeds the core from its
 NDJSON event stream and draws the now card between its status line and input row, the genome
