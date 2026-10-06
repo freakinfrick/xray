@@ -84,3 +84,14 @@ test('a running test row that is cut short shows one ellipsis, not two', () => {
   expect(text.includes('running…')).toBe(true)
   expect(text.includes('……')).toBe(false)
 })
+
+test('tests chained into a commit make a commit cell, and the run still counts', () => {
+  const t = newTurn('ship', 0)
+  const cmd = 'python3 -m unittest -q && git add -A && git commit -qm "Add wordfreq"'
+  startStep(t, '1', 'Bash', { command: cmd }, 1)
+  finishStep(t, '1', 'Bash', { command: cmd }, true, 'Ran 3 tests in 0.01s\n\nOK\n[master 1a2b3c4] Add wordfreq', undefined, 2)
+  expect(t.done[0]?.kind).toBe('commit')
+  expect(t.done[0]?.say).toBe('testing, then committing')
+  expect(t.runs.length).toBe(1)
+  expect(genome.code(t)).toBe('k')
+})

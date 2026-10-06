@@ -33,7 +33,9 @@ export function stepKind(tool: string, input: Record<string, unknown>): StepKind
   if (tool === 'Agent' || tool === 'Task') return 'agent'
   if (tool === 'Bash') {
     const cmd = String(input.command ?? '')
-    return isTestCommand(cmd) ? 'test' : isCommitCommand(cmd) ? 'commit' : shellKind(cmd)
+    // A commit chained after a test run (`pytest && git commit`) is a commit cell: the run still counts in the
+    // tests card (finishStep reads the command itself), and a commit drawn as a test vanished from the genome.
+    return isCommitCommand(cmd) ? 'commit' : isTestCommand(cmd) ? 'test' : shellKind(cmd)
   }
   return 'other'
 }
