@@ -1,7 +1,7 @@
 {
   "name": "xray",
   "version": "0.1.0",
-  "description": "xray-spinners: two glanceable cards under the spinner, what Claude is doing and its to-do list, plus a session genome: every step, one colored cell",
+  "description": "xray's Claude Code host: two glanceable cards under the spinner, what Claude is doing and its to-do list, plus a session genome (every step, one colored cell). The same core also runs in omp, pi, Hermes, Grok Build and dsh-tui.",
   "types": "./types/index.d.ts",
   "author": {
     "name": "freakinfrick"
