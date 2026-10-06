@@ -61,13 +61,13 @@ its own to-do list and status line, so xray draws neither a to-do card nor a fol
 ln -sfn /path/to/xray/omp ~/.omp/agent/extensions/xray   # or one run: omp -e /path/to/xray/omp/index.ts
 ```
 
-No hot reload in omp: restart (`omp -c`) after a change. Design and decisions: `omp/SPEC.md`.
+No hot reload in omp: restart it after a change. Design and decisions: `omp/SPEC.md`.
 
 TODO (omp): narration and custom task cards on omp's `smol` model role; the cache countdown, if omp
 ever exposes a cache TTL.
 
 ## Development
 
-`claude plugin validate .` and `claude plugin test` from this folder (the omp tests run there too;
-`tsc -p omp` type-checks the port). Design history and every
+`claude plugin validate .` and `claude plugin test` from this folder (the omp tests run there
+too); `../check.sh xray` also type-checks the port. Design history and every
 round of feedback: `SPEC.md`.

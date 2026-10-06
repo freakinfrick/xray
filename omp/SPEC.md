@@ -68,5 +68,6 @@ To-do card, task tools, cache countdown, narration, custom cards, moments/celebr
 
 ## Verify
 
-No hot reload: restart with `omp -c`. Unit tests for the adapter + kind table under bun;
+No hot reload: restart omp (`omp -c` opened a new session from a /tmp folder in the live test, so
+resume with `/resume`). Unit tests for the adapter + kind table under bun;
 done = screenshot of a real omp session (DISPLAY=:10.0 import), working and idle states.
