@@ -74,3 +74,13 @@ test('a clipped line that already trails off takes no second ellipsis', () => {
   const l = clipLine([{ t: 'tests · run 1  ' }, { t: 'running… still going on' }], 24)
   expect(l.map(g => g.t).join('').endsWith('……')).toBe(false)
 })
+
+test('a running test row that is cut short shows one ellipsis, not two', () => {
+  const t = newTurn('go', 0)
+  startStep(t, '1', 'Read', { file_path: '/r/a.py' }, 1)
+  finishStep(t, '1', 'Read', { file_path: '/r/a.py' }, true, 'x', undefined, 2)
+  startStep(t, '2', 'Bash', { command: 'python3 -m unittest' }, 3)
+  const text = spinnerRows(t, undefined, null, null, 4, 90, 3, undefined, '', false).map(l => l.map(g => g.t).join('')).join('\n')
+  expect(text.includes('running…')).toBe(true)
+  expect(text.includes('……')).toBe(false)
+})

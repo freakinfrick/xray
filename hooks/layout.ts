@@ -59,7 +59,9 @@ function keep(rows: Line[], n: number, width: number): Line[] {
   const out = rows.slice(0, Math.max(0, n))
   const last = out[out.length - 1]
   // A full last row gives up its last word to make room for the ellipsis.
-  if (last) out[out.length - 1] = cells(last) < width ? [...last, { t: '…', dim: true }] : clipLine(last, width - 1)
+  // The more-below mark, unless the row already trails off ("running…"): one ellipsis, never two.
+  const trails = !!last && last.map(g => g.t).join('').trimEnd().endsWith('…')
+  if (last && !trails) out[out.length - 1] = cells(last) < width ? [...last, { t: '…', dim: true }] : clipLine(last, width - 1)
   return out
 }
 
