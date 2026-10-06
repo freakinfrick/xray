@@ -68,3 +68,14 @@ test('an omp turn through the core: kinds, genome letters, the card alone at ful
   expect(text[0]?.startsWith('╭')).toBe(true)
   expect(text[text.length - 1]?.endsWith('╯')).toBe(true)
 })
+
+test('a commit through omp bash is a commit cell, chained or not', () => {
+  const t = newTurn('ship', 0)
+  for (const [id, command] of [['1', 'git add wordfreq.py test_wordfreq.py && git commit -m "Add wordfreq"'], ['2', 'cd /tmp/w && git commit -qm x']] as const) {
+    const c = toCall('bash', { command })
+    startStep(t, id, c.tool, c.input, 1)
+    finishStep(t, id, c.tool, c.input, true, '[master bf43b98] Add wordfreq', undefined, 2)
+  }
+  expect(t.done.map(x => x.kind)).toEqual(['commit', 'commit'])
+  expect(genome.code(t)).toBe('kk') // the genome's letter for a commit; drawn as #
+})

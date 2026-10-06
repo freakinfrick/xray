@@ -52,6 +52,8 @@ Claude Code offers the task tools only to some older ones, and the to-do card st
 
 ## oh-my-pi (omp)
 
+![xray in omp: the now card under omp's spinner, the genome, the /xray panel](docs/omp-demo.gif)
+
 `omp/` ports xray to [oh-my-pi](https://github.com/can1357/oh-my-pi) (v18.3.5) as an extension on the
 same core, skinned with omp's theme: the now card under omp's spinner in its rounded frame and theme
 colours, the genome between turns, `/xray` as a framed overlay (`/xray on|off` hides the card). omp keeps
