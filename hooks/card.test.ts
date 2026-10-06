@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import * as genome from './genome'
 import { spinnerRows } from './layout'
+import { clipLine } from './cards'
 import { finishStep, newTurn, startStep } from './track'
 
 const text = (rows: { t: string }[][]) => rows.map(l => l.map(g => g.t).join(''))
@@ -67,4 +68,9 @@ test('idle: the genome alone, labelled at the right edge, one row when narrow', 
   expect(wide[0]?.length).toBe(100)
   expect(genome.idle(Array.from({ length: 30 }, () => 'rrree'), 50).length).toBe(1)
   expect(genome.idle([], 100)).toEqual([])
+})
+
+test('a clipped line that already trails off takes no second ellipsis', () => {
+  const l = clipLine([{ t: 'tests · run 1  ' }, { t: 'running… still going on' }], 24)
+  expect(l.map(g => g.t).join('').endsWith('……')).toBe(false)
 })

@@ -513,7 +513,9 @@ export function clipLine(l: Line, width: number): Line {
   const all = l.map(s => s.t).join('')
   const space = all.lastIndexOf(' ', width - 1)
   const cut = space > width / 3 ? space : width - 1
-  return [...splitLine(l, cut, 0)[0], { t: '…', dim: true }]
+  const kept = splitLine(l, cut, 0)[0]
+  // A kept text that already trails off ("running…") takes no second ellipsis.
+  return kept.map(g => g.t).join('').trimEnd().endsWith('…') ? kept : [...kept, { t: '…', dim: true }]
 }
 
 const clock = (ms: number) => {

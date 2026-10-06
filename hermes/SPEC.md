@@ -66,7 +66,7 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.21.5, fork `~/hermes-agen
 
 ## Build, install, verify
 
-    ./build.sh                                  # hermes' esbuild → xray.mjs (commit the built file)
+    ./build.sh                                  # hermes' esbuild → xray.mjs (git-ignored: build after clone)
     ln -s $PWD/xray.mjs ~/.hermes/tui-widgets/xray.mjs
     ln -s $PWD/plugin   ~/.hermes/plugins/xray   # and add `- xray` under plugins.enabled in ~/.hermes/config.yaml
 
