@@ -1,0 +1,3 @@
+name: xray
+version: "1.0"
+description: Feed hermes' tool and turn events to the xray TUI widget (hermes --tui only)
