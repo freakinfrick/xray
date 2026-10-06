@@ -608,7 +608,9 @@ export const register: Register = (on, options) => {
     }
     // Round 16: the wide cards come from layout.ts as exact-width rows; each row is one Text.
     const cols = Math.max(40, (e.viewport?.columns ?? 100) - 2) // never fill the last column
-    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo, where(await here($, s), s.home))
+    // The genome and its note row sit inside the frame, under the cards (HOSTS.md decision 3).
+    const below = withNotes(s.rec, cols - 4, { live: s.turn ?? undefined, now })
+    const rows = spinnerRows(s.turn, s.mode, said, s.ctx, now, cols, (e.viewport?.rows ?? 0) >= TALL ? BODY_ROWS + 1 : BODY_ROWS, s.memo, where(await here($, s), s.home), { below })
 
     return (
       <Box flexDirection="column">
@@ -622,7 +624,6 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         ))}
-        {genomeRows(withNotes(s.rec, cols, { live: s.turn ?? undefined, now }), 'wg', Text)}
       </Box>
     )
   })
@@ -707,7 +708,7 @@ export const register: Register = (on, options) => {
     // Between turns the whole genome shows (user, 2026-10-03): on the strip's line only when every turn fits
     // there; otherwise its own rows under the strip, wrapped, nothing folded. On a phone one row, the oldest
     // turns folded (user, 2026-10-04): wrapped, it pushed the prompt down the screen.
-    const own = s.isHidden ? [] : genome.labelRight(genome.rows(s.rec.turns, width - genome.EDGE_LABEL.length - 1, { maxRows: hasTail ? Infinity : 1 }), width)
+    const own = s.isHidden ? [] : genome.idle(s.rec.turns, width, { maxRows: hasTail ? Infinity : 1 })
     const ownRow = own.length ? genomeRows(own, 'ig', Text) : null
     // Only read the clock when a figure needs it (the cache, the session's age).
     const now = s.cache.anchor >= 0 || s.rec.startedAt !== undefined ? await $.clock.now() : 0
@@ -758,7 +759,7 @@ function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resol
 // The label rides the first genome row's right edge, so cells and notes lay out label + 1 narrower.
 function withNotes(rec: SessionRec, cols: number, opts: Parameters<typeof genome.rows>[2]): Line[] {
   const width = cols - genome.EDGE_LABEL.length - 1
-  const rows = genome.labelRight(genome.rows(rec.turns, width, opts), cols)
+  const rows = genome.idle(rec.turns, cols, { maxRows: genome.MAX_ROWS, ...opts })
   if (!rows.length) return rows
   const longest = rec.turns.reduce((best, x, i) => (x.length > (rec.turns[best]?.length ?? 0) ? i : best), 0)
   const notes: genome.Note[] = [

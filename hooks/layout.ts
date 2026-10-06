@@ -6,6 +6,7 @@
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
 import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, squares, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tile, type Tone } from './cards'
+import * as genome from './genome'
 import { MARK, frame } from './glyphs'
 import type { Turn } from './track'
 
@@ -313,8 +314,16 @@ function facts(t: Turn, head: Card, now: number): Line[] {
   return rows.length ? rows : [[{ t: '» ' + t.prompt, dim: true }]]
 }
 
-// withTodo false (the omp port, where omp pins its own to-do list): the now card alone, the full width.
-export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = '', withTodo = true): Line[] {
+// How a host wants the cards. withTodo false (omp, pi, …: the host pins its own to-do list): the now card
+// alone, the full width; given `turns` (the session's finished turns) the genome rides inside it, right of
+// the facts. `below` (Claude Code, two cards): rows `cols - 4` wide the frame runs on down to enclose.
+export type SpinnerOpts = { withTodo?: boolean; turns?: readonly string[]; below?: Line[] }
+const GROW = 2 // body rows the single card may add for its genome
+const DNA_MIN = 16 // cells: a narrower genome column leaves the card and sits under it
+
+export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = '', how: boolean | SpinnerOpts = true): Line[] {
+  const o: SpinnerOpts = typeof how === 'boolean' ? { withTodo: how } : how
+  const withTodo = o.withTodo ?? true
   const head = nowCard(t, mode, narration, now)
   const todo0 = todoCard(t, ctx, now)
   const sq = squares(t)
@@ -344,14 +353,22 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const ws = withTodo ? allot([nowWant, ideal(todo)], cols, todo.tiles?.length ? 1 : undefined, cellsCap(todo), cellsNeed(todo)) : [cols, 0]
   const [wn, wt] = [ws[0] ?? MIN_W, ws[1] ?? MIN_W]
   const inner = wn - 4
+  // The genome inside the single card: a column right of the facts and gauges, as wide as they leave
+  // (the facts keep their own width, never more than half), up to GROW rows taller than the body.
+  const turns = !withTodo ? o.turns : undefined
+  const lw = turns ? Math.min(Math.max(cells(gauges), ...now0.lines.map(l => cells(l)), 12), Math.floor(inner / 2)) : inner
+  const dna = turns && inner - lw - SUBGAP >= DNA_MIN ? genome.rows(turns, inner - lw - SUBGAP, { live: t, now, maxRows: rows + GROW }) : []
+  const fw = dna.length ? lw : inner // the facts' width
   // Body: facts over rows - 2, then the divider and the gauges (whole figures only, the last drops first).
-  const factRows = Math.max(0, rows - 2)
-  const nowBody: Line[] = [...keep(now0.lines.map(l => clipLine(l, inner)), factRows, inner)]
+  const factRows = Math.max(0, rows - 2, dna.length - 2)
+  const nowBody: Line[] = [...keep(now0.lines.map(l => clipLine(l, fw)), factRows, fw)]
   while (nowBody.length < factRows) nowBody.push([])
-  const shown = fitParts(known([tp.ctx, tp.cache, tp.tok, tp.turn, tp.effort]), inner, ' · ')
+  const shown = fitParts(known([tp.ctx, tp.cache, tp.tok, tp.turn, tp.effort]), fw, ' · ')
   const hot = head.hot
   const lastAt = nowBody.findIndex(l => (l[0]?.t ?? '').startsWith('last: '))
-  if (hot && lastAt >= 0 && cells(nowBody[lastAt] ?? []) + 3 + cells(hot) <= inner) nowBody[lastAt] = [...(nowBody[lastAt] ?? []), { t: ' '.repeat(inner - cells(nowBody[lastAt] ?? []) - cells(hot)) }, ...hot]
+  if (hot && lastAt >= 0 && cells(nowBody[lastAt] ?? []) + 3 + cells(hot) <= fw) nowBody[lastAt] = [...(nowBody[lastAt] ?? []), { t: ' '.repeat(fw - cells(nowBody[lastAt] ?? []) - cells(hot)) }, ...hot]
+  // No room for the column (a narrow pane): the genome sits under the card, labelled, as it did.
+  const under = turns && !dna.length ? genome.idle(turns, cols, { live: t, now, maxRows: 1 }) : []
   const todoBody = withTodo ? body(todo, wt - 4, rows) : []
   const nowCardD = cards[0] as Drawn
   const todoCardD = cards[1] as Drawn
@@ -359,16 +376,42 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const out: Line[] = []
   const side = (l: Line): Line => (withTodo ? [{ t: ' '.repeat(GUTTER) }, ...l] : [])
   out.push([...walkRow(topBand(nowCardD, wn, top.status, top.pulse), nowCardD.walk === undefined ? [] : [{ from: 0, to: wn, f: nowCardD.walk }]), ...side(topTitle(todoCardD, wt, HEAVY))])
-  for (let r = 0; r < rows; r++) {
+  const bodyRows = factRows + 2
+  for (let r = 0; r < bodyRows; r++) {
+    const right: Line = dna.length ? [{ t: ' '.repeat(SUBGAP) }, ...(dna[r] ?? [])] : []
     const left: Line = r < factRows
-      ? [edge(nowCardD, '│ '), ...pad(nowBody[r] ?? [], inner), edge(nowCardD, ' │')]
+      ? [edge(nowCardD, '│ '), ...pad([...pad(nowBody[r] ?? [], fw), ...right], inner), edge(nowCardD, ' │')]
       : r === factRows
-        ? [edge(nowCardD, '│'), { t: '┄'.repeat(wn - 2), dim: true }, edge(nowCardD, '│')]
-        : [edge(nowCardD, '│ '), ...pad(shown, inner), edge(nowCardD, ' │')]
+        // With the genome column the divider runs under the facts only, stopping short of the genome.
+        ? dna.length
+          ? [edge(nowCardD, '│'), { t: '┄'.repeat(fw + 2), dim: true }, ...pad([{ t: ' '.repeat(SUBGAP - 1) }, ...(dna[r] ?? [])], inner - fw - 1), edge(nowCardD, ' │')]
+          : [edge(nowCardD, '│'), { t: '┄'.repeat(wn - 2), dim: true }, edge(nowCardD, '│')]
+        : [edge(nowCardD, '│ '), ...pad([...pad(shown, fw), ...right], inner), edge(nowCardD, ' │')]
     out.push([...left, ...side([edge(todoCardD, HEAVY.v + ' '), ...pad(todoBody[r] ?? [], wt - 4), edge(todoCardD, ' ' + HEAVY.v)])])
   }
-  out.push([...bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT), ...side(bottom(todoCardD, wt, [], HEAVY))])
+  const below = withTodo ? o.below ?? [] : []
+  if (!below.length) {
+    out.push([...bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT), ...side(bottom(todoCardD, wt, [], HEAVY))])
+    return [...out, ...under]
+  }
+  // Claude Code (HOSTS.md decision 3): the now card's left edge and the to-do card's right edge run on
+  // down past the cards' own bottoms (their outer corners become tees), the rows `below` sit between
+  // them, and one edge closes the shape, light under the now card, heavy under the to-do card.
+  const nowEnd = bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT)
+  const todoEnd = bottom(todoCardD, wt, [], HEAVY)
+  out.push([...retip(nowEnd, LIGHT.bl, '├', 'start'), { t: ' '.repeat(GUTTER) }, ...retip(todoEnd, HEAVY.br, '┫', 'end')])
+  for (const l of below) out.push([edge(nowCardD, '│ '), ...pad(clipLine(l, cols - 4), cols - 4), edge(todoCardD, ' ' + HEAVY.v)])
+  out.push([edge(nowCardD, LIGHT.bl + LIGHT.h.repeat(wn - 1)), edge(todoCardD, '╼' + HEAVY.h.repeat(Math.max(0, cols - wn - 2)) + HEAVY.br)])
   return out
+}
+
+// A row with its first (or last) glyph swapped: a card's corner becoming a tee where its edge runs on.
+function retip(l: Line, from: string, to: string, at: 'start' | 'end'): Line {
+  const i = at === 'start' ? 0 : l.length - 1
+  const g = l[i]
+  if (!g) return l
+  const t = at === 'start' ? (g.t.startsWith(from) ? to + g.t.slice(from.length) : g.t) : g.t.endsWith(from) ? g.t.slice(0, -from.length) + to : g.t
+  return l.map((x, k) => (k === i ? { ...x, t } : x))
 }
 
 // A card's own bottom edge, an optional figure riding it: ╰─ …/live ───╯.

@@ -74,7 +74,7 @@ const liveLetters = (t: Turn) => code(t) + [...t.running.values()].map(x => CODE
 
 // A laid-out cell and where it came from: turn index (turns.length = the live turn) and step within it.
 type Placed = { seg: Seg; turn?: number; step?: number }
-type Opts = { live?: Turn; now?: number; maxRows?: number; label?: string }
+export type Opts = { live?: Turn; now?: number; maxRows?: number; label?: string }
 
 // The genome wrapped into rows of at most `width - label` cells. Past `maxRows` the oldest whole turns
 // fold, one at a time, so a turn is never cut in half.
@@ -226,6 +226,12 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
   const used = first.reduce((a, g) => a + g.t.length, 0)
   return [[...first, { t: ' '.repeat(Math.max(1, width - used - label.length)) }, { t: label, dim: true }], ...rows.slice(1)]
 }
+
+// The genome on its own, `cols` wide, labelled at the right edge: every host's idle form between turns
+// (and a narrow card's row under it). A narrow pane keeps one row, the oldest turns folded.
+export const NARROW = 60
+export const idle = (turns: readonly string[], cols: number, opts: Opts = {}): Line[] =>
+  labelRight(rows(turns, cols - EDGE_LABEL.length - 1, { maxRows: cols < NARROW ? 1 : MAX_ROWS, ...opts }), cols)
 
 // The genome in the session's title, so /resume's list shows it (user, 2026-10-04, picks 1a, then colour).
 // Each step is its real cell in its kind's colour inside a dim bracket, as on screen: the picker draws ANSI
