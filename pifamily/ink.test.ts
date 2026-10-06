@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { ink, resultText, seg, toCall, type Theme } from './ink'
+import { ink, resultText, retoken, seg, toCall, type Theme } from './ink'
 import { newTurn, startStep, finishStep } from '../hooks/track'
 import { spinnerRows } from '../hooks/layout'
 import * as genome from '../hooks/genome'
@@ -20,6 +20,15 @@ test('semantic colours go through the theme token, kind hexes stay', () => {
 
 test('a band takes the token colour as its background, black text on it', () => {
   expect(seg(theme, { t: ' edit ', bg: 'green', color: 'black' })).toBe('\x1b[30m\x1b[48;2;0;255;136m edit \x1b[0m')
+})
+
+// pi's theme has no getColorHex: its foreground escape (truecolor or 256) moves to the background layer.
+test('on pi a band takes the token foreground escape as its background', () => {
+  const pi: Theme = { getFgAnsi: t => (t === 'success' ? '\x1b[38;2;0;255;136m' : t === 'error' ? '\x1b[38;5;196m' : '\x1b[39m') }
+  expect(seg(pi, { t: ' edit ', bg: 'green', color: 'black' })).toBe('\x1b[30m\x1b[48;2;0;255;136m edit \x1b[0m')
+  expect(seg(pi, { t: ' fail ', bg: 'red', color: 'black' })).toBe('\x1b[30m\x1b[48;5;196m fail \x1b[0m')
+  expect(seg(pi, { t: 'x', bg: 'cyan' })).toBe('x') // a default-colour token: no band colour, never a bare 39 as bg
+  expect(seg({ getFgAnsi: () => { throw new Error('unknown token') } }, { t: 'x', bg: 'green' })).toBe('x')
 })
 
 test('dim with no colour is the theme muted colour; dim on a colour is faint', () => {
@@ -44,6 +53,32 @@ test('omp tools map to the shapes the core classifies', () => {
   expect(toCall('eval', { title: 'Rename' }).kind).toBe('script')
   expect(toCall('todo', { op: 'init' }).kind).toBe('todo')
   expect(toCall('hub', {}).kind).toBe('other')
+})
+
+test('a swapped token reaches the theme, the methods stay bound', () => {
+  class T {
+    tag = '#'
+    getFgAnsi(t: string) {
+      return this.tag + t
+    }
+  }
+  const th = retoken(new T(), { mdLinkUrl: 'mdLink' })
+  expect(seg(th, { t: 'r', color: 'blue' })).toBe('#mdLinkr\x1b[0m')
+  expect(seg(th, { t: 'o', color: 'green' })).toBe('#successo\x1b[0m')
+  expect(th.getColorHex).toBeUndefined()
+})
+
+test("pi's find and ls are a look around, ls in words", () => {
+  expect(toCall('find', { pattern: '*.py', path: 'src' })).toEqual({ tool: 'Glob', input: { pattern: '*.py' } })
+  expect(toCall('ls', { path: 'src/xray/' }).say).toBe('listing xray')
+  expect(toCall('ls', { path: '.' }).say).toBe('listing the folder')
+  const t = newTurn('look', 0)
+  for (const [id, name] of [['1', 'find'], ['2', 'ls']] as const) {
+    const c = toCall(name, { pattern: '*', path: '.' })
+    startStep(t, id, c.tool, c.input, 1)
+    finishStep(t, id, c.tool, c.input, true, 'a.py', undefined, 2)
+  }
+  expect(t.done.map(x => x.kind)).toEqual(['read', 'read'])
 })
 
 test('omp results read as text', () => {
@@ -78,4 +113,13 @@ test('a commit through omp bash is a commit cell, chained or not', () => {
   }
   expect(t.done.map(x => x.kind)).toEqual(['commit', 'commit'])
   expect(genome.code(t)).toBe('kk') // the genome's letter for a commit; drawn as #
+})
+
+// The /xray turns section sizes each turn's row to its cells plus the two kind brackets (xray.ts panelLines).
+test('a lone turn fits a row of its cells plus two brackets, unfolded', () => {
+  for (const x of ['r', 'rree', 'rreek']) {
+    const row = (genome.rows([x], x.length + 2, { maxRows: 1 })[0] ?? []).map(g => g.t).join('')
+    expect(row.includes('turn')).toBe(false)
+    expect(row.length).toBe(x.length + 2)
+  }
 })

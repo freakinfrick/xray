@@ -27,7 +27,8 @@ has drifted to 18.6.2, read the tag).
 
 ## Defaults (decided by agent, say "undo dN")
 
-- d1 **Shared core.** Code lives in `~/claude/mods/xray/omp/`, imports `../hooks/*` (pure `Seg[]`
+- d1 **Shared core.** Code lives in `~/claude/mods/xray/pifamily/` (shared with pi since d10; `omp/index.ts`
+  is the entry), imports `../hooks/*` (pure `Seg[]`
   rendering, no `claude-code` imports). One source of truth. A Seg→ANSI adapter maps xray tones to
   theme tokens (ok→success, fail→error, warn→warning, live→accent, think/explore→muted variants).
   Symlinked into `~/.omp/agent/extensions/xray`. Ships in the freakinfrick/xray subtree mirror.
@@ -58,8 +59,21 @@ Changes from the plan, each from a live capture:
 - Genome store: `~/.omp/agent/xray/genomes.json` (40 sessions, as the parent). Survives `/resume`.
 - Installed: `~/.omp/agent/extensions/xray` → this folder.
 
-Verified: `mods/check.sh xray` (validate, tsc, tests incl. `omp/ink.test.ts`), `tsc -p omp`; live in
+Verified: `mods/check.sh xray` (validate, tsc, tests incl. `ink.test.ts`), `tsc -p omp`; live in
 tmux + xterm on :10: working card, idle strip, resume, `/xray`, 50-column fold, unflagged load.
+
+## One adapter with pi (2026-10-06)
+
+- d10 **pi family.** The body moved to `../pifamily/xray.ts` (`xray(pi, host)`), with `ink.ts`, its tests
+  and `env.d.ts`; `omp/index.ts` passes `{ dir: '.omp', closeOn: 'agent_end' }`. pi's entry and spec:
+  `../pi/`. `omp/tsconfig.json` type-checks all three folders (check.sh runs it).
+- d11 **Genome inside the card.** The separate genome row under the card is gone: the core's
+  `spinnerRows(..., { withTodo: false, turns })` draws it right of the fact rows; idle is `genome.idle()`.
+  The <60-column fold keeps its own one-row genome under the compact card.
+- d12 **A retry keeps the turn.** `agent_start` with a turn still open (after `willContinue`) reuses it;
+  before, it started a fresh turn and the steps before the retry were lost.
+- Live-checked after the move (omp 18.3.5, DeepSeek V4.1 Flash, `omp --no-extensions -e omp/index.ts`):
+  card with the genome inside, idle strip, `/xray`.
 
 ## Out of scope (v1)
 

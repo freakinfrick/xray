@@ -1,12 +1,15 @@
-// The omp port's two pure pieces (spec omp/SPEC.md): xray's Seg lines → ANSI through omp's theme, and an
-// omp tool call → the Claude Code shape the shared core (../hooks) reads. No omp imports, so the tests
-// run under `claude plugin test` like the rest of xray.
+// The pi family's two pure pieces (omp and pi, specs omp/SPEC.md, pi/SPEC.md): xray's Seg lines → ANSI
+// through the host's theme, and a host tool call → the Claude Code shape the shared core (../hooks) reads.
+// No host imports, so the tests run under `claude plugin test` like the rest of xray.
 import type { Line, Seg } from '../hooks/cards'
+import type { Call } from '../hooks/events'
+export type { Call }
 
-// The part of omp's Theme this uses (packages/tui/src/theme/theme-class.ts, v18.3.5).
+// The part of the host's Theme this uses (omp packages/tui/src/theme/theme-class.ts v18.3.5; pi
+// modes/interactive/theme/theme.d.ts 0.87.1, which has no getColorHex and no boxRound).
 export type Theme = {
   getFgAnsi(token: string): string
-  getColorHex(token: string): string
+  getColorHex?(token: string): string
   boxRound?: { topLeft: string; topRight: string; bottomLeft: string; bottomRight: string; horizontal: string; vertical: string }
 }
 
@@ -22,6 +25,18 @@ export const TOKEN: Record<string, string> = {
   gray: 'muted',
 }
 const base = (c: string) => c.replace(/Bright$/, '')
+
+// A host whose theme gives a token another job swaps it here: pi's mdLinkUrl is dim grey, so read cells
+// would look like other cells; its mdLink is the blue. The wrapper keeps the theme's methods bound.
+export function retoken(theme: Theme, swap: Record<string, string>): Theme {
+  const to = (t: string) => swap[t] ?? t
+  const hex = theme.getColorHex
+  return {
+    getFgAnsi: t => theme.getFgAnsi(to(t)),
+    ...(hex ? { getColorHex: (t: string) => hex.call(theme, to(t)) } : {}),
+    ...(theme.boxRound ? { boxRound: theme.boxRound } : {}),
+  }
+}
 
 const RESET = '\x1b[0m'
 function hexRgb(hex: string): [number, number, number] | null {
@@ -46,12 +61,16 @@ function fg(theme: Theme, color: string): string {
     return ''
   }
 }
+// A band's background: omp's hex, else the token's foreground escape moved to the background layer
+// (38;2;r;g;b or 38;5;n → 48;…), which is all pi offers. No 38; in it (an unset token): no band colour.
 function bg(theme: Theme, color: string): string {
   if (color.startsWith('#')) return rgb(color, 48)
   const token = TOKEN[base(color)]
   if (!token) return ''
   try {
-    return rgb(theme.getColorHex(token), 48)
+    if (theme.getColorHex) return rgb(theme.getColorHex(token), 48)
+    const f = theme.getFgAnsi(token)
+    return f.startsWith('\x1b[38;') ? '\x1b[48;' + f.slice(5) : ''
   } catch {
     return ''
   }
@@ -87,10 +106,10 @@ export function ink(theme: Theme, l: Line, width = Infinity): string {
   return out
 }
 
-// omp's tools → the names and argument keys the core reads (track.ts stepKind/startStep/finishStep).
+// omp's and pi's tools → the names and argument keys the core reads (track.ts stepKind/startStep/finishStep).
 // omp's spinner line already shows each call's intent (`i`, the why), so a mapped tool keeps the core's
 // own words (the what: "editing calc.py"); only tools the core has no words for say their intent.
-export type Call = { tool: string; input: Record<string, unknown>; say?: string; kind?: 'script' | 'todo' | 'other' }
+// Call is the core's (../hooks/events), shared with the JSONL-fed hosts.
 export function toCall(name: string, args: unknown, intent?: string): Call {
   const a = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
   const say = intent ?? (typeof a.i === 'string' ? a.i : undefined)
@@ -104,6 +123,11 @@ export function toCall(name: string, args: unknown, intent?: string): Call {
       return { tool: 'Grep', input: { pattern: String(a.pattern ?? ''), path: String(a.path ?? '') } }
     case 'glob':
       return { tool: 'Glob', input: { pattern: String(a.path ?? '') } }
+    // pi's own two, both a look around (the read kind): find is a glob under a path, ls lists a folder.
+    case 'find':
+      return { tool: 'Glob', input: { pattern: String(a.pattern ?? '') } }
+    case 'ls':
+      return { tool: 'LS', input: {}, say: say ?? `listing ${String(a.path ?? '').split('/').filter(x => x && x !== '.').pop() ?? 'the folder'}` }
     case 'edit':
       return { tool: 'Edit', input: path }
     case 'write':
@@ -126,7 +150,7 @@ export function toCall(name: string, args: unknown, intent?: string): Call {
   }
 }
 
-// A tool result's text: omp results are { content: [{ type: 'text', text }] } (or a bare string).
+// A tool result's text: omp and pi results are { content: [{ type: 'text', text }] } (or a bare string).
 export function resultText(result: unknown): string {
   if (typeof result === 'string') return result
   const content = (result as { content?: unknown } | null)?.content

@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["index.ts", "ink.ts", "env.d.ts"]
+  "include": ["index.ts", "../pi/index.ts", "../pifamily/xray.ts", "../pifamily/ink.ts", "../pifamily/env.d.ts"]
 }
