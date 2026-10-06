@@ -4,7 +4,9 @@ A glanceable card for coding agents: what the agent is doing right now, and a se
 every step of the session as one colored cell. One core (`hooks/`, pure lines of styled segments),
 a thin adapter per harness: Claude Code, oh-my-pi, pi, Hermes (`--tui`), Grok Build and dsh-tui.
 
-![xray in Claude Code: an hour-old session's genome, then a new task with its to-do list](docs/demo.gif)
+![xray on six harnesses at once: Claude Code, oh-my-pi, pi, Hermes, Grok Build and dsh-tui fix the same bug, step for step, then open the /xray panel](docs/sync-demo.gif)
+
+Six harnesses, one task, in step: each runs against the same scripted model (a local fake server that releases every step to all six at the same instant), so the cards, genomes and panels line up frame for frame. The harnesses and xray are real; only the model is scripted. Live takes on real models are in the Claude Code and oh-my-pi sections.
 
 ## What it shows
 
@@ -36,6 +38,8 @@ a thin adapter per harness: Claude Code, oh-my-pi, pi, Hermes (`--tui`), Grok Bu
 Live captures of every host (working card, idle genome, panel): [`HOSTS.md`](HOSTS.md#status-2026-10-06).
 
 ## Claude Code
+
+![xray in Claude Code: an hour-old session's genome, then a new task with its to-do list](docs/demo.gif)
 
 Function-hook plugin, Claude Code ≥ 2.1.287. Two cards under the spinner: **now** (left, with the
 folder in its bottom edge and the context gauge) and **to-do** (right, heavy frame: one cell per
