@@ -313,7 +313,8 @@ function facts(t: Turn, head: Card, now: number): Line[] {
   return rows.length ? rows : [[{ t: '» ' + t.prompt, dim: true }]]
 }
 
-export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = ''): Line[] {
+// withTodo false (the omp port, where omp pins its own to-do list): the now card alone, the full width.
+export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: number | null, now: number, cols: number, rows: number, memo?: Memo, folder = '', withTodo = true): Line[] {
   const head = nowCard(t, mode, narration, now)
   const todo0 = todoCard(t, ctx, now)
   const sq = squares(t)
@@ -340,7 +341,7 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   })
   // Widths: the cells ask for their cap, the now card keeps room for its facts and gauges.
   const nowWant = Math.max(cells(gauges) + 4, ...now0.lines.map(l => cells(l) + 4), NOW_TODO)
-  const ws = allot([nowWant, ideal(todo)], cols, todo.tiles?.length ? 1 : undefined, cellsCap(todo), cellsNeed(todo))
+  const ws = withTodo ? allot([nowWant, ideal(todo)], cols, todo.tiles?.length ? 1 : undefined, cellsCap(todo), cellsNeed(todo)) : [cols, 0]
   const [wn, wt] = [ws[0] ?? MIN_W, ws[1] ?? MIN_W]
   const inner = wn - 4
   // Body: facts over rows - 2, then the divider and the gauges (whole figures only, the last drops first).
@@ -351,21 +352,22 @@ export function spinnerRows(t: Turn, mode: Mode, narration: string | null, ctx: 
   const hot = head.hot
   const lastAt = nowBody.findIndex(l => (l[0]?.t ?? '').startsWith('last: '))
   if (hot && lastAt >= 0 && cells(nowBody[lastAt] ?? []) + 3 + cells(hot) <= inner) nowBody[lastAt] = [...(nowBody[lastAt] ?? []), { t: ' '.repeat(inner - cells(nowBody[lastAt] ?? []) - cells(hot)) }, ...hot]
-  const todoBody = body(todo, wt - 4, rows)
+  const todoBody = withTodo ? body(todo, wt - 4, rows) : []
   const nowCardD = cards[0] as Drawn
   const todoCardD = cards[1] as Drawn
   const top = band(head.lines[0] ?? [], t.running.size > 0)
   const out: Line[] = []
-  out.push([...walkRow(topBand(nowCardD, wn, top.status, top.pulse), nowCardD.walk === undefined ? [] : [{ from: 0, to: wn, f: nowCardD.walk }]), { t: ' '.repeat(GUTTER) }, ...topTitle(todoCardD, wt, HEAVY)])
+  const side = (l: Line): Line => (withTodo ? [{ t: ' '.repeat(GUTTER) }, ...l] : [])
+  out.push([...walkRow(topBand(nowCardD, wn, top.status, top.pulse), nowCardD.walk === undefined ? [] : [{ from: 0, to: wn, f: nowCardD.walk }]), ...side(topTitle(todoCardD, wt, HEAVY))])
   for (let r = 0; r < rows; r++) {
     const left: Line = r < factRows
       ? [edge(nowCardD, '│ '), ...pad(nowBody[r] ?? [], inner), edge(nowCardD, ' │')]
       : r === factRows
         ? [edge(nowCardD, '│'), { t: '┄'.repeat(wn - 2), dim: true }, edge(nowCardD, '│')]
         : [edge(nowCardD, '│ '), ...pad(shown, inner), edge(nowCardD, ' │')]
-    out.push([...left, { t: ' '.repeat(GUTTER) }, edge(todoCardD, HEAVY.v + ' '), ...pad(todoBody[r] ?? [], wt - 4), edge(todoCardD, ' ' + HEAVY.v)])
+    out.push([...left, ...side([edge(todoCardD, HEAVY.v + ' '), ...pad(todoBody[r] ?? [], wt - 4), edge(todoCardD, ' ' + HEAVY.v)])])
   }
-  out.push([...bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT), { t: ' '.repeat(GUTTER) }, ...bottom(todoCardD, wt, [], HEAVY)])
+  out.push([...bottom(nowCardD, wn, folder ? [{ t: folder, dim: true }] : [], LIGHT), ...side(bottom(todoCardD, wt, [], HEAVY))])
   return out
 }
 
