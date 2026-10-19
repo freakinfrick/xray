@@ -1,6 +1,6 @@
 # xray for hermes (`hermes --tui`) — spec
 
-Port of xray to Hermes Agent's full-screen Ink TUI (v0.21.5, fork `~/hermes-agent`). Parent: `../HOSTS.md`
+Port of xray to Hermes Agent's full-screen Ink TUI (v0.22.2, fork `~/hermes-agent`; first written on v0.21.5). Parent: `../HOSTS.md`
 (decision 2: TUI mode only, no patch to the hermes fork). Pattern: `../omp/SPEC.md`.
 
 ## What it shows
@@ -16,14 +16,17 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.21.5, fork `~/hermes-agen
 
 ## How it is wired
 
-    hermes python (gateway)                         hermes node TUI (Ink)
+    shared gateway (`hermes gateway run`)               hermes node TUI (Ink), one per pane
     plugin/__init__.py hooks ──append──▶ ~/.hermes/xray/live/<TUI pid>.jsonl ──fs.watch/tail──▶ xray.mjs
+          │ session id → live session → WS peer port → pid owning that socket (/proc)
 
 - `plugin/` (installed as `~/.hermes/plugins/xray`, listed in `plugins.enabled`): `pre_llm_call` →
   turn_start, `pre_tool_call` → start, `post_tool_call` → end, `post_api_request` → usage,
   `on_session_end` (fires once per turn, interrupted ones too) and `agent_loop_stopped` → turn_end.
-  Registers only inside the TUI gateway (`tui_gateway.entry`), never in classic mode, and not under
-  `CLAUDE_HUMAN_MODS=off`. Every hook swallows errors and returns None (`pre_tool_call` is fail-closed;
+  Since 0.22 every turn (TUI, classic, `-q`) runs in the one shared gateway, so the plugin loads there and
+  routes each line to the TUIs viewing its session (d1). It appends only to a feed that already exists:
+  the widget creates its own at load, so classic mode, Desktop and widget-less TUIs get nothing.
+  `CLAUDE_HUMAN_MODS=off` in a TUI's env stops its widget, and with it that TUI's feed. Every hook swallows errors and returns None (`pre_tool_call` is fail-closed;
   a dict there is a directive). Big args (file contents, patches, code) are dropped; results keep their
   last 6000 chars.
 - `widget.ts` → `xray.mjs` (installed as `~/.hermes/tui-widgets/xray.mjs`): registers `xray` (modal) and
@@ -37,10 +40,17 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.21.5, fork `~/hermes-agen
 
 ## Decisions (agent, say "undo dN")
 
-- d1 **Feed key = the TUI's pid.** The node TUI spawns the gateway directly; the plugin walks up
-  `/proc` to the nearest `node` ancestor. Parallel hermes panes share `~/.hermes` and stay apart.
+- d1 **Feed key = the TUI's pid, found through its socket.** 0.22's TUI spawns no python child: it
+  talks to the shared gateway over a loopback WebSocket. The plugin API names no session's clients, so
+  the plugin finds the gateway's `SessionAuthority` objects through `gc` (once, rescans throttled to 5 s),
+  takes the hook's `session_id` → `authority.sessions[sid].event_stream.fanout` → each `WSTransport._peer`
+  (`127.0.0.1:<client port>`) → the `/proc/net/tcp` inode → the pid holding it. Cached per session and
+  re-resolved when the peer set changes (reconnect, a second window on one session: each gets the lines).
+  Private gateway internals: a hermes update can move them, and then the card goes quiet (no crash; every
+  hook swallows). Verified on 0.22.2 with two parallel panes on one gateway: feeds stay apart.
 - d2 **Subagents dropped from the feed.** `delegate_task` children fire the same hooks in the same
-  process; a turn_start with a `parent` marks that session id a child and its lines are skipped. The
+  process; a turn_start with a `parent` marks that session id a child and the plugin drops its lines
+  (they have no viewer of their own anyway; `feed.ts` keeps its own child filter for old feeds). The
   main turn shows the delegate call itself (agent kind). A parentless turn_start with a new session id
   (`/new`, `/resume`) saves the old record and loads the new one.
 - d3 **Tool map in TS, not python.** The plugin writes hermes' names and raw args (`tool`, `args`, plus
@@ -72,5 +82,8 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.21.5, fork `~/hermes-agen
 
 `mods/check.sh xray` type-checks `hermes/` (its own tsconfig, node built-ins typed in `env.d.ts`) and
 runs `hermes.test.ts`. A rebuilt `xray.mjs` hot-loads when the widgets folder changes (`touch -h` the
-symlink); plugin changes need a TUI restart. Live-checked 2026-10-06 in `hermes-deepseek --tui`
-(DeepSeek V4.1 Flash), 120×40 and 56 columns: working card, idle strip, `/xray`, hot reload.
+symlink); plugin changes need a **gateway** restart (it runs with `--idle-exit`: quit every TUI, or stop
+`hermes gateway run`). Live-checked 2026-10-06 in `hermes-deepseek --tui` (DeepSeek V4.1 Flash), 120×40 and
+56 columns: working card, idle strip, `/xray`, hot reload. Re-checked 2026-10-19 on 0.22.2 against a fake
+OpenAI-compatible server in an isolated `HERMES_HOME`: working card, idle genome, `/xray`, `/new`, 56 columns,
+two panes on one gateway.

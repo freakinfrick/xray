@@ -1,7 +1,8 @@
 // xray for hermes' full-screen TUI (`hermes --tui`): the now card docked above the status bar while a turn
 // runs, the genome there between turns, /xray for the detail panel. Spec: ./SPEC.md. Hermes gives widgets
-// no agent events, so the python plugin (./plugin) appends them to ~/.hermes/xray/live/<this pid>.jsonl
-// and this file tails it. Bundled with ../hooks into xray.mjs (./build.sh); hermes hot-loads that from
+// no agent events, so the python plugin (./plugin, in the gateway) appends them to
+// ~/.hermes/xray/live/<this pid>.jsonl and this file tails it. The plugin only appends to a feed that
+// exists: creating it here is what asks for one. Bundled with ../hooks into xray.mjs (./build.sh); hermes hot-loads that from
 // ~/.hermes/tui-widgets/.
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -175,6 +176,7 @@ export default function register(sdk: Sdk) {
   const bump = () => sdk.updateWidget(card, s => ({ n: s.n + 1 }))
   try {
     mkdirSync(LIVE, { recursive: true })
+    writeFileSync(join(LIVE, FILE), '', { flag: 'a' })
   } catch {}
   prune()
   pull()

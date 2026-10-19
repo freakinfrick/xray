@@ -126,7 +126,8 @@ ln -s "$PWD/xray.mjs" ~/.hermes/tui-widgets/xray.mjs
 ln -s "$PWD/plugin"   ~/.hermes/plugins/xray   # then add `- xray` under plugins.enabled in ~/.hermes/config.yaml
 ```
 
-A rebuilt `xray.mjs` hot-loads; plugin changes need a TUI restart. Spec: [`hermes/SPEC.md`](hermes/SPEC.md).
+A rebuilt `xray.mjs` hot-loads; plugin changes need a restart of the shared hermes gateway (hermes 0.22+
+runs every turn there). Spec: [`hermes/SPEC.md`](hermes/SPEC.md).
 
 ## Grok Build
 

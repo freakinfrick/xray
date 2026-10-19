@@ -20,7 +20,7 @@ tsc per host folder, `claude plugin test`). Captures in `docs/hosts/` (tmux stat
   pinned by a test, seen fixed on pi).
 - **pi** 0.87.1 — built, live. Spec: [`pi/SPEC.md`](pi/SPEC.md).
   [working](docs/hosts/pi-working.png) · [idle](docs/hosts/pi-idle.png) · [panel](docs/hosts/pi-panel.png)
-- **hermes** 0.21.5 `--tui` — built, live (incl. 56-column fold and hot reload). Spec:
+- **hermes** 0.22.2 `--tui` — built, live (incl. 56-column fold and hot reload; 0.22 gateway routing re-checked 2026-10-19). Spec:
   [`hermes/SPEC.md`](hermes/SPEC.md). [working](docs/hosts/hermes-working.png) ·
   [idle](docs/hosts/hermes-idle.png) · [panel](docs/hosts/hermes-panel.png)
 - **grok** 1.0.41 — built, live with `grok-deepseek`; no panel by design. Spec: [`grok/SPEC.md`](grok/SPEC.md).
@@ -39,7 +39,8 @@ tsc per host folder, `claude plugin test`). Captures in `docs/hosts/` (tmux stat
   under a real retry; pi closing the turn on `agent_settled` after Esc is inferred from pi's types; omp's glob
   case maps `a.path` as the pattern (param name unverified); omp PNGs predate the last retoken/turn-reuse
   edits (re-checked by text capture only).
-- **hermes:** `/new` and `/resume` record swap and the subagent filter are unit-tested only; the hot-reload
+- **hermes:** `/new` is live-checked (2026-10-19); `/resume` and the subagent filter are unit-tested only;
+  the 0.22 feed routing reads private gateway internals (`hermes/SPEC.md` d1), re-check after each update; the hot-reload
   double-count fix was seen once, indirectly. `xray.mjs` is git-ignored (`hermes/.gitignore`) while
   `hermes/SPEC.md` says to commit the built file: an install needs `build.sh` either way.
 - **grok:** no live cache/tok gauges (grok reports usage once per turn, d2); a grok killed mid-turn leaves the
