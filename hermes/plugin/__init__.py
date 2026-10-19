@@ -107,7 +107,7 @@ def _targets(sid: str | None, rescan: bool = False) -> tuple[int, ...]:
             return ()
         peers = _peer_ports(live)
         cached = _routes.get(sid)
-        if cached and cached[0] == peers:
+        if cached and cached[0] == peers and cached[1]:  # an empty answer is retried, never cached as final
             return cached[1]
         pids = _socket_pids(peers)
         if len(_routes) > 64:
@@ -197,8 +197,8 @@ def _usage(session_id=None, usage=None, started_at=None, first_chunk_at=None, en
 
 
 def register(ctx):
-    if os.environ.get("CLAUDE_HUMAN_MODS") == "off":
-        return
+    # No CLAUDE_HUMAN_MODS check here: this is the gateway's env, shared by every TUI. A TUI's own
+    # `=off` stops its widget, which then never creates the feed this plugin needs.
     ctx.register_hook("pre_llm_call", _turn_start)
     ctx.register_hook("pre_tool_call", _tool_start)
     ctx.register_hook("post_tool_call", _tool_end)

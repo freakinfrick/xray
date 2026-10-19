@@ -73,6 +73,9 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.22.2, fork `~/hermes-agen
 - No `responding`/`thinking` mode: no plugin hook marks the first streamed token cheaply; the band
   says "waiting on the model" until a tool starts.
 - Classic prompt_toolkit mode: nothing (HOSTS.md decision 2).
+- **Gateway and TUI must see each other's `/proc`.** The plugin reads the TUI's socket fds; a TUI
+  launched inside a sandbox (bwrap, another pid/user namespace) against a gateway started outside it,
+  or the reverse, gets no feed and an idle card. Restart the gateway from the same side as the TUI.
 
 ## Build, install, verify
 
