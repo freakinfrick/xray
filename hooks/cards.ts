@@ -132,6 +132,9 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; 
   memory: { t: '§', color: '#ff69b4', bold: true }, // a memory saved: kept past this session, like a commit
   commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
   agent: { t: '▌', color: 'cyan' },
+  skill: { t: '▌', color: '#ffd7af' }, // round 22: a skill loaded
+  mcp: { t: '▌', color: '#87afaf' }, // an MCP server's tool
+  ask: { t: '?', color: 'white', bold: true }, // a question put to the person (AskUserQuestion)
   todo: { t: '▌', dim: true },
   other: { t: '▌', dim: true },
 }

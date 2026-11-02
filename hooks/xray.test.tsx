@@ -1553,7 +1553,7 @@ test('the genome key: every cell in its own look with its word, packed to the wi
   const rows = genome.key(60).map(l => text(l))
   expect(rows.join(' ')).toMatch(/▌ read .*▌ edit .*# commit .*\(\) looked .*\[\] changed .*\{\} delegated/)
   expect(rows.every(r => r.length <= 60)).toBe(true)
-  expect(genome.key(200)).toHaveLength(1)
+  expect(genome.key(240)).toHaveLength(1) // round 22 added skill, mcp, asked you
 })
 
 test('the genome label sits at the right edge of the first row, never over a cell', async () => {

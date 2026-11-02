@@ -7,9 +7,10 @@ import { KIND, type Line, type Seg } from './cards'
 import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
-// One letter per step; a failed step is `x` whatever its kind. To-do bookkeeping is left out, as in the filmstrip.
-const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm', run: 'c', script: 's', orchestrate: 'h', network: 'n', wait: 'w', test: 't', commit: 'k', agent: 'a', todo: '', other: 'o' }
-const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', m: 'memory', c: 'run', s: 'script', h: 'orchestrate', n: 'network', w: 'wait', t: 'test', k: 'commit', a: 'agent', o: 'other' }
+// One letter per step; a failed step is `x` whatever its kind (why it failed: the archive's `fails`).
+// Round 22: l skill, p MCP tool, q a question put to the person; they count as looking. To-do bookkeeping is left out, as in the filmstrip.
+export const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm', run: 'c', script: 's', orchestrate: 'h', network: 'n', wait: 'w', test: 't', commit: 'k', agent: 'a', skill: 'l', mcp: 'p', ask: 'q', todo: '', other: 'o' }
+const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', m: 'memory', c: 'run', s: 'script', h: 'orchestrate', n: 'network', w: 'wait', t: 'test', k: 'commit', a: 'agent', l: 'skill', p: 'mcp', q: 'ask', o: 'other' }
 
 export const MAX_ROWS = 3
 export const MAX_TURNS = 400 // per session, oldest dropped: a few KB at most
@@ -197,7 +198,7 @@ export function shown(turns: readonly string[], room: number, label = 'genome ')
 
 // The key under the panel's genome: each cell in its own look and the word for it, then any extra
 // tokens (the note row's marks), packed into rows of `width`.
-const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['s', 'script'], ['c', 'command'], ['h', 'orchestrate'], ['n', 'network'], ['w', 'wait'], ['k', 'commit'], ['m', 'memory'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['o', 'other']]
+const KEYED: [string, string][] = [['r', 'read'], ['e', 'edit'], ['s', 'script'], ['c', 'command'], ['h', 'orchestrate'], ['n', 'network'], ['w', 'wait'], ['k', 'commit'], ['m', 'memory'], ['t', 'tests pass'], ['x', 'failed'], ['a', 'agent'], ['l', 'skill'], ['p', 'mcp'], ['q', 'asked you'], ['o', 'other']]
 export function key(width: number, extra: Line[] = []): Line[] {
   const tokens: Line[] = [...KEYED.map(([c, w]) => [cellOf(c), { t: ` ${w}`, dim: true }]), ...(Object.entries(BRACKET) as [Bracket, [string, string]][]).map(([k, [o, c]]): Line => [{ t: `${o}${c}`, dim: true }, { t: ` ${k}`, dim: true }]), ...extra]
   const rows: Line[] = []

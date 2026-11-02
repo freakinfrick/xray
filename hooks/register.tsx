@@ -11,11 +11,12 @@ import { panel } from './panel'
 import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
+import * as archive from './archive'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, shortName, loadRec, type SessionRec } from './session'
 import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
-import { agentStep, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
+import { agentLetter, agentStep, stepKind, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
 const keptTurn = atom({ plugin: 'xray', key: 'prev' } as const, null) // the last finished turn, for the panel after a reload
@@ -70,6 +71,8 @@ type Live = {
   transcript?: string // this session's transcript, from the classic hooks; the genome's title line goes there
   tasks: tasks.Store // round 21: the session's task list, answered by xray instead of core
   tasksId: string // the session it belongs to
+  arch?: archive.Archive // round 22: every turn of this session, kept on disk past the store's 40
+  denied: Map<string, 'hook' | 'denied'> // tool_use ids tool.check denied (by a hook or not), until their call ends
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
 
@@ -81,6 +84,11 @@ async function loadGenome($: EngineInterface, s: Live) {
   s.genomeId = id
   s.rec = loadRec(await $.store.get(genome.keyOf(id)))
   s.rec.startedAt ??= await $.clock.now()
+  // Round 22: the archive file, read back on /resume; a fresh one otherwise.
+  s.arch = undefined
+  if (!s.home) return
+  const fresh = archive.newArchive(id, s.cwd, s.rec.startedAt, await $.session.model().catch(() => undefined))
+  s.arch = archive.loadArchive(await $.fs.read(archive.pathOf(s.home, id)).catch(() => undefined), fresh)
 }
 async function saveGenome($: EngineInterface, s: Live, letters: string, extra: Parameters<typeof addTurn>[2] = {}) {
   await loadGenome($, s)
@@ -88,6 +96,11 @@ async function saveGenome($: EngineInterface, s: Live, letters: string, extra: P
   s.rec = addTurn(s.rec, letters, extra)
   await $.store.set(genome.keyOf(s.genomeId), s.rec)
   for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
+}
+async function saveArchive($: EngineInterface, s: Live, turn: archive.ArchTurn) {
+  if (!s.arch || !s.home || !s.genomeId) return
+  s.arch = archive.addArchTurn(s.arch, turn)
+  await $.fs.write(archive.pathOf(s.home, s.genomeId), JSON.stringify(s.arch))
 }
 
 // Round 21: a task tool call answered from xray's store, so core never opens its own list.
@@ -311,7 +324,7 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '', tasks: tasks.emptyStore(), tasksId: '' }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '', tasks: tasks.emptyStore(), tasksId: '', denied: new Map() }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
@@ -405,10 +418,16 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     // Only a person's own prompt starts a turn; task notifications and scheduled triggers join the running one.
     if (isOff(s) || (e.origin.kind !== 'composer' && s.turn)) return next(e)
+    // Round 22: typed into the running turn, it joins it (counted) instead of starting a new one.
+    if (s.turn && e.turnId && !e.isMeta) {
+      s.turn.midTurn = (s.turn.midTurn ?? 0) + 1
+      return next(e)
+    }
     await loadGenome($, s)
     s.prev = s.turn ?? s.prev
     const at = await $.clock.now()
     s.turn = newTurn(e.text, at)
+    s.turn.user = { chars: e.text.length, origin: e.origin.kind, ...(e.command ? { command: e.command.name } : {}) }
     if (s.prev?.endedAt !== undefined) Object.assign(s.turn, { awayMs: at - s.prev.endedAt, isAwayCold: cacheLeft(s.cache, at) === 0 })
     carryTodos(s.prev, s.turn)
     s.narration = null
@@ -440,14 +459,34 @@ export const register: Register = (on, options) => {
     return r
   })
 
+  // Round 22: which calls were denied before they ran, and whether a hook did it (rm_guard, sleep-guard...).
+  on('tool.check', async ($, e, next) => {
+    const r = await next(e)
+    if (!isOff(s) && e.tool_use_id && r.decision === 'deny') s.denied.set(e.tool_use_id, r.hook ? 'hook' : 'denied')
+
+    return r
+  })
+
   on('tool.call', async ($, e, next) => {
     const t = s.turn
     const input = e as unknown as Record<string, unknown>
     // Round 21: subagents' task calls too, or core fills its list and draws it under the main spinner.
     const run = (): ReturnType<typeof next> => (!isOff(s) && tasks.TASK_TOOLS.has(e.tool) ? (answerTask($, s, e.tool, input) as ReturnType<typeof next>) : next(e))
     if (t && !isOff(s) && e.agentId) {
-      agentStep(t, e.agentId, sayStep(e.tool, input))
+      const agentId = e.agentId
+      agentStep(t, agentId, sayStep(e.tool, input))
       $.ui.invalidate('ui.render')
+      // Its letter lands when the step ends, x if it failed (round 22).
+      const kind = stepKind(e.tool, input)
+      let ran: Awaited<ReturnType<typeof next>> | undefined
+      try {
+        ran = await run()
+      } finally {
+        const ok = ran !== undefined && ran.deny === undefined && !ran.isError
+        if (kind !== 'todo') agentLetter(t, agentId, ok ? genome.CODE[kind] : 'x')
+      }
+
+      return ran
     }
     if (!t || isOff(s) || e.agentId) return run()
     const id = e.tool_use_id ?? `local-${t.done.length + t.running.size}`
@@ -460,6 +499,9 @@ export const register: Register = (on, options) => {
       const ok = ran !== undefined && ran.deny === undefined && !ran.isError
       const failedBefore = t.failures
       finishStep(t, id, e.tool, input, ok, ran?.text ?? '', ran?.result, await $.clock.now())
+      const step = t.done[t.done.length - 1]
+      if (!ok && step?.id === id) step.why = archive.failWhy(ran, s.denied.get(id))
+      s.denied.delete(id)
       void burst($, s)
       if (failedBefore === 0 && t.failures > 0) void narrate($, s)
       $.ui.invalidate('ui.render')
@@ -512,6 +554,8 @@ export const register: Register = (on, options) => {
       const moments = [...celebrations(t), ...rec20.moments, ...(await turnMoments($, s, t, letters, now).catch(() => [])), ...(lm.marks.length ? [landmarkMoment(lm.marks)].filter((x): x is Moment => !!x) : [])]
       const name = nameOf(letters, countedRuns(t), filesRead(t))
       await saveGenome($, s, letters, { name, marks: lm.marks, tests: lm.tests, files: fileTouches(t, now) })
+      const end = archive.endOf(e.answer, e.reason)
+      await saveArchive($, s, archive.archTurn(t, letters, { name, end, ms: e.durationMs, ctx: s.ctx, model: e.usage?.model })).catch(() => undefined)
       await writeTitle($, s)
       const memo = recall(s.history, t)
       s.history = record(s.history, t)

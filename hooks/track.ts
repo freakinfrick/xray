@@ -18,9 +18,12 @@ function colorTodos(t: Turn) {
 }
 // kind: what the filmstrip colors a step by (round 16, direction 1). A Bash step takes the kind of what
 // it did (2026-10-04): read and edit like the tools, or script, orchestrate, network, wait, run (`shellKind`).
-export type StepKind = 'read' | 'edit' | 'memory' | 'run' | 'script' | 'orchestrate' | 'network' | 'wait' | 'test' | 'commit' | 'agent' | 'todo' | 'other'
+export type StepKind = 'read' | 'edit' | 'memory' | 'run' | 'script' | 'orchestrate' | 'network' | 'wait' | 'test' | 'commit' | 'agent' | 'skill' | 'mcp' | 'ask' | 'todo' | 'other'
+// Why a step failed (round 22, the archive): the tool erred, a hook blocked it, a rule or the person
+// denied it, it timed out, or it never came back (interrupted).
+export type FailWhy = 'error' | 'hook' | 'denied' | 'timeout' | 'aborted'
 // note: what a commit step committed (round 20a), "3f9c2ab subject". file: the path a step read or wrote (20d/e).
-export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string; file?: string }
+export type Step = { id: string; tool: string; say: string; startedAt: number; endedAt?: number; ok?: boolean; kind?: StepKind; note?: string; file?: string; why?: FailWhy }
 const READS = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead'])
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const MEMORY_PATH = /\/\.claude\/projects\/[^/]+\/memory\//
@@ -31,6 +34,10 @@ export function stepKind(tool: string, input: Record<string, unknown>): StepKind
   if (EDITS.has(tool)) return MEMORY_PATH.test(String(input.file_path ?? '')) ? 'memory' : 'edit'
   if (TODOS.has(tool)) return 'todo'
   if (tool === 'Agent' || tool === 'Task') return 'agent'
+  // Round 22: these were `other`, 6% of steps the genome could not name.
+  if (tool === 'Skill') return 'skill'
+  if (tool === 'AskUserQuestion') return 'ask'
+  if (tool.startsWith('mcp__')) return 'mcp'
   if (tool === 'Bash') {
     const cmd = String(input.command ?? '')
     // A commit chained after a test run (`pytest && git commit`) is a commit cell: the run still counts in the
@@ -43,7 +50,8 @@ export function stepKind(tool: string, input: Record<string, unknown>): StepKind
 export type Run = TestRun & { running: boolean; startedAt: number; endedAt?: number; ok?: boolean; isStopped?: boolean }
 export type Template = 'default' | 'research' | 'agents' | 'tests' | 'refactor'
 // A subagent the main session started. Its own steps arrive on tool.call with its agentId.
-export type Agent = { toolUseId: string; agentId?: string; label: string; isBackground: boolean; startedAt: number; endedAt?: number; ok?: boolean; steps: number; doing?: string }
+// letters: its own steps as genome letters (round 22), so the archive sees inside an `a` cell.
+export type Agent = { toolUseId: string; agentId?: string; label: string; isBackground: boolean; startedAt: number; endedAt?: number; ok?: boolean; steps: number; doing?: string; letters?: string }
 // A shell command the main session ran, kept across turns: reruns are what bench and build compare.
 export type Cmd = { cmd: string; startedAt: number; endedAt?: number; ok?: boolean; text?: string; measure?: { v: number; unit: string } }
 // A command sent to the background, followed through its output file.
@@ -80,6 +88,8 @@ export type Turn = {
   endedAt?: number // round 20: when turn.complete came
   awayMs?: number // round 20f: the gap between the previous turn's end and this prompt
   isAwayCold?: boolean // the prompt cache had lapsed by then
+  user?: { chars: number; origin: string; command?: string } // round 22: the prompt that started it, never its text
+  midTurn?: number // round 22: prompts the person typed into it while it ran
 }
 
 export const newTurn = (prompt: string, now: number): Turn => ({
@@ -158,6 +168,12 @@ export function agentStep(t: Turn, agentId: string, say: string) {
   if (!a) return
   a.steps += 1
   a.doing = say
+}
+
+// A subagent's step ended: its letter joins the agent's own genome (round 22).
+export function agentLetter(t: Turn, agentId: string, letter: string) {
+  const a = agentOf(t, agentId)
+  if (a && letter) a.letters = (a.letters ?? '') + letter
 }
 
 export function finishAgent(t: Turn, key: { agentId?: string; toolUseId?: string }, ok: boolean, now: number) {

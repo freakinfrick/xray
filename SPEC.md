@@ -825,3 +825,26 @@ sub-cards now only feed one fact row (their side columns/foot rows are dead weig
 - User, verbatim: "in between turns, the xray mod doesnt show the directory but it needs to".
 - Strip now leads with `where()`: full form on desktop, last part on phone / under NARROW. Still also
   in the `/xray` panel's `here` section. Device glyph stays off the strip.
+
+## Round 22 — genomes as a dataset (2026-11-02, built)
+User asked what would make genomes better for "isolated en-masse analytics for behavioral
+understanding", then said "all 6!". Trigger: the store keeps 40 sessions (~2.5 days), a reader saw
+only Claude's side, and 6% of steps were `o`.
+1. **Archive** (`hooks/archive.ts`): one self-describing JSON per session at
+   `~/.claude/xray-genomes/<session id>.json`, rewritten whole at each turn end, never swept (the mod
+   fs has no append; per-session files stay far under the 4 MiB read cap). The store is unchanged.
+2. **Header**: `schema` 1, `about` (how to read it, what is not recorded), `privacy` (local only, never
+   to any external service or model API), `legend` (letter → kind, plus x), `session` {id, cwd, harness,
+   model, startedAt}. Conductor workers (CLAUDE_HUMAN_MODS=off) and /xray-off turns are NOT recorded:
+   stated in `about`, not flagged.
+3. **User side, no text**: `user` {chars, origin, command}, `awayMs`, `midTurn` (prompts typed into a
+   running turn: those now JOIN the turn instead of starting a new one), `end` = `aborted` for Esc.
+4. **Why it failed**: letters unchanged (`x`); a parallel `fails` [{at, why}] indexes the turn's
+   letters. why = hook (a hook's tool.check deny, verified live with rm_guard) | denied | timeout |
+   aborted | error. Limit: core's sandbox and directory blocks arrive as plain tool errors → `error`.
+5. **New letters**: `l` Skill, `p` MCP tool, `q` AskUserQuestion; all three bracket as looked; panel
+   key gained them. Turn `end`: decision (dbox fence with DECIDE/DO NOW) | status (other dbox) |
+   question | talk | silent | aborted | error, from the reply text, which is not kept.
+6. **Timing + subagents**: `ms`, `ctxPct`, summed `tokens`, `model` per turn; `agents` [{label,
+   letters, ok, ms, isBackground}], each subagent's own steps as genome letters (verified live: `cx`).
+Unseen live: an interactive Esc (`aborted`), a mid-turn prompt joining a turn, /resume reading the file back.
