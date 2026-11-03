@@ -50,12 +50,13 @@ test('round 22: a turn as the archive keeps it: fails index the letters, agents 
 })
 
 test('round 22: the archive file reads back its turns under a current header; junk starts over', () => {
-  const fresh = archive.newArchive('id1', '/w', 5, 'opus')
+  const fresh = archive.newArchive('id1', '/w', 5, false, 'opus')
   const kept = archive.addArchTurn(fresh, { at: 1, letters: 'r', name: '', fails: [], agents: [], end: 'talk' })
   const back = archive.loadArchive(JSON.stringify({ ...kept, schema: 0, legend: {} }), fresh)
   expect(back.turns).toHaveLength(1)
   expect(back.schema).toBe(archive.SCHEMA)
   expect(back.legend.r).toBe('read')
+  expect(back.session.isInteractive).toBe(false)
   expect(archive.loadArchive('not json', fresh)).toBe(fresh)
   expect(archive.pathOf('/home/u', 'id1')).toBe('/home/u/.claude/xray-genomes/id1.json')
 })

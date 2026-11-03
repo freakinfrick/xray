@@ -43,18 +43,19 @@ export type Archive = {
   about: string
   privacy: string
   legend: Record<string, string>
-  session: { id: string; cwd: string; harness: 'claude-code'; model?: string; startedAt: number }
+  // isInteractive false: a scripted run (`claude -p`, the SDK), kept but tagged so a reader can leave it out.
+  session: { id: string; cwd: string; harness: 'claude-code'; isInteractive: boolean; model?: string; startedAt: number }
   turns: ArchTurn[]
 }
 
 export const pathOf = (home: string, id: string) => `${home}/${DIR}/${id}.json`
 
-export const newArchive = (id: string, cwd: string, startedAt: number, model?: string): Archive => ({
+export const newArchive = (id: string, cwd: string, startedAt: number, isInteractive: boolean, model?: string): Archive => ({
   schema: SCHEMA,
   about: ABOUT,
   privacy: PRIVACY,
   legend: LEGEND,
-  session: { id, cwd, harness: 'claude-code', ...(model ? { model } : {}), startedAt },
+  session: { id, cwd, harness: 'claude-code', isInteractive, ...(model ? { model } : {}), startedAt },
   turns: [],
 })
 

@@ -72,6 +72,7 @@ type Live = {
   tasks: tasks.Store // round 21: the session's task list, answered by xray instead of core
   tasksId: string // the session it belongs to
   arch?: archive.Archive // round 22: every turn of this session, kept on disk past the store's 40
+  isInteractive: boolean // false under `claude -p` / the SDK: archived (tagged), kept out of the store's 40
   denied: Map<string, 'hook' | 'denied'> // tool_use ids tool.check denied (by a hook or not), until their call ends
 }
 const isOff = (s: Live) => s.isEnvOff || s.isHidden
@@ -87,13 +88,15 @@ async function loadGenome($: EngineInterface, s: Live) {
   // Round 22: the archive file, read back on /resume; a fresh one otherwise.
   s.arch = undefined
   if (!s.home) return
-  const fresh = archive.newArchive(id, s.cwd, s.rec.startedAt, await $.session.model().catch(() => undefined))
+  const fresh = archive.newArchive(id, s.cwd, s.rec.startedAt, s.isInteractive, await $.session.model().catch(() => undefined))
   s.arch = archive.loadArchive(await $.fs.read(archive.pathOf(s.home, id)).catch(() => undefined), fresh)
 }
 async function saveGenome($: EngineInterface, s: Live, letters: string, extra: Parameters<typeof addTurn>[2] = {}) {
   await loadGenome($, s)
   if (!s.genomeId) return
   s.rec = addTurn(s.rec, letters, extra)
+  // A scripted run's genome would push a real session out of the 40 the screen and /resume draw from.
+  if (!s.isInteractive) return
   await $.store.set(genome.keyOf(s.genomeId), s.rec)
   for (const k of genome.stale(await $.store.keys(), genome.keyOf(s.genomeId))) await $.store.delete(k)
 }
@@ -324,13 +327,14 @@ async function deviceClass($: EngineInterface): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '', tasks: tasks.emptyStore(), tasksId: '', denied: new Map() }
+  const s: Live = { isNarrating: (options as Record<string, unknown>).narration !== 'off', isWriting: (options as Record<string, unknown>).customCards !== 'off', ledger: [], isEnvOff: false, isHidden: false, turn: null, prev: null, mode: undefined, narration: null, narratedAt: -Infinity, ctx: null, isTicking: false, cwd: '', home: '', health: [], history: [], isBursting: false, isMobile: false, memo: { tones: {} }, cache: emptyCache(), isCacheOff: false, idleGen: 0, rec: emptyRec(), genomeId: '', tasks: tasks.emptyStore(), tasksId: '', isInteractive: true, denied: new Map() }
 
   on('session.start', async ($, e, next) => {
     s.isEnvOff = (await $.env.get('CLAUDE_HUMAN_MODS')) === 'off'
     if (s.isEnvOff) return next(e)
     s.isHidden = (await $.store.get('isHidden')) === true
     s.cwd = e.cwd ?? ''
+    s.isInteractive = e.isInteractive
     s.home = (await $.env.get('HOME')) ?? ''
     s.health = await health($, s.home)
     s.isMobile = (await deviceClass($)) === 'mobile'

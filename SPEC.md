@@ -848,3 +848,10 @@ only Claude's side, and 6% of steps were `o`.
 6. **Timing + subagents**: `ms`, `ctxPct`, summed `tokens`, `model` per turn; `agents` [{label,
    letters, ok, ms, isBackground}], each subagent's own steps as genome letters (verified live: `cx`).
 Unseen live: an interactive Esc (`aborted`), a mid-turn prompt joining a turn, /resume reading the file back.
+- **Follow-up (2026-11-03, f2+f3):** scripted runs (`claude -p`, SDK; `session.start` isInteractive
+  false) are archived with `session.isInteractive: false` and kept OUT of the store's 40, so they no
+  longer push real sessions off the screen and /resume. `tools/genome_print.py` prints genomes as an
+  image, one session per line (archive by default, `--store` for the plugin store; skips scripted and
+  stepless sessions unless `--all` / `--keep-empty`; hook blocks drawn orange). Verified live: a
+  `claude -p --resume` second process read the file back (2 turns), store untouched. Dev trap: an edit
+  under `mods/` reloads xray mid-turn, and that turn is never recorded (fresh state has no s.turn).
