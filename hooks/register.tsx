@@ -603,17 +603,12 @@ export const register: Register = (on, options) => {
       const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT, where(await here($, s), s.home, true))
       const color = TONE_COLOR[k.tone]
       const dim = k.tone === 'quiet'
-      const ink = (l: Line, key: string) => l.map((g, i) => (
-        <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
-          {g.t}
-        </Text>
-      ))
       const cellsOf = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
       // An edge carrying a line: ┏━ text ━━━┓ (round 21: the phone's one card is the main card, heavy), or bare when the line is empty.
       const edge = (l: Line, left: string, right: string, key: string) => (
         <Text key={key} wrap="truncate-end">
           <Text color={color} dimColor={dim}>{l.length ? `${left}━ ` : left + '━'}</Text>
-          {ink(l, key)}
+          {ink(l, key, Text)}
           <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '━'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
         </Text>
       )
@@ -645,7 +640,7 @@ export const register: Register = (on, options) => {
           {k.body.map((l, r) => (
             <Text key={`kb${r}`} wrap="truncate-end">
               <Text color={color} dimColor={dim}>{'┃ '}</Text>
-              {ink(l, `kb${r}`)}
+              {ink(l, `kb${r}`, Text)}
               <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cellsOf(l))) + ' ┃'}</Text>
             </Text>
           ))}
@@ -665,11 +660,7 @@ export const register: Register = (on, options) => {
         {line}
         {rows.map((l, r) => (
           <Text key={`w${r}`} wrap="truncate-end">
-            {l.map((g, i) => (
-              <Text key={`w${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
-                {g.t}
-              </Text>
-            ))}
+            {ink(l, `w${r}s`, Text)}
           </Text>
         ))}
       </Box>
@@ -723,11 +714,7 @@ export const register: Register = (on, options) => {
             <Text bold>{sec.title}</Text>
             {sec.rows.map((l, r) => (
               <Text key={`p${i}r${r}`} wrap="truncate-end">
-                {l.map((g, k) => (
-                  <Text key={`g${k}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
-                    {g.t}
-                  </Text>
-                ))}
+                {ink(l, 'g', Text)}
               </Text>
             ))}
           </Box>
@@ -794,9 +781,10 @@ export const register: Register = (on, options) => {
 }
 
 const cells = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
+// The one Seg -> Text renderer: every style a Seg can carry reaches the terminal.
 function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
   return l.map((g, i) => (
-    <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold}>
+    <Text key={`${key}${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold} inverse={g.inv} strikethrough={g.strike}>
       {g.t}
     </Text>
   ))
@@ -829,11 +817,7 @@ const EDGE_MARK = 5 // Claude Code draws its own `[-]` at the strip line's right
 function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
   return rows.map((l, r) => (
     <Text key={`${key}${r}`} wrap="truncate-end">
-      {l.map((g, i) => (
-        <Text key={`${key}${r}s${i}`} color={g.color} backgroundColor={g.bg} dimColor={g.dim} bold={g.bold}>
-          {g.t}
-        </Text>
-      ))}
+      {ink(l, `${key}${r}s`, Text)}
     </Text>
   ))
 }
