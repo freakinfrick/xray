@@ -170,11 +170,23 @@ export function sectionLines(sections: readonly Section[]): Line[] {
   return out.slice(0, -1)
 }
 
-// A host port's /xray: genome first, then how long this session ran, the turn's own sections, files, turns.
+// The /xray order on every host: genome, then last turn and here, the turn's own sections (`body`),
+// records, files, turns. Claude Code adds the genome's mark key, the last turn, a where row and records.
+export type Extras = { marks?: Line[]; last?: Line[]; where?: Line; records?: Line[] }
+export function panelSections(body: readonly Section[], rec: SessionRec, live: Turn | null, cols: number, now: number, cwd: string, home: string, x: Extras = {}): Section[] {
+  const ran: Line[] = rec.startedAt !== undefined ? [[{ t: `${span(now - rec.startedAt)} · ${rec.turns.length} turn${rec.turns.length === 1 ? '' : 's'}`, dim: true }]] : []
+  const hereRows = [...(x.where ? [x.where] : []), ...ran]
+  return [
+    genomeSection(rec, cols, live, now, x.marks),
+    ...(x.last?.length ? [{ title: 'last turn', rows: x.last }] : []),
+    ...(hereRows.length ? [{ title: 'here', rows: hereRows }] : []),
+    ...body,
+    ...(x.records?.length ? [{ title: 'records · this folder', rows: x.records }] : []),
+    ...[filesSection(rec, cols, cwd, home), turnsSection(rec)].filter((sec): sec is Section => !!sec),
+  ]
+}
+
+// A host port's /xray: the shared order over the turn's own sections.
 export function hostPanel(shown: Turn | null, live: Turn | null, rec: SessionRec, usage: Usage | null, cols: number, now: number, cwd: string, home: string): Line[] {
-  const sections = panel(shown, usage, now, [], { cols }, null)
-  sections.unshift(genomeSection(rec, cols, live, now))
-  if (rec.startedAt !== undefined) sections.splice(1, 0, { title: 'here', rows: [[{ t: `${span(now - rec.startedAt)} · ${rec.turns.length} turn${rec.turns.length === 1 ? '' : 's'}`, dim: true }]] })
-  for (const sec of [filesSection(rec, cols, cwd, home), turnsSection(rec)]) if (sec) sections.push(sec)
-  return sectionLines(sections)
+  return sectionLines(panelSections(panel(shown, usage, now, [], { cols }, null), rec, live, cols, now, cwd, home))
 }

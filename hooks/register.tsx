@@ -8,7 +8,7 @@ import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest,
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
-import { filesSection, genomeSection, panel, turnsSection } from './panel'
+import { panel, panelSections } from './panel'
 import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
@@ -17,7 +17,7 @@ import * as archive from './archive'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, loadRec, type SessionRec } from './session'
-import { MARK_GLYPH, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
+import { MARK_GLYPH, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, tile, type Day, type Moment } from './moments'
 import { agentLetter, agentStep, stepKind, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -671,21 +671,16 @@ export const register: Register = (on, options) => {
     const usage = await $.session.usage().catch(() => null)
     // Text columns inside the paddingX={1} below; rows as the surface measured them.
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
-    const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
+    const now = await $.clock.now()
+    const body = panel(s.turn ?? s.prev, usage, now, s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
     // The genome and its key lead the panel and always show (user, 2026-10-03): placed last, they fell
     // below the pane's 32 rows on a busy turn.
     const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
-    sections.unshift(genomeSection(s.rec, cols ?? 80, s.turn, await $.clock.now(), marks))
     // Round 21: what left the idle strip lives here: how the last turn went, where this is, how long.
     const l = s.turn ? null : await read($, last)
     const tone = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
-    const at = await $.clock.now()
     const lastRows: Line[] = l ? [[{ t: ` ${l.name ?? l.title ?? 'turn'} `, bg: tone ?? 'gray', color: 'black' }, { t: ` ${l.title ?? 'turn'} · `, dim: true }, { t: l.headline, color: tone }], ...(l.moment ? [tile(l.moment)] : []), ...(l.memo ?? []).map((m): Line => [{ t: m, dim: true }])] : []
-    const hereRows: Line[] = [[{ t: where(await here($, s), s.home) }], ...(s.rec.startedAt !== undefined ? [[{ t: `${span(at - s.rec.startedAt)} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }]] : [])]
-    sections.splice(1, 0, ...(lastRows.length ? [{ title: 'last turn', rows: lastRows }] : []), { title: 'here', rows: hereRows })
-    const best = recordRows(s.records)
-    if (best.length) sections.push({ title: 'records · this folder', rows: best })
-    for (const sec of [filesSection(s.rec, cols ?? 80, s.cwd, s.home), turnsSection(s.rec)]) if (sec) sections.push(sec)
+    const sections = panelSections(body, s.rec, s.turn, cols ?? 80, now, s.cwd, s.home, { marks, last: lastRows, where: [{ t: where(await here($, s), s.home) }], records: recordRows(s.records) })
 
     return (
       <Box flexDirection="column" paddingX={1}>

@@ -5,7 +5,7 @@ import { compact, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, n
 import { allot, body, hostView, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
-import { hostPanel, panel } from './panel'
+import { hostPanel, panel, panelSections } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
@@ -1304,6 +1304,19 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   expect(text(genome.tail(['re', 'c'], 30))).toBe('genome [▌▌][▌]') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
   expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*\(▌▌▌▌\)$/)
+})
+
+test('every /xray panel shares one section order; Claude Code\'s extras slot into it', async () => {
+  let rec: SessionRec = { ...emptyRec(), startedAt: 0 }
+  rec = addTurn(rec, 'rre', { name: 'fix-1' })
+  const body = [{ title: 'requests', rows: [] }]
+  const x = { last: [[{ t: 'went fine' }]], where: [{ t: '~/w' }], records: [[{ t: 'best' }]] }
+  const titles = panelSections(body, rec, null, 70, 60_000, '/w', '/h', x).map(sec => sec.title.split(' · ')[0])
+  expect(titles).toEqual(['genome', 'last turn', 'here', 'requests', 'records', 'turns'])
+  const here = panelSections(body, rec, null, 70, 60_000, '/w', '/h', x)[2]
+  expect(here?.rows.map(text)).toEqual(['~/w', '1m · 1 turn'])
+  // No extras, no start time: no last turn, no here, no records.
+  expect(panelSections(body, { ...rec, startedAt: undefined }, null, 70, 0, '/w', '/h').map(sec => sec.title.split(' · ')[0])).toEqual(['genome', 'requests', 'turns'])
 })
 
 test('a host port panel: genome first, how long, then files and named turns, from the shared sections', async () => {
