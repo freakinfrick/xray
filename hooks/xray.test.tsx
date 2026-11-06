@@ -11,7 +11,7 @@ import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, par
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import * as title from './title'
-import { cells } from './line'
+import { capRows, cells } from './line'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { MAX_TURNS, addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName, type SessionRec } from './session'
@@ -1741,4 +1741,11 @@ test('with CLAUDE_HUMAN_MODS=off core\'s task-tool reminder stays', async ($, on
   on('prompt.attachment', ($, e) => ({ text: (e as { text: string }).text }) as never)
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   expect((await $.prompt.attachment({ type: 'task_reminder', text: 'x' } as never)).text).toBe('x')
+})
+
+test('a list past its room ends in one +N rows line', async () => {
+  const rows = ['a', 'b', 'c', 'd'].map(t => [{ t }])
+  expect(capRows(rows, 4)).toBe(rows)
+  expect(capRows(rows, 3).map(text)).toEqual(['a', 'b', '+2 rows'])
+  expect(capRows(rows, 1).map(text)).toEqual(['+4 rows'])
 })

@@ -3,7 +3,7 @@
 // The drawing is xray's shared core (../hooks); this file feeds it the host's events and hands its lines to
 // the host's widget through ./ink (the host's theme). What differs per host comes in as a Host.
 import type { Mode } from '../hooks/cards'
-import type { Line } from '../hooks/line'
+import { capRows, type Line } from '../hooks/line'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel, type Usage } from '../hooks/panel'
 import * as genome from '../hooks/genome'
@@ -249,7 +249,7 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
     const paint = (t: string) => (edge ? edge + t + '\x1b[0m' : t)
     const inner = Math.max(10, width - 4)
     const fit = Math.max(1, (process.stdout.rows ?? 40) - 4)
-    const shown = rows.length > fit ? [...rows.slice(0, fit - 1), [{ t: `+${rows.length - fit + 1} rows`, dim: true }]] : rows
+    const shown = capRows(rows, fit)
     const title = ink(theme, [{ t: 'xray', bold: true }])
     const hint = ink(theme, [{ t: 'any key closes', dim: true }])
     return [

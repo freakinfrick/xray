@@ -74,3 +74,8 @@ export function clipLine(l: Line, width: number): Line {
   // A kept text that already trails off ("running…") takes no second ellipsis.
   return kept.map(g => g.t).join('').trimEnd().endsWith('…') ? kept : [...kept, { t: '…', dim: true }]
 }
+
+// At most `room` rows: past that the last row says how many more there were ('+N rows').
+export function capRows(rows: Line[], room: number): Line[] {
+  return rows.length > room ? [...rows.slice(0, room - 1), [{ t: `+${rows.length - room + 1} rows`, dim: true }]] : rows
+}

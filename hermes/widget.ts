@@ -7,7 +7,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Line } from '../hooks/line'
+import { capRows, type Line } from '../hooks/line'
 import * as genome from '../hooks/genome'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel } from '../hooks/panel'
@@ -155,7 +155,7 @@ export default function register(sdk: Sdk) {
       // Dialog: border, padding, title and hint take 8 rows; one more spare.
       const room = Math.max(4, height - 9)
       const all = hostPanel(f.s.turn ?? f.s.prev, f.s.turn, f.s.rec, null, inner, Date.now(), process.cwd(), homedir())
-      const shown = all.length > room ? [...all.slice(0, room - 1), [{ t: `+${all.length - room + 1} rows`, dim: true }]] : all
+      const shown = capRows(all, room)
       return h(sdk.Overlay, { zone: 'center' }, h(sdk.Dialog, { title: 'xray', hint: 'any key closes', width }, rows(shown.map(l => pad(l, inner)), t.color, 'p')))
     },
   })
