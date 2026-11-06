@@ -7,13 +7,13 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { compact, TONE_COLOR, type Line } from '../hooks/cards'
+import type { Line } from '../hooks/cards'
 import * as genome from '../hooks/genome'
-import { spinnerRows, type Memo } from '../hooks/layout'
+import { hostView, type Memo } from '../hooks/layout'
+import { hostPanel } from '../hooks/panel'
 import { loadRec, type SessionRec } from '../hooks/session'
 import { feed, open, type Feed, type Store } from './feed'
 import { pad, props, type Colors } from './ink'
-import { panelLines } from './panel'
 
 // The slice of hermes' widgetSdk used here (ui-tui/src/sdk/userWidgets.ts, sdk/types.ts, v0.21.5).
 type Node = unknown
@@ -40,8 +40,6 @@ type Sdk = {
   updateWidget<S>(app: App<S>, fn: (s: S) => S): void
 }
 
-const NARROW = 60 // columns: below this the card folds to its compact rows (as omp)
-const BODY_ROWS = 3
 const HOME = process.env.HERMES_HOME?.trim() || join(homedir(), '.hermes')
 const DIR = join(HOME, 'xray')
 const LIVE = join(DIR, 'live')
@@ -131,14 +129,7 @@ export default function register(sdk: Sdk) {
     const t = f.s.turn
     const now = Date.now()
     const cols = Math.max(24, width)
-    if (!t) return genome.idle(f.s.rec.turns, cols)
-    if (cols < NARROW) {
-      const k = compact(t, f.s.mode, null, null, now, cols - 2, false)
-      const band: Line = [{ t: ` ${k.status} `, bg: TONE_COLOR[k.tone] ?? 'gray', color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
-      return [band, ...k.body, k.bottom, ...genome.idle(f.s.rec.turns, cols, { live: t, now, maxRows: 1 })]
-    }
-    // No context gauge or folder: hermes' status bar shows both.
-    return spinnerRows(t, f.s.mode, null, null, now, cols, BODY_ROWS, memo, '', { withTodo: false, turns: f.s.rec.turns })
+    return hostView(t, f.s.mode, f.s.rec.turns, memo, cols, now)
   }
 
   // Each row one truncating <Text>: Ink would wrap a long one and break the frame.
@@ -167,7 +158,7 @@ export default function register(sdk: Sdk) {
       const inner = width - 6
       // Dialog: border, padding, title and hint take 8 rows; one more spare.
       const room = Math.max(4, height - 9)
-      const all = panelLines(f.s, inner, Date.now(), process.cwd(), homedir())
+      const all = hostPanel(f.s.turn ?? f.s.prev, f.s.turn, f.s.rec, null, inner, Date.now(), process.cwd(), homedir())
       const shown = all.length > room ? [...all.slice(0, room - 1), [{ t: `+${all.length - room + 1} rows`, dim: true }]] : all
       return h(sdk.Overlay, { zone: 'center' }, h(sdk.Dialog, { title: 'xray', hint: 'any key closes', width }, rows(shown.map(l => pad(l, inner)), t.color, 'p')))
     },

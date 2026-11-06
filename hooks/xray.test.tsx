@@ -5,7 +5,7 @@ import { TONE_COLOR, compact, effortTag, filmstrip, mood, stepCounts, teleParts,
 import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
-import { panel } from './panel'
+import { hostPanel, panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
@@ -13,7 +13,7 @@ import * as genome from './genome'
 import { cells } from './line'
 import * as tasks from './tasks'
 import { nameOf } from './names'
-import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName } from './session'
+import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName, type SessionRec } from './session'
 import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, stepKind, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
@@ -1294,6 +1294,18 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   expect(text(genome.tail(['re', 'c'], 30))).toBe('genome [▌▌][▌]') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
   expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*\(▌▌▌▌\)$/)
+})
+
+test('a host port panel: genome first, how long, then files and named turns, from the shared sections', async () => {
+  let rec: SessionRec = { ...emptyRec(), startedAt: 0 }
+  rec = addTurn(rec, 'rre', { name: 'fix-1' })
+  rec = addTurn(rec, 'rrrrrrrr', { name: 'fix-2' })
+  const rows = hostPanel(null, null, rec, null, 70, 125 * 60_000, '/w', '/h').map(text)
+  expect(rows[0]).toMatch(/^genome · /)
+  expect(rows).toContain('here')
+  expect(rows.some(r => /^2h05 · 2 turns$/.test(r))).toBe(true)
+  expect(rows).toContain('turns · 2 · 1 kinds')
+  expect(rows.some(r => /^ {2}2 {2}\S{10} {2}fix-2$/.test(r))).toBe(true) // 8 cells + brackets, never '+1 turn'
 })
 
 test('a panel turn row shows the turn whole in its brackets, cut with an ellipsis, never folded to +1 turn', async () => {

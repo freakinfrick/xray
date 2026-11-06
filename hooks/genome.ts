@@ -3,7 +3,7 @@
 // grows to 3 rows, then folds the oldest whole turns into a dim `+N turns`. Saved per session in the
 // plugin store (key `genome:<session id>`), so /resume brings it back. Pure: register.tsx does the I/O.
 
-import { KIND, cells, clipLine, type Line, type Seg } from './line'
+import { KIND, NARROW, cells, clipLine, type Line, type Seg } from './line'
 import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
@@ -229,7 +229,7 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
 
 // The genome on its own, `cols` wide, labelled at the right edge: every host's idle form between turns
 // (and a narrow card's row under it). A narrow pane keeps one row, the oldest turns folded.
-export const NARROW = 60
+export { NARROW }
 export const idle = (turns: readonly string[], cols: number, opts: Opts = {}): Line[] =>
   labelRight(rows(turns, cols - EDGE_LABEL.length - 1, { maxRows: cols < NARROW ? 1 : MAX_ROWS, ...opts }), cols)
 

@@ -2,20 +2,20 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, lastTurn, where, type Mode } from './cards'
-import { cells, type Line } from './line'
+import { NARROW, cells, type Line } from './line'
 import { bar } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
 import { addEntry, isRefused, parseRating, rules, type Entry } from './ledger'
-import { panel } from './panel'
+import { filesSection, genomeSection, panel, turnsSection } from './panel'
 import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
 import * as archive from './archive'
 import * as tasks from './tasks'
 import { nameOf } from './names'
-import { addTurn, emptyRec, fileTouches, shortName, loadRec, type SessionRec } from './session'
+import { addTurn, emptyRec, fileTouches, loadRec, type SessionRec } from './session'
 import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentLetter, agentStep, stepKind, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
@@ -28,7 +28,6 @@ const NARRATE_GAP_MS = 60_000
 const BURST_MS = 500 // one burst per event: a step landing, a to-do done, a tone changing
 const BURST_FRAME_MS = 160
 const NARRATION_TTL_MS = 30_000
-const NARROW = 60 // columns: below this the cards give way to the compact rows (round 8)
 const SHORT = 30 // rows: below this (phone keyboard up) the compact rows fold to the ticker
 const BODY_ROWS = 3 // card text rows between the top edges and the tray; one more on a tall terminal (round 16)
 const TODO_NUDGE =
@@ -674,11 +673,9 @@ export const register: Register = (on, options) => {
     const cols = e.props.bodyColumns !== undefined ? e.props.bodyColumns - 2 : undefined
     const sections = panel(s.turn ?? s.prev, usage, await $.clock.now(), s.ledger, { cols, rows: e.viewport?.rows }, s.isCacheOff ? null : s.cache)
     // The genome and its key lead the panel and always show (user, 2026-10-03): placed last, they fell
-    // below the pane's 32 rows on a busy turn. At most PANEL_DNA rows; older turns fold into +N.
-    const dna = genome.rows(s.rec.turns, cols ?? 80, { live: s.turn ?? undefined, now: await $.clock.now(), maxRows: PANEL_DNA })
+    // below the pane's 32 rows on a busy turn.
     const marks = (Object.keys(MARK_GLYPH) as (keyof typeof MARK_GLYPH)[]).map((k): Line => [{ t: MARK_GLYPH[k], ...markLook(k) }, { t: ` ${MARK_WORD[k]}`, dim: true }])
-    // An empty row takes no height: the spacer holds a space.
-    sections.unshift({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...(dna.length ? dna : [[{ t: 'no steps yet this session', dim: true }]]), [{ t: ' ' }], ...genome.key(cols ?? 80, marks)] })
+    sections.unshift(genomeSection(s.rec, cols ?? 80, s.turn, await $.clock.now(), marks))
     // Round 21: what left the idle strip lives here: how the last turn went, where this is, how long.
     const l = s.turn ? null : await read($, last)
     const tone = l?.tone === 'ok' ? 'green' : l?.tone === 'fail' ? 'red' : undefined
@@ -688,24 +685,7 @@ export const register: Register = (on, options) => {
     sections.splice(1, 0, ...(lastRows.length ? [{ title: 'last turn', rows: lastRows }] : []), { title: 'here', rows: hereRows })
     const best = recordRows(s.records)
     if (best.length) sections.push({ title: 'records · this folder', rows: best })
-    // Round 20e: the files this session touched, newest touch first, each touch a genome cell.
-    const files = s.rec.files.slice(0, PANEL_TURNS)
-    if (files.length) {
-      const all = s.rec.files.map(x => x.f)
-      const names = files.map(x => shortName(x.f, all, s.cwd, s.home))
-      const w = Math.min(28, Math.max(...names.map(n => n.length)))
-      sections.push({ title: `files · ${s.rec.files.length}`, rows: files.map((x, i) => [{ t: (names[i] ?? '').slice(0, w).padEnd(w + 2) }, ...genome.cellsOf(x.cells.slice(-Math.max(8, (cols ?? 80) - w - 4)))]) })
-    }
-    // Round 20d: each turn by name, newest first (10 at most: the pane is 32 rows).
-    const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse()
-    if (named.length) {
-      const w = Math.min(genome.TURN_CELLS, Math.max(...named.slice(0, PANEL_TURNS).map(r => r.x.length + 2), 3))
-      const rows: Line[] = named.slice(0, PANEL_TURNS).map(r => {
-        const dna = genome.turnRow(r.x, w)
-        return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...dna, { t: ' '.repeat(Math.max(0, w - cells(dna)) + 2) }, { t: r.name }]
-      })
-      sections.push({ title: `turns · ${named.length} · ${new Set(named.map(r => r.name.replace(/\d+/g, 'N'))).size} kinds`, rows })
-    }
+    for (const sec of [filesSection(s.rec, cols ?? 80, s.cwd, s.home), turnsSection(s.rec)]) if (sec) sections.push(sec)
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -806,8 +786,6 @@ function withNotes(rec: SessionRec, cols: number, opts: Parameters<typeof genome
   return row.length ? [...rows.slice(0, -1), row, ...rows.slice(-1)] : rows
 }
 const LONGEST_MIN = 12
-const PANEL_TURNS = 10
-const PANEL_DNA = 12
 // The note row's marks in words, for the genome's key.
 const MARK_WORD = { commit: 'commit', green: 'back to green', red: 'red again', fanout: '2+ agents', ctx: 'context 50/70 %', longest: 'longest turn' } as const
 

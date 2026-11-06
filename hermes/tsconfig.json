@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["widget.ts", "calls.ts", "feed.ts", "ink.ts", "panel.ts", "env.d.ts"]
+  "include": ["widget.ts", "calls.ts", "feed.ts", "ink.ts", "env.d.ts"]
 }

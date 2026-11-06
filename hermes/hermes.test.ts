@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { resultText, toCall, toEvent } from './calls'
 import { feed, open, step, type Store } from './feed'
 import { cells, fit, pad, props, type Colors } from './ink'
-import { panelLines } from './panel'
+import { hostPanel } from '../hooks/panel'
 import { emptyRec, type SessionRec } from '../hooks/session'
 import { spinnerRows } from '../hooks/layout'
 
@@ -102,7 +102,7 @@ test('a new session id swaps the record and keeps the old one saved', () => {
 test('the panel draws the genome and the last turn from the feed state', () => {
   const f = open()
   feed(f, turn('s1').join('') + line({ t: 1600, kind: 'turn_end', sid: 's1' }), mem())
-  const rows = panelLines(f.s, 70, 2000)
+  const rows = hostPanel(f.s.turn ?? f.s.prev, f.s.turn, f.s.rec, null, 70, 2000, '', '')
   expect(text(rows[0] ?? [])).toContain('genome')
   expect(rows.some(r => text(r).includes('calc.py'))).toBe(true)
 })

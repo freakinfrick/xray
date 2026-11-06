@@ -6,12 +6,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Line, Mode } from '../hooks/cards'
-import { compact, TONE_COLOR } from '../hooks/cards'
-import { spinnerRows, type Memo } from '../hooks/layout'
-import { panel, type Usage } from '../hooks/panel'
+import { hostView, type Memo } from '../hooks/layout'
+import { hostPanel, type Usage } from '../hooks/panel'
 import * as genome from '../hooks/genome'
 import { nameOf } from '../hooks/names'
-import { addTurn, emptyRec, fileTouches, loadRec, shortName, type SessionRec } from '../hooks/session'
+import { addTurn, emptyRec, fileTouches, loadRec, type SessionRec } from '../hooks/session'
 import { countedRuns, endTurn, filesRead, finishStep, newTurn, spawnAgent, startStep, type Turn } from '../hooks/track'
 import { cells, ink, resultText, retoken, toCall, type Call, type Theme } from './ink'
 
@@ -44,10 +43,6 @@ export type Pi = {
 export type Host = { dir: string; closeOn: 'agent_end' | 'agent_settled'; tokens?: Record<string, string> }
 
 const KEY = 'xray'
-const NARROW = genome.NARROW // columns: below this the card folds to its compact rows (parent round 8)
-const BODY_ROWS = 3
-const PANEL_DNA = 12
-const PANEL_TURNS = 10
 
 type Live = {
   turn: Turn | null
@@ -142,15 +137,7 @@ export function xray(pi: Pi, host: Host) {
     const t = s.turn
     // Never the last column: a full-width row wraps in some terminals.
     const cols = Math.max(24, width - 1)
-    // Between turns the genome alone: the host's own status line already carries the folder and context.
-    if (!t) return genome.idle(s.rec.turns, cols)
-    if (cols < NARROW) {
-      const k = compact(t, s.mode, null, null, now, cols - 2, false)
-      const band: Line = [{ t: ` ${k.status} `, bg: TONE_COLOR[k.tone] ?? 'gray', color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
-      return [band, ...k.body, k.bottom, ...genome.idle(s.rec.turns, cols, { live: t, now, maxRows: 1 })]
-    }
-    // One card, the genome inside it right of the facts. No context gauge or folder: the status line has both.
-    return spinnerRows(t, s.mode, null, null, now, cols, BODY_ROWS, s.memo, '', { withTodo: false, turns: s.rec.turns })
+    return hostView(t, s.mode, s.rec.turns, s.memo, cols, now)
   }
 
   // Once a second while a turn runs: elapsed times move without an event. omp's ctx timer is cleared with the
@@ -303,35 +290,7 @@ export function xray(pi: Pi, host: Host) {
     const c = ctx.getContextUsage()
     // pi gives null tokens/percent right after a compaction: unknown, not 0%.
     const usage: Usage = { context: { tokens: c?.tokens ?? undefined, window: c?.contextWindow ?? 0, percent: c?.percent ?? undefined }, cost: { usd: s.cost }, rateLimits: [] }
-    const sections = panel(s.turn ?? s.prev, usage, now, [], { cols }, null)
-    const dna = genome.rows(s.rec.turns, cols, { live: s.turn ?? undefined, now, maxRows: PANEL_DNA })
-    sections.unshift({ title: `genome · ${genome.summary(s.rec.turns)}`, rows: [...(dna.length ? dna : [[{ t: 'no steps yet this session', dim: true }]]), [{ t: ' ' }], ...genome.key(cols)] })
-    if (s.rec.startedAt !== undefined) {
-      const mins = Math.round((now - s.rec.startedAt) / 60_000)
-      sections.splice(1, 0, { title: 'here', rows: [[{ t: `${mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`} · ${s.rec.turns.length} turn${s.rec.turns.length === 1 ? '' : 's'}`, dim: true }]] })
-    }
-    // The files this session touched, newest touch first, each touch a genome cell (parent round 20e).
-    const files = s.rec.files.slice(0, PANEL_TURNS)
-    if (files.length) {
-      const all = s.rec.files.map(x => x.f)
-      const names = files.map(x => shortName(x.f, all, process.cwd(), homedir()))
-      const w = Math.min(28, Math.max(...names.map(n => n.length)))
-      sections.push({ title: `files · ${s.rec.files.length}`, rows: files.map((x, i) => [{ t: (names[i] ?? '').slice(0, w).padEnd(w + 2) }, ...genome.cellsOf(x.cells.slice(-Math.max(8, cols - w - 4)))]) })
-    }
-    const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse().slice(0, PANEL_TURNS)
-    if (named.length) {
-      const w = Math.min(genome.TURN_CELLS, Math.max(...named.map(r => r.x.length + 2), 3))
-      sections.push({
-        title: `turns · ${named.length}`,
-        rows: named.map(r => {
-          const d = genome.turnRow(r.x, w)
-          return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...d, { t: ' '.repeat(Math.max(0, w - cells(d)) + 2) }, { t: r.name }]
-        }),
-      })
-    }
-    const out: Line[] = []
-    for (const sec of sections) out.push([{ t: sec.title, bold: true }], ...sec.rows, [])
-    return out.slice(0, -1)
+    return hostPanel(s.turn ?? s.prev, s.turn, s.rec, usage, cols, now, process.cwd(), homedir())
   }
 
   // The panel in omp's own overlay chrome (omp d9; pi draws the same, its theme has no boxRound): a rounded box

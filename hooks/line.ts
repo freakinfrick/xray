@@ -29,6 +29,8 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; 
   other: { t: '▌', dim: true },
 }
 
+export const NARROW = 60 // columns: below this the cards fold to their compact rows (round 8)
+
 export const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)
 
 export function splitLine(line: Line, cut: number, skip: number): [Line, Line] {

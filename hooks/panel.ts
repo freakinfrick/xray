@@ -1,6 +1,9 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
-import type { Line } from './line'
+import { NARROW, cells, type Line } from './line'
+import * as genome from './genome'
+import { shortName, type SessionRec } from './session'
+import { span } from './moments'
 import { MARK, bar, tile } from './glyphs'
 import { cacheRows, type Cache } from './cache'
 import type { Entry } from './ledger'
@@ -15,7 +18,6 @@ const MAX_OWED = 8
 const BAR = 20
 const STEP_TEXT = 36
 // Under these the panel compacts: a phone is 47 × 42, about 21 rows with the keyboard up.
-const NARROW = 60
 const SHORT = 30
 
 // What the pane measured: text columns inside the padding, and rows. Unmeasured = roomy.
@@ -127,4 +129,55 @@ export function panel(t: Turn | null, usage: Usage | null, now: number, ledger: 
     })
   if (!out.length) out.push({ title: 'xray', rows: [[{ t: 'nothing measured yet: send a prompt', dim: true }]] })
   return out
+}
+
+// The genome, files and turns sections every /xray panel draws (Claude Code, pi, omp, hermes), and the
+// whole panel a host port shows. At most PANEL_DNA genome rows (older turns fold into +N), PANEL_TURNS
+// files and turns: the pane is 32 rows.
+export const PANEL_DNA = 12
+export const PANEL_TURNS = 10
+
+// An empty row takes no height: the spacer holds a space.
+export function genomeSection(rec: SessionRec, cols: number, live: Turn | null, now: number, marks: Line[] = []): Section {
+  const dna = genome.rows(rec.turns, cols, { live: live ?? undefined, now, maxRows: PANEL_DNA })
+  return { title: `genome · ${genome.summary(rec.turns)}`, rows: [...(dna.length ? dna : [[{ t: 'no steps yet this session', dim: true }]]), [{ t: ' ' }], ...genome.key(cols, marks)] }
+}
+
+// Round 20e: the files this session touched, newest touch first, each touch a genome cell.
+export function filesSection(rec: SessionRec, cols: number, cwd: string, home: string): Section | null {
+  const files = rec.files.slice(0, PANEL_TURNS)
+  if (!files.length) return null
+  const all = rec.files.map(x => x.f)
+  const names = files.map(x => shortName(x.f, all, cwd, home))
+  const w = Math.min(28, Math.max(...names.map(n => n.length)))
+  return { title: `files · ${rec.files.length}`, rows: files.map((x, i) => [{ t: (names[i] ?? '').slice(0, w).padEnd(w + 2) }, ...genome.cellsOf(x.cells.slice(-Math.max(8, cols - w - 4)))]) }
+}
+
+// Round 20d: each turn by name, newest first.
+export function turnsSection(rec: SessionRec): Section | null {
+  const named = rec.turns.map((x, i) => ({ x, i, name: rec.names[i] ?? '' })).filter(r => r.name).reverse()
+  if (!named.length) return null
+  const shown = named.slice(0, PANEL_TURNS)
+  const w = Math.min(genome.TURN_CELLS, Math.max(...shown.map(r => r.x.length + 2), 3))
+  const rows: Line[] = shown.map(r => {
+    const d = genome.turnRow(r.x, w)
+    return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...d, { t: ' '.repeat(Math.max(0, w - cells(d)) + 2) }, { t: r.name }]
+  })
+  return { title: `turns · ${named.length} · ${new Set(named.map(r => r.name.replace(/\d+/g, 'N'))).size} kinds`, rows }
+}
+
+// A section per block, a blank row between, titles bold.
+export function sectionLines(sections: readonly Section[]): Line[] {
+  const out: Line[] = []
+  for (const sec of sections) out.push([{ t: sec.title, bold: true }], ...sec.rows, [])
+  return out.slice(0, -1)
+}
+
+// A host port's /xray: genome first, then how long this session ran, the turn's own sections, files, turns.
+export function hostPanel(shown: Turn | null, live: Turn | null, rec: SessionRec, usage: Usage | null, cols: number, now: number, cwd: string, home: string): Line[] {
+  const sections = panel(shown, usage, now, [], { cols }, null)
+  sections.unshift(genomeSection(rec, cols, live, now))
+  if (rec.startedAt !== undefined) sections.splice(1, 0, { title: 'here', rows: [[{ t: `${span(now - rec.startedAt)} · ${rec.turns.length} turn${rec.turns.length === 1 ? '' : 's'}`, dim: true }]] })
+  for (const sec of [filesSection(rec, cols, cwd, home), turnsSection(rec)]) if (sec) sections.push(sec)
+  return sectionLines(sections)
 }

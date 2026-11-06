@@ -5,8 +5,8 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, filmstrip, nowCard, squares, stepCounts, taskCard, teleParts, todoCard, type Card, type Mode, type Tile, type Tone } from './cards'
-import { cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
+import { TONE_COLOR, band, compact, type Mode as CardMode, filmstrip, nowCard, squares, stepCounts, taskCard, teleParts, todoCard, type Card, type Mode, type Tile, type Tone } from './cards'
+import { NARROW, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
 import * as genome from './genome'
 import { MARK, frame } from './glyphs'
 import type { Turn } from './track'
@@ -424,3 +424,17 @@ function bottom(c: Drawn, w: number, fig: Line, g: typeof LIGHT): Line {
   if (!f.length) return [edge(c, g.bl + g.h.repeat(Math.max(0, w - 2)) + g.br)]
   return [edge(c, g.bl + g.h + ' '), ...f, edge(c, ' ' + g.h.repeat(Math.max(1, w - 5 - cells(f))) + g.br)]
 }
+
+// What a host port (pi, omp, hermes) draws above its editor: between turns the genome alone; under
+// NARROW the compact band, body and a one-row genome; else one card with the genome inside it. No
+// context gauge or folder: the host's own status line carries both. `cols` is the room the host gives.
+export function hostView(t: Turn | null, mode: CardMode, turns: readonly string[], memo: Memo, cols: number, now: number): Line[] {
+  if (!t) return genome.idle(turns, cols)
+  if (cols < NARROW) {
+    const k = compact(t, mode, null, null, now, cols - 2, false)
+    const band: Line = [{ t: ` ${k.status} `, bg: TONE_COLOR[k.tone] ?? 'gray', color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
+    return [band, ...k.body, k.bottom, ...genome.idle(turns, cols, { live: t, now, maxRows: 1 })]
+  }
+  return spinnerRows(t, mode, null, null, now, cols, HOST_BODY_ROWS, memo, '', { withTodo: false, turns })
+}
+const HOST_BODY_ROWS = 3
