@@ -335,10 +335,6 @@ export function squares(t: Turn): Line | undefined {
 const GLYPHS_ONLY = /^[\s·]*[█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■□◆▲✕▐][\s·█▉▊▋▌▍▎▏░▒▓▁▂▃▄▅▆▇■□◆▲✕▐]*$/
 
 // The one line above the prompt between turns: how it ended, what is still owed.
-// The device mod's class as the idle strip's leading glyph; unknown (or no device mod) draws nothing.
-const DEVICE_GLYPH: Record<string, string> = { mobile: '📱', desktop: '🖥', local: '⌂' }
-export const deviceGlyph = (cls: string | undefined): string | undefined => (cls ? DEVICE_GLYPH[cls] : undefined)
-
 // The folder as the status line showed it (round 17 folds that line into xray): home as ~, and only the
 // last part on a phone or once the path runs long.
 export function where(cwd: string, home: string, short = false): string {

@@ -26,12 +26,6 @@ export function code(t: Turn): string {
     .join('')
 }
 
-// A reply with no steps still counts (its │ shows the person spoke): stored as ''.
-export const append = (g: readonly string[], turn: string): string[] => [...g, turn].slice(-MAX_TURNS)
-
-// Stored value → turns, ignoring anything that isn't a list of strings.
-export const load = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
-
 // Store keys to delete so at most MAX_SESSIONS genomes stay (keys come in insertion order, oldest first).
 export function stale(keys: readonly string[], keep: string): string[] {
   const mine = keys.filter(k => k.startsWith(PREFIX) && k !== keep)

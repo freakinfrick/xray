@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { TONE_COLOR, compact, deviceGlyph, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
+import { TONE_COLOR, compact, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
 import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
@@ -581,14 +581,6 @@ test('/xray rate files the rating; the panel lists it', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'xray', surface: 'terminal', component: 'Pane', requestId: 'xray', props: { title: 'xray', isFocused: false, bodyColumns: 90, placement: 'inline' } as never })
   expect(await ui.find({ type: 'Text', text: /taste ledger · 1/ })).toBeDefined()
   await ui.unmount()
-})
-
-test('the idle strip leads with the device class glyph, nothing when unknown or absent', async () => {
-  expect(deviceGlyph('mobile')).toBe('📱')
-  expect(deviceGlyph('desktop')).toBe('🖥')
-  expect(deviceGlyph('local')).toBe('⌂')
-  expect(deviceGlyph('unknown')).toBeUndefined()
-  expect(deviceGlyph(undefined)).toBeUndefined()
 })
 
 const LAST = { title: 'tests', headline: 'all 11 pass ✓', tone: 'ok' as const, owed: [] }
@@ -1295,15 +1287,12 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   startStep(t, 'b', 'Bash', { command: 'false' }, 6)
   finishStep(t, 'b', 'Bash', { command: 'false' }, false, '', undefined, 7)
   expect(genome.code(t)).toBe('rex')
-  expect(genome.append(['re'], '')).toEqual(['re', '']) // a reply with no steps still gets its │
   expect(text(genome.rows(['re', '', 'c'], 40)[0])).toBe('[▌▌]()[▌]')
   expect(genome.rows(['', ''], 40)).toEqual([])
   // between turns: flush right on the strip's line, label last; too little room, nothing
   expect(text(genome.tail(['re', 'c'], 30))).toBe('genome [▌▌][▌]') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
   expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*\(▌▌▌▌\)$/)
-  expect(genome.load(['a', 3, null, 'b'])).toEqual(['a', 'b'])
-  expect(genome.load('nope')).toEqual([])
 })
 
 test('genome: each turn in its kind\'s brackets, wraps at the width, folds the oldest whole turns past 3 rows', async () => {
