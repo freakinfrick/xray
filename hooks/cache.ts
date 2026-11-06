@@ -3,14 +3,16 @@
 // The mod's usage has no 5m/1h split; the session's transcript does, so the lifetime is read from there.
 
 import type { Line } from './cards'
+import type { XrayCache } from '../types'
 import { bar } from './glyphs'
 
-export type Ttl = '5m' | '1h'
 // One row per turn, from the turn's first request: the one that finds the cache warm or cold.
-export type CacheRow = { read: number; wrote: number; fresh: number; why?: string }
+export type CacheRow = Cache['rows'][number]
 // anchor: when the last main-loop request started (the docs count the lifetime from there; every read
 // or write refreshes it). size: that request's whole prompt plus its answer, what a lapse rewrites.
-export type Cache = { ttl: Ttl | null; anchor: number; size: number; model: string; rows: CacheRow[]; turns: number; toastedAt: number }
+// The shape lives in the plugin's state contract (types/index.d.ts, self-contained by rule).
+export type Cache = XrayCache
+export type Ttl = NonNullable<Cache['ttl']>
 export type CacheRequest = { startedAt: number; input: number; cacheRead: number; cacheWrite: number; output: number; model: string }
 
 export const TTL_MS: Record<Ttl, number> = { '5m': 300_000, '1h': 3_600_000 }
