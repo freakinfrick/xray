@@ -5,6 +5,7 @@
 
 import { KIND, NARROW, cells, clipLine, type Line, type Seg } from './line'
 import { frame } from './glyphs'
+import { loadRec, type SessionRec } from './session'
 import type { StepKind, Turn } from './track'
 
 // One letter per step; a failed step is `x` whatever its kind (why it failed: the archive's `fails`).
@@ -31,6 +32,21 @@ export function stale(keys: readonly string[], keep: string): string[] {
   const mine = keys.filter(k => k.startsWith(PREFIX) && k !== keep)
   return mine.slice(0, Math.max(0, mine.length - (MAX_SESSIONS - 1)))
 }
+
+// A host's genome store over its own file (pi, omp, hermes): the host reads and writes the whole map, the
+// keys, the record shape and the pruning stay here. Claude Code keeps its genomes in $.store instead.
+export type StoreIO = { read(): Record<string, unknown>; write(all: Record<string, unknown>): void }
+export type Store = { load(sid: string): SessionRec; save(sid: string, rec: SessionRec): void }
+export const storeOver = (io: StoreIO): Store => ({
+  load: sid => loadRec(io.read()[keyOf(sid)]),
+  save(sid, rec) {
+    const all = io.read()
+    const key = keyOf(sid)
+    all[key] = rec
+    for (const k of stale(Object.keys(all), key)) delete all[k]
+    io.write(all)
+  },
+})
 
 export const cellsOf = (letters: string): Line => merge([...letters].map(cellOf))
 export const cellOf = (c: string): Seg => {

@@ -11,8 +11,8 @@ import type { Line } from '../hooks/line'
 import * as genome from '../hooks/genome'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel } from '../hooks/panel'
-import { loadRec, type SessionRec } from '../hooks/session'
-import { feed, open, type Feed, type Store } from './feed'
+import type { Store } from '../hooks/genome'
+import { feed, open, type Feed } from './feed'
 import { pad, props, type Colors } from './ink'
 
 // The slice of hermes' widgetSdk used here (ui-tui/src/sdk/userWidgets.ts, sdk/types.ts, v0.21.5).
@@ -46,26 +46,22 @@ const LIVE = join(DIR, 'live')
 const FILE = `${process.pid}.jsonl`
 const STORE = join(DIR, 'genomes.json')
 
-function readStore(): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(STORE, 'utf8')) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-const store: Store = {
-  load: sid => loadRec(readStore()[genome.keyOf(sid)]),
-  save(sid: string, rec: SessionRec) {
+// A failed write leaves the genome as it was on disk: the card still draws from memory.
+const store: Store = genome.storeOver({
+  read() {
     try {
-      const all = readStore()
-      const key = genome.keyOf(sid)
-      all[key] = rec
-      for (const k of genome.stale(Object.keys(all), key)) delete all[k]
+      return JSON.parse(readFileSync(STORE, 'utf8')) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  },
+  write(all) {
+    try {
       if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true })
       writeFileSync(STORE, JSON.stringify(all))
     } catch {}
   },
-}
+})
 
 // Feeds left by TUIs that are gone (a crash skips the exit hook).
 function prune() {

@@ -2,16 +2,14 @@
 // while it works, the genome between turns, /xray for the detail panel. Specs: ../omp/SPEC.md, ../pi/SPEC.md.
 // The drawing is xray's shared core (../hooks); this file feeds it the host's events and hands its lines to
 // the host's widget through ./ink (the host's theme). What differs per host comes in as a Host.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import type { Mode } from '../hooks/cards'
 import type { Line } from '../hooks/line'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel, type Usage } from '../hooks/panel'
 import * as genome from '../hooks/genome'
+import type { StoreIO } from '../hooks/genome'
 import { nameOf } from '../hooks/names'
-import { addTurn, emptyRec, fileTouches, loadRec, type SessionRec } from '../hooks/session'
+import { addTurn, emptyRec, fileTouches, type SessionRec } from '../hooks/session'
 import { countedRuns, endTurn, filesRead, finishStep, newTurn, spawnAgent, startStep, type Turn } from '../hooks/track'
 import { cells, ink, resultText, retoken, toCall, type Call, type Theme } from './ink'
 
@@ -66,44 +64,25 @@ type Live = {
 // The main session in the host's TUI only: factories rebind in subagents; unattended panes turn mods off.
 const isOn = (ctx: Ctx) => ctx.hasUI && ctx.mode === 'tui' && (ctx.agent?.kind ?? 'main') === 'main' && process.env.CLAUDE_HUMAN_MODS !== 'off'
 
-export function xray(pi: Pi, host: Host) {
+// io: the genome file (./fileio.ts hostIO); home: the person's home, for short file names in /xray.
+export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
   const s: Live = { turn: null, prev: null, prompt: '', calls: new Map(), rec: emptyRec(), id: '', mode: undefined, memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
   const redraw = () => s.tui?.requestRender()
   const paint = (theme: Theme) => (host.tokens ? retoken(theme, host.tokens) : theme)
-  // The host's agent dir: both omp and pi move it with PI_CODING_AGENT_DIR (isolated runs, profiles).
-  const dir = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), host.dir, 'agent'), 'xray')
-  const store = join(dir, 'genomes.json')
+  const store = genome.storeOver(io)
   let timer: unknown = null
-
-  function readStore(): Record<string, unknown> {
-    try {
-      return JSON.parse(readFileSync(store, 'utf8')) as Record<string, unknown>
-    } catch {
-      return {}
-    }
-  }
-  function writeStore(all: Record<string, unknown>) {
-    try {
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(store, JSON.stringify(all))
-    } catch {}
-  }
 
   function load(ctx: Ctx) {
     const id = ctx.sessionManager.getSessionId() ?? ''
     if (id === s.id) return
     s.id = id
-    s.rec = id ? loadRec(readStore()[genome.keyOf(id)]) : emptyRec()
+    s.rec = id ? store.load(id) : emptyRec()
     s.rec.startedAt ??= Date.now()
   }
   function save(letters: string, extra: Parameters<typeof addTurn>[2]) {
     if (!s.id) return
     s.rec = addTurn(s.rec, letters, extra)
-    const all = readStore()
-    const key = genome.keyOf(s.id)
-    all[key] = s.rec
-    for (const k of genome.stale(Object.keys(all), key)) delete all[k]
-    writeStore(all)
+    store.save(s.id, s.rec)
   }
 
   // One widget for both states: the card while a turn runs, the genome between turns. /new, /resume
@@ -283,7 +262,7 @@ export function xray(pi: Pi, host: Host) {
     const c = ctx.getContextUsage()
     // pi gives null tokens/percent right after a compaction: unknown, not 0%.
     const usage: Usage = { context: { tokens: c?.tokens ?? undefined, window: c?.contextWindow ?? 0, percent: c?.percent ?? undefined }, cost: { usd: s.cost }, rateLimits: [] }
-    return hostPanel(s.turn ?? s.prev, s.turn, s.rec, usage, cols, now, process.cwd(), homedir())
+    return hostPanel(s.turn ?? s.prev, s.turn, s.rec, usage, cols, now, process.cwd(), home)
   }
 
   // The panel in omp's own overlay chrome (omp d9; pi draws the same, its theme has no boxRound): a rounded box

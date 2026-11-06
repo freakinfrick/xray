@@ -13,5 +13,6 @@ const PI: Host = { dir: '.pi', closeOn: 'agent_settled', tokens: { mdLinkUrl: 'm
 export default async function (pi: Pi) {
   const here = dirname(realpathSync(fileURLToPath(import.meta.url)))
   const { xray } = (await import(join(here, '..', 'pifamily', 'xray.ts'))) as typeof import('../pifamily/xray')
-  xray(pi, PI)
+  const { home, hostIO } = (await import(join(here, '..', 'pifamily', 'fileio.ts'))) as typeof import('../pifamily/fileio')
+  xray(pi, PI, hostIO(PI.dir), home())
 }

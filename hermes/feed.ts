@@ -3,11 +3,10 @@
 // ids: a turn_start names its parent, so a child's lines are dropped and the main turn only sees the
 // delegate_task call itself. A parentless turn_start with a new session id (/new, /resume) swaps the record.
 import { apply, init, parse, type State } from '../hooks/events'
-import type { SessionRec } from '../hooks/session'
+import type { Store } from '../hooks/genome'
 import { toEvent, type Raw } from './calls'
 
 export type Feed = { sid: string; s: State; children: Set<string> }
-export type Store = { load(sid: string): SessionRec; save(sid: string, rec: SessionRec): void }
 
 export const open = (): Feed => ({ sid: '', s: init(), children: new Set() })
 
