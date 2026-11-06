@@ -2,7 +2,7 @@
 // turns: the strip above the prompt, one toast before it lapses, and a per-turn table in /xray.
 // The mod's usage has no 5m/1h split; the session's transcript does, so the lifetime is read from there.
 
-import type { Line } from './line'
+import { cells, type Line } from './line'
 import type { XrayCache } from '../types'
 import { bar } from './glyphs'
 
@@ -139,7 +139,7 @@ export function cacheRows(c: Cache, now: number, max: number, cols: number): { t
       { t: kilo(r.wrote).padStart(7) },
       { t: kilo(r.fresh).padStart(6), dim: true },
     ]
-    const w = row.reduce((n, g) => n + g.t.length, 0)
+    const w = cells(row)
     return r.why && w + 2 + r.why.length <= cols ? [...row, { t: `  ${r.why}`, color }] : row
   })
   const missed = c.rows.filter(r => r.why && r.why !== 'new session')

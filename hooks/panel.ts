@@ -1,6 +1,6 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
-import { NARROW, cells, type Line } from './line'
+import { NARROW, SHORT, cells, type Line } from './line'
 import * as genome from './genome'
 import { shortName, type SessionRec } from './session'
 import { span } from './moments'
@@ -17,18 +17,15 @@ const MAX_STEPS = 6
 const MAX_OWED = 8
 const BAR = 20
 const STEP_TEXT = 36
-// Under these the panel compacts: a phone is 47 × 42, about 21 rows with the keyboard up.
-const SHORT = 30
 
 // What the pane measured: text columns inside the padding, and rows. Unmeasured = roomy.
 export type Size = { cols?: number; rows?: number }
 
-const width = (l: Line) => l.reduce((n, g) => n + g.t.length, 0)
 // A row's core always shows; its extras follow only while the row still fits.
 function fit(core: Line, extras: Line[], cols: number): Line {
   const out = [...core]
   for (const x of extras) {
-    if (width(out) + width(x) > cols) break
+    if (cells(out) + cells(x) > cols) break
     out.push(...x)
   }
   return out

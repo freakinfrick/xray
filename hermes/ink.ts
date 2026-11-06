@@ -1,6 +1,6 @@
 // xray's Seg lines → props for hermes' Ink <Text>, coloured through the TUI's theme (its skin), so the
 // card reads in hermes' own palette. Pure: the widget (./widget.ts) does the createElement.
-import type { Line, Seg } from '../hooks/cards'
+import type { Line, Seg } from '../hooks/line'
 import { cells } from '../hooks/line'
 
 // The slice of hermes' ThemeColors this uses (ui-tui/src/theme.ts).

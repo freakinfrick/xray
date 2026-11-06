@@ -29,6 +29,7 @@ export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; 
   other: { t: '▌', dim: true },
 }
 
+export const SHORT = 30 // rows: below this (a phone, keyboard up) the compact rows and the panel fold
 export const NARROW = 60 // columns: below this the cards fold to their compact rows (round 8)
 
 export const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)

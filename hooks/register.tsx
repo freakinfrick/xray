@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, lastTurn, where, type Mode } from './cards'
-import { NARROW, cells, type Line } from './line'
+import { NARROW, SHORT, cells, type Line } from './line'
 import { CTX_WARN, MARK, bar, ctxColor } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
@@ -17,7 +17,7 @@ import * as archive from './archive'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, loadRec, type SessionRec } from './session'
-import { MARK_GLYPH, MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
+import { MARK_GLYPH, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, markLook, milestones, noteRuns, pick, span, tile, type Day, type Moment } from './moments'
 import { agentLetter, agentStep, stepKind, carryTodos, checkSignal, endTurn, finishAgent, finishStep, countedRuns, filesRead, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep, type Turn } from './track'
 
 const last = atom({ plugin: 'xray', key: 'last' } as const, null)
@@ -29,7 +29,6 @@ const NARRATE_GAP_MS = 60_000
 const BURST_MS = 500 // one burst per event: a step landing, a to-do done, a tone changing
 const BURST_FRAME_MS = 160
 const NARRATION_TTL_MS = 30_000
-const SHORT = 30 // rows: below this (phone keyboard up) the compact rows fold to the ticker
 const BODY_ROWS = 3 // card text rows between the top edges and the tray; one more on a tall terminal (round 16)
 const TODO_NUDGE =
   'The user watches a live view of your to-do list. On any task with 3 or more steps, keep a to-do list current ' +
@@ -717,7 +716,7 @@ export const register: Register = (on, options) => {
     // NARROW columns, gets the short form (the long one ran its still-owed tail off the edge at 46).
     const hasTail = (await deviceClass($)) !== 'mobile' && (e.viewport?.columns ?? 100) >= NARROW
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
-    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, ctxColor(pct))] : []), { t: ` ${Math.round(pct)}%`, color: pct >= CTX_WARN ? 'yellow' : undefined, dim: pct < 70 }]
+    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, ctxColor(pct))] : []), { t: ` ${Math.round(pct)}%`, color: pct >= CTX_WARN ? 'yellow' : undefined, dim: pct < CTX_WARN }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.

@@ -5,7 +5,7 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, compact, type Mode as CardMode, filmstrip, nowCard, squares, stepCounts, taskCard, teleParts, todoCard, type Card, type Mode, type Tile, type Tone } from './cards'
+import { TONE_COLOR, band, compact, filmstrip, nowCard, squares, stepCounts, taskCard, teleParts, todoCard, type Card, type Mode, type Tile, type Tone } from './cards'
 import { NARROW, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
 import * as genome from './genome'
 import { MARK, frame } from './glyphs'
@@ -280,17 +280,6 @@ function topTitle(c: Drawn, w: number, g = { tl: '╭', tr: '╮', h: '─' }): 
   return [edge(c, g.tl + g.h), said, ...note, edge(c, fill + g.tr)]
 }
 
-// Neighbouring cells of one look as one segment.
-function runs(segs: Seg[]): Line {
-  const out: Seg[] = []
-  for (const g of segs) {
-    const p = out[out.length - 1]
-    if (p && p.color === g.color && p.dim === g.dim && p.bg === g.bg && p.bold === g.bold) out[out.length - 1] = { ...p, t: p.t + g.t }
-    else out.push({ ...g })
-  }
-  return out
-}
-
 const known = (ps: (Line | undefined)[]): Line[] => ps.filter((p): p is Line => !!p)
 
 // Round 21 (pick 1): two cards with fixed places. Left, the now card: the live step's band in its top
@@ -428,7 +417,7 @@ function bottom(c: Drawn, w: number, fig: Line, g: typeof LIGHT): Line {
 // What a host port (pi, omp, hermes) draws above its editor: between turns the genome alone; under
 // NARROW the compact band, body and a one-row genome; else one card with the genome inside it. No
 // context gauge or folder: the host's own status line carries both. `cols` is the room the host gives.
-export function hostView(t: Turn | null, mode: CardMode, turns: readonly string[], memo: Memo, cols: number, now: number): Line[] {
+export function hostView(t: Turn | null, mode: Mode, turns: readonly string[], memo: Memo, cols: number, now: number): Line[] {
   if (!t) return genome.idle(turns, cols)
   if (cols < NARROW) {
     const k = compact(t, mode, null, null, now, cols - 2, false)

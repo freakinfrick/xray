@@ -1,7 +1,7 @@
 // The pi family's two pure pieces (omp and pi, specs omp/SPEC.md, pi/SPEC.md): xray's Seg lines → ANSI
 // through the host's theme, and a host tool call → the Claude Code shape the shared core (../hooks) reads.
 // No host imports, so the tests run under `claude plugin test` like the rest of xray.
-import type { Line, Seg } from '../hooks/cards'
+import type { Line, Seg } from '../hooks/line'
 import { cells } from '../hooks/line'
 import type { Call } from '../hooks/events'
 export type { Call }

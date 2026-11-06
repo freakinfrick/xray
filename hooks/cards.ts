@@ -6,8 +6,7 @@ import { hotFile } from './session'
 import { DEFAULTS, customCard } from './custom'
 import { CTX_WARN, MARK, SPARK, bar, ctxColor, frame, spark, tile } from './glyphs'
 import { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
-export { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg }
-import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
+import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explore'
 // spare: a row drawn only when the lines leave one free after wrapping.

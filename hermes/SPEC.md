@@ -36,7 +36,7 @@ Port of xray to Hermes Agent's full-screen Ink TUI (v0.22.2, fork `~/hermes-agen
   are pruned at load.
 - Pure, gate-tested pieces: `calls.ts` (tool map, result text, feed line → core Event), `feed.ts`
   (session and subagent handling over `../hooks/events`), `ink.ts` (Seg → Ink `<Text>` props through
-  the skin), `panel.ts` (the panel's rows). Tests: `hermes.test.ts`.
+  the skin); the card and the panel's rows come from `../hooks` (`hostView`, `hostPanel`). Tests: `hermes.test.ts`.
 
 ## Decisions (agent, say "undo dN")
 

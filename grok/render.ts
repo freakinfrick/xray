@@ -1,6 +1,6 @@
 // What grok's status-line row shows, from the replayed events: the now card (genome inside) while a turn
 // runs, the genome alone between turns. Pure; ./status.mjs feeds it the files and stdin. Spec: ./SPEC.md.
-import type { Line, Seg } from '../hooks/cards'
+import type { Line, Seg } from '../hooks/line'
 import { apply, parse, reduce, type State } from '../hooks/events'
 import * as genome from '../hooks/genome'
 import { spinnerRows } from '../hooks/layout'

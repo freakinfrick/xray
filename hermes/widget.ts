@@ -7,7 +7,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Line } from '../hooks/cards'
+import type { Line } from '../hooks/line'
 import * as genome from '../hooks/genome'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel } from '../hooks/panel'

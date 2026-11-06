@@ -33,8 +33,8 @@ tsc per host folder, `claude plugin test`). Captures in `docs/hosts/` (tmux stat
 
 - **core:** the fact cut prints `running……` (ellipsis on a word already ending in …); the panel's steps list
   shows the last 6, so an early failed step counts in the title but isn't listed; `hooks/panel.ts:115` lets a
-  null context percent through (pi's adapter coerces it); `hermes/panel.ts` duplicates the omp/pi panel
-  section builder, which belongs in `hooks/` for every single-card host.
+  null context percent through (pi's adapter coerces it). (Done 2026-11-06: every single-card host draws through `hooks/layout.ts`
+  `hostView` and `hooks/panel.ts` `hostPanel`; `hermes/panel.ts` is gone.)
 - **omp/pi:** omp `agent_start` reusing a still-open turn after `willContinue` (d12) is reasoned, not seen
   under a real retry; pi closing the turn on `agent_settled` after Esc is inferred from pi's types; omp's glob
   case maps `a.path` as the pattern (param name unverified); omp PNGs predate the last retoken/turn-reuse

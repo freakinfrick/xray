@@ -5,7 +5,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Line, Mode } from '../hooks/cards'
+import type { Mode } from '../hooks/cards'
+import type { Line } from '../hooks/line'
 import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel, type Usage } from '../hooks/panel'
 import * as genome from '../hooks/genome'
@@ -212,10 +213,7 @@ export function xray(pi: Pi, host: Host) {
     const c = toCall(e.toolName, e.args, e.intent)
     s.calls.set(e.toolCallId, c)
     const now = Date.now()
-    startStep(t, e.toolCallId, c.tool, c.input, now)
-    const step = t.running.get(e.toolCallId)
-    if (step && c.say) step.say = c.say
-    if (step && c.kind) step.kind = c.kind
+    startStep(t, e.toolCallId, c.tool, c.input, now, { say: c.say, kind: c.kind })
     if (c.tool === 'Task') spawnAgent(t, { toolUseId: e.toolCallId, label: c.say ?? 'agent', isBackground: false, startedAt: now })
     s.mode = 'tool-use'
     redraw()
@@ -224,12 +222,7 @@ export function xray(pi: Pi, host: Host) {
     const t = s.turn
     if (!t) return
     const c = s.calls.get(e.toolCallId) ?? toCall(e.toolName, {})
-    const step = t.running.get(e.toolCallId)
-    finishStep(t, e.toolCallId, c.tool, c.input, !e.isError, resultText(e.result), e.result, Date.now())
-    // finishStep files the running step itself; a step it had to rebuild gets the host's words and kind back.
-    const done = t.done[t.done.length - 1]
-    if (!step && done && c.say) done.say = c.say
-    if (!step && done && c.kind) done.kind = c.kind
+    finishStep(t, e.toolCallId, c.tool, c.input, !e.isError, resultText(e.result), e.result, Date.now(), { say: c.say, kind: c.kind })
     s.calls.delete(e.toolCallId)
     if (!t.running.size) s.mode = 'requesting'
     redraw()

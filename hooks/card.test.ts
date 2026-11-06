@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import * as genome from './genome'
 import { spinnerRows } from './layout'
-import { clipLine } from './cards'
+import { clipLine } from './line'
 import { finishStep, newTurn, startStep } from './track'
 
 const text = (rows: { t: string }[][]) => rows.map(l => l.map(g => g.t).join(''))

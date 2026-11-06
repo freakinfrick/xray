@@ -1,9 +1,9 @@
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
-import { TONE_COLOR, compact, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
+import { compact, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
 import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
-import { DEFAULTS, checkRecipe, detect, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
+import { DEFAULTS, checkRecipe, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { hostPanel, panel } from './panel'
 import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, transcriptPath, ttlFromTail, type Cache } from './cache'
@@ -14,7 +14,7 @@ import * as title from './title'
 import { cells } from './line'
 import * as tasks from './tasks'
 import { nameOf } from './names'
-import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName, type SessionRec } from './session'
+import { MAX_TURNS, addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName, type SessionRec } from './session'
 import { MOMENT_BG, celebrations, recordRows, records, type Records, landmarkMoment, landmarks, milestones, noteRuns, pick, tile } from './moments'
 import { agentStep, stepKind, carryTodos, countedRuns, filesRead, checkSignal, endTurn, finishAgent, finishStep, isJobDue, loadTurn, newTurn, queueFromResponse, readJob, saveTurn, spawnAgent, startStep } from './track'
 
@@ -1386,8 +1386,8 @@ test('session record: a round-19 list still reads as its turns; the oldest turns
   expect(loadRec(['re', 3, 'c'])).toEqual({ turns: ['re', 'c'], names: [], marks: [], files: [] })
   expect(loadRec('nope').turns).toEqual([])
   let rec = emptyRec()
-  for (let i = 0; i < genome.MAX_TURNS + 2; i++) rec = addTurn(rec, 'r', { name: `n${i}`, marks: i === 1 || i === 3 ? [{ at: 0, kind: 'commit', text: `c${i}` }] : [] })
-  expect(rec.turns.length).toBe(genome.MAX_TURNS)
+  for (let i = 0; i < MAX_TURNS + 2; i++) rec = addTurn(rec, 'r', { name: `n${i}`, marks: i === 1 || i === 3 ? [{ at: 0, kind: 'commit', text: `c${i}` }] : [] })
+  expect(rec.turns.length).toBe(MAX_TURNS)
   expect(rec.names[0]).toBe('n2')
   expect(rec.marks).toEqual([{ turn: 1, at: 0, kind: 'commit', text: 'c3' }]) // c1 went with its turn; c3 shifted down
   const files = mergeFiles([{ f: 'a.ts', cells: 'r', at: 1 }], [{ f: 'b.ts', cells: 'e', at: 3 }, { f: 'a.ts', cells: 'e', at: 2 }])

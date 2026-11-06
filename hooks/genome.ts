@@ -14,7 +14,6 @@ const KIND_OF = Object.fromEntries(Object.entries(CODE).filter(([, c]) => c).map
 
 export const MAX_ROWS = 3
 export const TURN_CELLS = 26 // a panel's turns list: a turn and its two brackets, cut past this
-export { MAX_TURNS } from './session'
 export const MAX_SESSIONS = 40 // sessions kept in the store, oldest dropped
 export const PREFIX = 'genome:'
 export const keyOf = (sessionId: string) => PREFIX + sessionId
@@ -229,7 +228,6 @@ export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Lin
 
 // The genome on its own, `cols` wide, labelled at the right edge: every host's idle form between turns
 // (and a narrow card's row under it). A narrow pane keeps one row, the oldest turns folded.
-export { NARROW }
 export const idle = (turns: readonly string[], cols: number, opts: Opts = {}): Line[] =>
   labelRight(rows(turns, cols - EDGE_LABEL.length - 1, { maxRows: cols < NARROW ? 1 : MAX_ROWS, ...opts }), cols)
 
