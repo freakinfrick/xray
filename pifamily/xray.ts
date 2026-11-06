@@ -8,9 +8,8 @@ import { hostView, type Memo } from '../hooks/layout'
 import { hostPanel, type Usage } from '../hooks/panel'
 import * as genome from '../hooks/genome'
 import type { StoreIO } from '../hooks/genome'
-import { nameOf } from '../hooks/names'
-import { addTurn, emptyRec, fileTouches, type SessionRec } from '../hooks/session'
-import { countedRuns, endTurn, filesRead, finishStep, newTurn, spawnAgent, startStep, type Turn } from '../hooks/track'
+import { emptyRec } from '../hooks/session'
+import { apply, init, type State } from '../hooks/events'
 import { cells, ink, resultText, retoken, toCall, type Call, type Theme } from './ink'
 
 // The slice of the extension API used here: omp packages/coding-agent/src/extensibility/extensions/types.ts,
@@ -43,14 +42,11 @@ export type Host = { dir: string; closeOn: 'agent_end' | 'agent_settled'; tokens
 
 const KEY = 'xray'
 
+// st: the core's turn state (../hooks/events), fed from the host's events below; the rest is the host's own.
 type Live = {
-  turn: Turn | null
-  prev: Turn | null
+  st: State
   prompt: string
-  calls: Map<string, Call>
-  rec: SessionRec
   id: string
-  mode: Mode
   memo: Memo
   isHidden: boolean
   cost: number
@@ -66,7 +62,7 @@ const isOn = (ctx: Ctx) => ctx.hasUI && ctx.mode === 'tui' && (ctx.agent?.kind ?
 
 // io: the genome file (./fileio.ts hostIO); home: the person's home, for short file names in /xray.
 export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
-  const s: Live = { turn: null, prev: null, prompt: '', calls: new Map(), rec: emptyRec(), id: '', mode: undefined, memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
+  const s: Live = { st: init(), prompt: '', id: '', memo: { tones: {} }, isHidden: false, cost: 0, msgAt: 0, firstAt: 0, tui: null, isTicking: false }
   const redraw = () => s.tui?.requestRender()
   const paint = (theme: Theme) => (host.tokens ? retoken(theme, host.tokens) : theme)
   const store = genome.storeOver(io)
@@ -76,15 +72,9 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
     const id = ctx.sessionManager.getSessionId() ?? ''
     if (id === s.id) return
     s.id = id
-    s.rec = id ? store.load(id) : emptyRec()
-    s.rec.startedAt ??= Date.now()
+    s.st.rec = id ? store.load(id) : emptyRec()
+    s.st.rec.startedAt ??= Date.now()
   }
-  function save(letters: string, extra: Parameters<typeof addTurn>[2]) {
-    if (!s.id) return
-    s.rec = addTurn(s.rec, letters, extra)
-    store.save(s.id, s.rec)
-  }
-
   // One widget for both states: the card while a turn runs, the genome between turns. /new, /resume
   // and a fork wipe every widget, so this runs again on each switch.
   function mount(ctx: Ctx) {
@@ -114,10 +104,10 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
 
   function draw(width: number): Line[] {
     const now = Date.now()
-    const t = s.turn
+    const t = s.st.turn
     // Never the last column: a full-width row wraps in some terminals.
     const cols = Math.max(24, width - 1)
-    return hostView(t, s.mode, s.rec.turns, s.memo, cols, now)
+    return hostView(t, s.st.mode, s.st.rec.turns, s.memo, cols, now)
   }
 
   // Once a second while a turn runs: elapsed times move without an event. omp's ctx timer is cleared with the
@@ -126,7 +116,7 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
     if (s.isTicking) return
     s.isTicking = true
     const fn = () => {
-      if (s.turn) redraw()
+      if (s.st.turn) redraw()
     }
     if (ctx.setInterval) ctx.setInterval(fn, 1000)
     else timer = setInterval(fn, 1000)
@@ -140,8 +130,8 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
   })
   // omp only: /new, /resume and a fork keep the runtime (pi tears it down and starts it again instead).
   pi.on('session_switch', (_e, ctx) => {
-    s.turn = null
-    s.prev = null
+    s.st.turn = null
+    s.st.prev = null
     s.id = ''
     mount(ctx)
   })
@@ -153,72 +143,54 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
   pi.on('agent_start', (_e, ctx) => {
     if (!isOn(ctx)) return
     load(ctx)
-    if (!s.turn) {
-      s.turn = newTurn(s.prompt, Date.now())
-      s.calls.clear()
-    }
-    s.mode = 'requesting'
+    if (!s.st.turn) apply(s.st, { t: Date.now(), kind: 'turn_start', prompt: s.prompt })
+    s.st.mode = 'requesting'
     tick(ctx)
     redraw()
   })
 
   pi.on('message_start', (e: { message?: { role?: string } }) => {
-    if (!s.turn || e.message?.role !== 'assistant') return
+    if (!s.st.turn || e.message?.role !== 'assistant') return
     s.msgAt = Date.now()
     s.firstAt = 0
-    s.mode = 'requesting'
+    s.st.mode = 'requesting'
   })
   pi.on('message_update', () => {
-    if (!s.turn || s.mode === 'responding') return
+    if (!s.st.turn || s.st.mode === 'responding') return
     s.firstAt ||= Date.now()
-    s.mode = 'responding'
+    s.st.mode = 'responding'
     redraw()
   })
   pi.on('message_end', (e: { message?: { role?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost?: { total?: number } } } }) => {
     const u = e.message?.role === 'assistant' ? e.message.usage : undefined
     if (!u) return
     s.cost += u.cost?.total ?? 0
-    const t = s.turn
+    const t = s.st.turn
     if (!t) return
     const now = Date.now()
-    t.requests.push({ startedAt: s.msgAt || now, firstAt: s.firstAt || now, endedAt: now, output: u.output ?? 0, input: u.input ?? 0, cacheRead: u.cacheRead ?? 0, cacheWrite: u.cacheWrite ?? 0 })
-    s.mode = t.running.size ? 'tool-use' : 'requesting'
+    apply(s.st, { t: now, kind: 'usage', usage: { startedAt: s.msgAt || now, firstAt: s.firstAt || now, output: u.output, input: u.input, cacheRead: u.cacheRead, cacheWrite: u.cacheWrite } })
     redraw()
   })
 
   pi.on('tool_execution_start', (e: { toolCallId: string; toolName: string; args: unknown; intent?: string }) => {
-    const t = s.turn
-    if (!t) return
+    // A step with no turn open is dropped (the core's apply would open one): pi fires none outside a turn.
+    if (!s.st.turn) return
     const c = toCall(e.toolName, e.args, e.intent)
-    s.calls.set(e.toolCallId, c)
-    const now = Date.now()
-    startStep(t, e.toolCallId, c.tool, c.input, now, { say: c.say, kind: c.kind })
-    if (c.tool === 'Task') spawnAgent(t, { toolUseId: e.toolCallId, label: c.say ?? 'agent', isBackground: false, startedAt: now })
-    s.mode = 'tool-use'
+    apply(s.st, { t: Date.now(), kind: 'start', id: e.toolCallId, tool: c.tool, input: c.input, say: c.say, as: c.kind })
     redraw()
   })
   pi.on('tool_execution_end', (e: { toolCallId: string; toolName: string; result: unknown; isError: boolean }) => {
-    const t = s.turn
-    if (!t) return
-    const c = s.calls.get(e.toolCallId) ?? toCall(e.toolName, {})
-    finishStep(t, e.toolCallId, c.tool, c.input, !e.isError, resultText(e.result), e.result, Date.now(), { say: c.say, kind: c.kind })
-    s.calls.delete(e.toolCallId)
-    if (!t.running.size) s.mode = 'requesting'
+    if (!s.st.turn) return
+    const c = s.st.calls.get(e.toolCallId) ?? toCall(e.toolName, {})
+    apply(s.st, { t: Date.now(), kind: 'end', id: e.toolCallId, tool: c.tool, input: c.input, say: c.say, as: c.kind, ok: !e.isError, text: resultText(e.result) })
     redraw()
   })
 
   pi.on(host.closeOn, (e: { willContinue?: boolean }) => {
-    const t = s.turn
-    if (!t || e.willContinue) return
-    const now = Date.now()
-    endTurn(t)
-    t.endedAt = now
-    const letters = genome.code(t)
-    save(letters, { name: nameOf(letters, countedRuns(t), filesRead(t)), files: fileTouches(t, now) })
+    if (!s.st.turn || e.willContinue) return
+    apply(s.st, { t: Date.now(), kind: 'turn_end' })
+    if (s.id) store.save(s.id, s.st.rec)
     // No genome in the session name (omp spec d6): omp strips ESC from names, so the colours showed as raw codes.
-    s.prev = t
-    s.turn = null
-    s.mode = undefined
     redraw()
   })
 
@@ -262,7 +234,7 @@ export function xray(pi: Pi, host: Host, io: StoreIO, home: string) {
     const c = ctx.getContextUsage()
     // pi gives null tokens/percent right after a compaction: unknown, not 0%.
     const usage: Usage = { context: { tokens: c?.tokens ?? undefined, window: c?.contextWindow ?? 0, percent: c?.percent ?? undefined }, cost: { usd: s.cost }, rateLimits: [] }
-    return hostPanel(s.turn ?? s.prev, s.turn, s.rec, usage, cols, now, process.cwd(), home)
+    return hostPanel(s.st.turn ?? s.st.prev, s.st.turn, s.st.rec, usage, cols, now, process.cwd(), home)
   }
 
   // The panel in omp's own overlay chrome (omp d9; pi draws the same, its theme has no boxRound): a rounded box

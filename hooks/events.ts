@@ -87,7 +87,7 @@ export function apply(s: State, e: Event): State {
       const c: Call = { tool: String(e.tool ?? 'other'), input: e.input ?? {}, ...(e.say ? { say: e.say } : {}), ...(e.as ? { kind: e.as } : {}) }
       s.calls.set(id, c)
       startStep(t, id, c.tool, c.input, at, { say: c.say, kind: c.kind })
-      if (isAgentTool(c.tool)) spawnAgent(t, { toolUseId: id, label: c.say ?? String(c.input.description ?? 'agent'), isBackground: false, startedAt: at })
+      if (isAgentTool(c.tool)) spawnAgent(t, { toolUseId: id, label: c.say || String(c.input.description || 'agent'), isBackground: false, startedAt: at })
       s.mode = 'tool-use'
       return s
     }
