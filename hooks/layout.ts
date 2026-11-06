@@ -421,8 +421,11 @@ export function hostView(t: Turn | null, mode: Mode, turns: readonly string[], m
   if (!t) return genome.idle(turns, cols)
   if (cols < NARROW) {
     const k = compact(t, mode, null, null, now, cols - 2, false)
-    const band: Line = [{ t: ` ${k.status} `, bg: TONE_COLOR[k.tone] ?? 'gray', color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
-    return [band, ...k.body, k.bottom, ...genome.idle(turns, cols, { live: t, now, maxRows: 1 })]
+    const bg = TONE_COLOR[k.tone] ?? 'gray'
+    const band: Line = [{ t: ` ${k.status} `, bg, color: 'black' }, ...(k.pulse ? [{ t: ' ' }, k.pulse] : [])]
+    // The status's overflow is a band row of its own, as on the main card.
+    const more: Line[] = k.more ? [[{ t: ` ${k.more} `, bg, color: 'black' }]] : []
+    return [band, ...more, ...k.body, k.bottom, ...genome.idle(turns, cols, { live: t, now, maxRows: 1 })]
   }
   return spinnerRows(t, mode, null, null, now, cols, HOST_BODY_ROWS, memo, '', { withTodo: false, turns })
 }

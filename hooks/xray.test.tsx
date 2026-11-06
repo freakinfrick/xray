@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 import { compact, effortTag, filmstrip, mood, stepCounts, teleParts, lastTurn, nowCard, taskCard, todoCard, where, PENDING_BG } from './cards'
-import { allot, body, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
+import { allot, body, hostView, ideal, pack, spinnerRows, tileRows, wrap } from './layout'
 import { DEFAULTS, checkRecipe, lastLine, lastPair, parseRecipe, writerPrompt } from './custom'
 import { SEED, isRefused, parseRating, rules } from './ledger'
 import { hostPanel, panel } from './panel'
@@ -725,6 +725,15 @@ test('with the keyboard up the body folds to one row and the bottom edge is bare
   const narrow = compact(busyTurn(), undefined, null, 6, 30_000, 28, true)
   expect(narrow.more).toBe('model · 29s')
   expect(text(narrow.body[0])).toBe('▌▌▌▌▌▌ 6 · □□□□□□ 0/6')
+})
+
+test('a narrow host view keeps the status band\'s overflow row', async () => {
+  const k = compact(busyTurn(), undefined, null, null, 30_000, 28, false)
+  expect(k.more).toBe('model · 29s')
+  const rows = hostView(busyTurn(), undefined, [], { tones: {} }, 30, 30_000).map(l => text(l))
+  expect(rows[0]).toBe(` ${k.status} `)
+  expect(rows[1]).toBe(' model · 29s ')
+  expect(rows[2]).toBe(text(k.body[0]))
 })
 
 test('the spinner draws one framed card at 47 columns, folded at 21 rows, the three cards at 100', async ($, on) => {
