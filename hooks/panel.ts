@@ -4,7 +4,7 @@ import { NARROW, cells, type Line } from './line'
 import * as genome from './genome'
 import { shortName, type SessionRec } from './session'
 import { span } from './moments'
-import { MARK, bar, tile } from './glyphs'
+import { MARK, bar, ctxColor, tile } from './glyphs'
 import { cacheRows, type Cache } from './cache'
 import type { Entry } from './ledger'
 import { openTodos, type Request, type Step, type Turn } from './track'
@@ -46,7 +46,7 @@ const when = (iso: string) => {
   const ms = Date.parse(iso)
   return Number.isNaN(ms) ? iso : new Date(ms).toTimeString().slice(0, 5)
 }
-const pctColor = (p: number) => (p >= 90 ? 'red' : p >= 70 ? 'yellow' : 'green')
+const pctColor = (p: number) => ctxColor(p, 'green')
 
 const gauge = (percent: number): Line => bar(percent / 100, GAUGE, pctColor(percent))
 

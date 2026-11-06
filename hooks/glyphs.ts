@@ -40,3 +40,8 @@ export const tile = (t: string, color: string): Seg => ({ t, color, inv: true })
 // One meaning per shape, on every card and the panel (round 16, direction 5). Circles belong to effort
 // alone (○ ◐ ● ◉, Claude Code's own), so a status mark never reads as an effort level.
 export const MARK = { live: '◆', done: '■', pending: '□', warn: '▲', fail: '✕', ok: '✓' } as const
+
+// Context fill, on every gauge, card and panel: yellow from CTX_WARN percent, red from CTX_FULL.
+export const CTX_WARN = 70
+export const CTX_FULL = 90
+export const ctxColor = (pct: number, calm?: string): string | undefined => (pct >= CTX_FULL ? 'red' : pct >= CTX_WARN ? 'yellow' : calm)

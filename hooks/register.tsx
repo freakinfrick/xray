@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, lastTurn, where, type Mode } from './cards'
 import { NARROW, cells, type Line } from './line'
-import { bar } from './glyphs'
+import { CTX_WARN, MARK, bar, ctxColor } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
@@ -716,7 +716,7 @@ export const register: Register = (on, options) => {
     // NARROW columns, gets the short form (the long one ran its still-owed tail off the edge at 46).
     const hasTail = (await deviceClass($)) !== 'mobile' && (e.viewport?.columns ?? 100) >= NARROW
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
-    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, pct >= 90 ? 'red' : pct >= 70 ? 'yellow' : undefined)] : []), { t: ` ${Math.round(pct)}%`, color: pct >= 70 ? 'yellow' : undefined, dim: pct < 70 }]
+    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, ctxColor(pct))] : []), { t: ` ${Math.round(pct)}%`, color: pct >= CTX_WARN ? 'yellow' : undefined, dim: pct < 70 }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
@@ -737,7 +737,7 @@ export const register: Register = (on, options) => {
     const cache: Line = s.isCacheOff || s.cache.anchor < 0 ? [] : cacheStrip(s.cache, now, !hasTail, hasTail)
     // The folder leads again (user, 2026-10-05): between turns is where you look for which pane this is.
     const dir = where(await here($, s), s.home, !hasTail)
-    const lead: Line = [...(dir ? [{ t: `${dir}  ` }] : []), ...gauge, ...cache, ...owedLine, ...s.health.map(x => ({ t: `  ${MARK_WARN} ${x}`, color: 'red' }))]
+    const lead: Line = [...(dir ? [{ t: `${dir}  ` }] : []), ...gauge, ...cache, ...owedLine, ...s.health.map(x => ({ t: `  ${MARK.warn} ${x}`, color: 'red' }))]
     const right = (used: number) => {
       if (s.isHidden || !hasTail) return null
       const room = width - used - 3 - EDGE_MARK
@@ -800,7 +800,6 @@ function genomeRows(rows: Line[], key: string, Text: ReturnType<EngineInterface[
 }
 
 // The two checks the status line's dots made (PT, ADHD-CM), as words when one fails.
-const MARK_WARN = '▲'
 async function health($: EngineInterface, home: string): Promise<string[]> {
   if (!home) return []
   const out: string[] = []

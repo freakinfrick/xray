@@ -4,7 +4,7 @@
 import type { LastTurn } from '../types'
 import { hotFile } from './session'
 import { DEFAULTS, customCard } from './custom'
-import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
+import { CTX_WARN, MARK, SPARK, bar, ctxColor, frame, spark, tile } from './glyphs'
 import { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
 export { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg }
 import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
@@ -170,7 +170,7 @@ export function todoCard(t: Turn, ctxPercent: number | null, now = Infinity): Ca
   const done = t.todos.filter(x => x.status === 'completed').length
   const q = t.queued.size
   const bg = runningAgents(t).length
-  const warn = ctxPercent !== null && ctxPercent >= 70
+  const warn = ctxPercent !== null && ctxPercent >= CTX_WARN
   const tags: Line = [...(q ? [{ t: `${q} queued`, dim: true }] : []), ...(bg ? [{ t: plural(bg, 'agent'), dim: true }] : []), ...(warn ? [{ t: `${MARK.warn} context ${Math.round(ctxPercent)}%`, color: 'yellow' }] : [])]
   const note = tags.flatMap((s, i) => (i ? [{ t: ' · ', dim: true }, s] : [s]))
   const cur = t.todos.find(x => x.status === 'in_progress')
@@ -346,7 +346,7 @@ export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ct
   const parts: { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } = { turn: [{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }] }
   // Past 85% the gauge walks (its last cell blinks at the tick): the one figure that needs you moves.
   const shown = ctxPercent !== null && ctxPercent >= 85 && frame(now) % 2 ? Math.max(0, ctxPercent - 100 / GAUGE) : ctxPercent
-  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : undefined), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxColor(ctxPercent)), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
@@ -391,7 +391,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const status = first.map(x => x.t).join('')
   const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
-    const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+    const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
     const counts: Line = [...filmstrip(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
@@ -410,7 +410,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   // (round 10: the card grows one row at most, the status's overflow first).
   const told: Line | undefined = narration || !t.done.length ? sub : undefined
   const story: Line[] = !told ? [] : more || todoRow ? [clipLine(told, inner)] : wrapOnce(told, inner, inner).filter((l): l is Line => !!l)
-  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxPercent >= 90 ? 'red' : ctxPercent >= 70 ? 'yellow' : undefined), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= 70 ? 'yellow' : undefined }]
+  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxColor(ctxPercent)), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
   const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]
