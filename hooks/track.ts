@@ -219,10 +219,14 @@ export function planFromText(t: Turn, text: string) {
   colorTodos(t)
 }
 
-export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number) {
+// A host that names its steps itself (hermes' feed: say, as) passes them in `as`; else they come from the tool.
+export type StepAs = { say?: string; kind?: StepKind }
+export const isAgentTool = (tool: string) => tool === 'Agent' || tool === 'Task'
+
+export function startStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, now: number, as: StepAs = {}) {
   t.queued.delete(id)
   const file = String(input.file_path ?? input.notebook_path ?? '') || undefined
-  t.running.set(id, { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input), ...(file ? { file } : {}) })
+  t.running.set(id, { id, tool, say: as.say ?? sayStep(tool, input), startedAt: now, kind: as.kind ?? stepKind(tool, input), ...(file ? { file } : {}) })
   if (tool === 'Bash') t.cmds.push({ cmd: String(input.command ?? '').trim(), startedAt: now })
   if (tool === 'Bash' && isTestCommand(String(input.command ?? ''))) t.runs.push({ pass: 0, fail: 0, total: 0, failing: [], running: true, startedAt: now })
   if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
@@ -253,11 +257,13 @@ export function startStep(t: Turn, id: string, tool: string, input: Record<strin
   pickTemplate(t)
 }
 
-export function finishStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, ok: boolean, text: string, result: unknown, now: number) {
-  const step = t.running.get(id) ?? { id, tool, say: sayStep(tool, input), startedAt: now, kind: stepKind(tool, input) }
+// `as` names a step whose start was never seen; `why` says why a failed one failed.
+export function finishStep(t: Turn, id: string, tool: string, input: Record<string, unknown>, ok: boolean, text: string, result: unknown, now: number, as: StepAs & { why?: FailWhy } = {}) {
+  const step = t.running.get(id) ?? { id, tool, say: as.say ?? sayStep(tool, input), startedAt: now, kind: as.kind ?? stepKind(tool, input) }
   t.running.delete(id)
   step.endedAt = now
   step.ok = ok
+  if (!ok && as.why) step.why = as.why
   t.done.push(step)
   if (!ok) t.failures += 1
   if (step.kind === 'commit' && ok) step.note = commitNote(String(input.command ?? ''), text)
@@ -282,7 +288,7 @@ export function finishStep(t: Turn, id: string, tool: string, input: Record<stri
     if (path) t.edited.set(path, { at: now, checked: false })
   }
   // A foreground agent's tool call returns when the agent is done; a background one returns at launch.
-  if ((tool === 'Agent' || tool === 'Task') && !t.agents.find(a => a.toolUseId === id)?.isBackground) finishAgent(t, { toolUseId: id }, ok, now)
+  if (isAgentTool(tool) && !t.agents.find(a => a.toolUseId === id)?.isBackground) finishAgent(t, { toolUseId: id }, ok, now)
   if (tool === 'TaskCreate' && ok) {
     const task = (result as { task?: { id?: string; subject?: string } } | undefined)?.task
     if (task?.id) t.todos.push({ id: String(task.id), text: String(input.subject ?? task.subject ?? ''), active: String(input.activeForm ?? input.subject ?? ''), status: 'pending' })

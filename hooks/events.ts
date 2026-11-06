@@ -6,7 +6,7 @@ import type { Mode } from './cards'
 import * as genome from './genome'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, type SessionRec } from './session'
-import { countedRuns, endTurn, filesRead, finishStep, newTurn, spawnAgent, startStep, type Turn } from './track'
+import { countedRuns, endTurn, filesRead, finishStep, isAgentTool, newTurn, spawnAgent, startStep, type Turn } from './track'
 
 // A tool call in the core's names (Bash, Read, Edit, Grep, Glob, Write, WebFetch, WebSearch, Task, …) and
 // argument keys (command, file_path, pattern, url, query, description). `say` and `kind` speak for a tool
@@ -86,11 +86,8 @@ export function apply(s: State, e: Event): State {
       const id = String(e.id ?? `${at}`)
       const c: Call = { tool: String(e.tool ?? 'other'), input: e.input ?? {}, ...(e.say ? { say: e.say } : {}), ...(e.as ? { kind: e.as } : {}) }
       s.calls.set(id, c)
-      startStep(t, id, c.tool, c.input, at)
-      const step = t.running.get(id)
-      if (step && c.say) step.say = c.say
-      if (step && c.kind) step.kind = c.kind
-      if (c.tool === 'Task' || c.tool === 'Agent') spawnAgent(t, { toolUseId: id, label: c.say ?? String(c.input.description ?? 'agent'), isBackground: false, startedAt: at })
+      startStep(t, id, c.tool, c.input, at, { say: c.say, kind: c.kind })
+      if (isAgentTool(c.tool)) spawnAgent(t, { toolUseId: id, label: c.say ?? String(c.input.description ?? 'agent'), isBackground: false, startedAt: at })
       s.mode = 'tool-use'
       return s
     }
@@ -98,12 +95,7 @@ export function apply(s: State, e: Event): State {
       const t = s.turn ?? open('')
       const id = String(e.id ?? '')
       const c = s.calls.get(id) ?? { tool: String(e.tool ?? 'other'), input: e.input ?? {}, ...(e.say ? { say: e.say } : {}), ...(e.as ? { kind: e.as } : {}) }
-      const step = t.running.get(id)
-      finishStep(t, id, c.tool, c.input, e.ok !== false, String(e.text ?? ''), e.text, at)
-      // finishStep files the running step itself; one it had to rebuild (no start seen) gets the words and kind back.
-      const done = t.done[t.done.length - 1]
-      if (!step && done && c.say) done.say = c.say
-      if (!step && done && c.kind) done.kind = c.kind
+      finishStep(t, id, c.tool, c.input, e.ok !== false, String(e.text ?? ''), e.text, at, { say: c.say, kind: c.kind })
       s.calls.delete(id)
       if (!t.running.size) {
         s.mode = 'requesting'

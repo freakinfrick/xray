@@ -505,9 +505,7 @@ export const register: Register = (on, options) => {
     } finally {
       const ok = ran !== undefined && ran.deny === undefined && !ran.isError
       const failedBefore = t.failures
-      finishStep(t, id, e.tool, input, ok, ran?.text ?? '', ran?.result, await $.clock.now())
-      const step = t.done[t.done.length - 1]
-      if (!ok && step?.id === id) step.why = archive.failWhy(ran, s.denied.get(id))
+      finishStep(t, id, e.tool, input, ok, ran?.text ?? '', ran?.result, await $.clock.now(), ok ? {} : { why: archive.failWhy(ran, s.denied.get(id)) })
       s.denied.delete(id)
       void burst($, s)
       if (failedBefore === 0 && t.failures > 0) void narrate($, s)
