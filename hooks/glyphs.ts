@@ -45,3 +45,12 @@ export const MARK = { live: '◆', done: '■', pending: '□', warn: '▲', fai
 export const CTX_WARN = 70
 export const CTX_FULL = 90
 export const ctxColor = (pct: number, calm?: string): string | undefined => (pct >= CTX_FULL ? 'red' : pct >= CTX_WARN ? 'yellow' : calm)
+// The context percent as text after its gauge (or after `lead`), yellow from CTX_WARN.
+export const ctxPct = (pct: number, lead = ' '): Seg => ({ t: `${lead}${Math.round(pct)}%`, color: pct >= CTX_WARN ? 'yellow' : undefined })
+
+// Whole seconds as 45s or 2m 01s, on the cards, the panel and the recipe sources; with `hours`, 1h 05m
+// from an hour.
+export function duration(s: number, hours = false): string {
+  if (hours && s >= 3600) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}

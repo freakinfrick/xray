@@ -4,7 +4,7 @@ import { NARROW, SHORT, cells, type Line } from './line'
 import * as genome from './genome'
 import { shortName, type SessionRec } from './session'
 import { span } from './moments'
-import { MARK, bar, ctxColor, tile } from './glyphs'
+import { MARK, bar, ctxColor, duration, tile } from './glyphs'
 import { cacheRows, type Cache } from './cache'
 import type { Entry } from './ledger'
 import { openTodos, type Request, type Step, type Turn } from './track'
@@ -34,9 +34,7 @@ const GAUGE = 12
 
 // Tenths under 10 s, whole seconds to a minute, then 2m 01s like the cards (fits the 6-cell column).
 const secs = (ms: number) => {
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`
-  const s = Math.round(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  return ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : duration(Math.round(ms / 1000))
 }
 const kilo = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n))
 const when = (iso: string) => {

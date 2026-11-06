@@ -4,7 +4,7 @@
 
 import type { Card, Tone } from './cards'
 import type { Line } from './line'
-import { MARK, bar, frame, spark, tile } from './glyphs'
+import { MARK, bar, duration, frame, spark, tile } from './glyphs'
 import type { Cmd, Turn } from './track'
 
 export type Signal = 'bisect' | 'bench' | 'batch' | 'build'
@@ -74,10 +74,7 @@ export function detect(t: Turn, now: number): Signal | null {
 
 // ---- sources: every value a recipe may show, measured ----------------------------------------------
 
-const secs = (ms: number) => {
-  const s = Math.max(0, Math.round(ms / 1000))
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`
-}
+const secs = (ms: number) => duration(Math.max(0, Math.round(ms / 1000)), true)
 const T = (v: string, o: Partial<Extract<Val, { kind: 'text' }>> = {}): Val => ({ kind: 'text', v, ...o })
 const fmt = (v: number, unit: string) => `${Number.isInteger(v) ? v : v.toFixed(v < 10 ? 2 : 1)}${unit}`
 

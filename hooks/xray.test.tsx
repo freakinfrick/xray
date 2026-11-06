@@ -12,6 +12,7 @@ import { clean, recall, record } from './memory'
 import * as genome from './genome'
 import * as title from './title'
 import { capRows, cells } from './line'
+import { ctxPct, duration } from './glyphs'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { MAX_TURNS, addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName, type SessionRec } from './session'
@@ -1748,4 +1749,13 @@ test('a list past its room ends in one +N rows line', async () => {
   expect(capRows(rows, 4)).toBe(rows)
   expect(capRows(rows, 3).map(text)).toEqual(['a', 'b', '+2 rows'])
   expect(capRows(rows, 1).map(text)).toEqual(['+4 rows'])
+})
+
+test('one duration and one ctx percent for every card, the panel and the recipes', async () => {
+  expect(duration(9)).toBe('9s')
+  expect(duration(121)).toBe('2m 01s')
+  expect(duration(3900)).toBe('65m 00s') // the cards and panel keep minutes
+  expect(duration(3900, true)).toBe('1h 05m') // the recipe sources go to hours
+  expect(ctxPct(42)).toEqual({ t: ' 42%', color: undefined })
+  expect(ctxPct(70.4, 'ctx ')).toEqual({ t: 'ctx 70%', color: 'yellow' })
 })

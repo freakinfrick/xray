@@ -4,7 +4,7 @@
 import type { LastTurn } from '../types'
 import { hotFile } from './session'
 import { DEFAULTS, customCard } from './custom'
-import { CTX_WARN, MARK, SPARK, bar, ctxColor, frame, spark, tile } from './glyphs'
+import { CTX_WARN, MARK, SPARK, bar, ctxColor, ctxPct, duration, frame, spark, tile } from './glyphs'
 import { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
 import { openTodos, runningAgents, type Run, type Todo, type Turn } from './track'
 
@@ -345,7 +345,7 @@ export function teleParts(t: Turn, ctxPercent: number | null, now: number): { ct
   const parts: { ctx?: Line; tok?: Line; cache?: Line; turn: Line; effort?: Line } = { turn: [{ t: 'turn ', dim: true }, { t: clock(now - t.startedAt) }] }
   // Past 85% the gauge walks (its last cell blinks at the tick): the one figure that needs you moves.
   const shown = ctxPercent !== null && ctxPercent >= 85 && frame(now) % 2 ? Math.max(0, ctxPercent - 100 / GAUGE) : ctxPercent
-  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxColor(ctxPercent)), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
+  if (ctxPercent !== null && shown !== null) parts.ctx = [{ t: 'ctx ', dim: true }, ...bar(shown / 100, GAUGE, ctxColor(ctxPercent)), ctxPct(ctxPercent)]
   const done = t.requests.filter(r => r.endedAt > r.firstAt)
   const out = done.reduce((a, r) => a + r.output, 0)
   const gen = done.reduce((a, r) => a + (r.endedAt - r.firstAt), 0)
@@ -390,7 +390,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   const status = first.map(x => x.t).join('')
   const more = rest?.map(x => x.t).join('').trimStart()
   if (isTicker) {
-    const ctx: Line | undefined = ctxPercent === null ? undefined : [{ t: `ctx ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
+    const ctx: Line | undefined = ctxPercent === null ? undefined : [ctxPct(ctxPercent, 'ctx ')]
     const counts: Line = [...filmstrip(t, 6, now), { t: ` ${t.done.length}${failed ? ` · ${failed}${MARK.fail}` : ''}`, dim: true }]
     return { tone, status, more, pulse, body: [fitParts([counts, todo, ctx, tok, effort], inner, ' · ')], bottom: [] }
   }
@@ -409,7 +409,7 @@ export function compact(t: Turn, mode: Mode, narration: string | null, ctxPercen
   // (round 10: the card grows one row at most, the status's overflow first).
   const told: Line | undefined = narration || !t.done.length ? sub : undefined
   const story: Line[] = !told ? [] : more || todoRow ? [clipLine(told, inner)] : wrapOnce(told, inner, inner).filter((l): l is Line => !!l)
-  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxColor(ctxPercent)), { t: ` ${Math.round(ctxPercent)}%`, color: ctxPercent >= CTX_WARN ? 'yellow' : undefined }]
+  const gauge: Line | undefined = ctxPercent === null ? undefined : [{ t: 'ctx  ', dim: true }, ...bar(wholeCells(ctxPercent / 100, GAUGE), GAUGE, ctxColor(ctxPercent)), ctxPct(ctxPercent)]
   const sent = lastSent(t)
   const cache: Line | undefined = sent ? [{ t: 'cache ', dim: true }, { t: `${Math.round(sent * 100)}%` }] : undefined
   const turn: Line = [{ t: clock(now - t.startedAt), dim: true }]
@@ -458,10 +458,7 @@ function wrapOnce(l: Line, first: number, rest: number): [Line, Line | undefined
 }
 
 
-const clock = (ms: number) => {
-  const s = Math.floor(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
-}
+const clock = (ms: number) => duration(Math.floor(ms / 1000))
 
 export const clip = (s: string, n: number) => {
   const one = s.replace(/\s+/g, ' ').trim()

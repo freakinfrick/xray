@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { TONE_COLOR, compact, lastTurn, where, type Mode } from './cards'
 import { NARROW, SHORT, cells, type Line } from './line'
-import { CTX_WARN, MARK, bar, ctxColor } from './glyphs'
+import { CTX_WARN, MARK, bar, ctxColor, ctxPct } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
 import { DEFAULTS, WRITER, parseRecipe, sources, writerPrompt } from './custom'
@@ -711,7 +711,7 @@ export const register: Register = (on, options) => {
     // NARROW columns, gets the short form (the long one ran its still-owed tail off the edge at 46).
     const hasTail = (await deviceClass($)) !== 'mobile' && (e.viewport?.columns ?? 100) >= NARROW
     const pct = (await $.session.usage().catch(() => null))?.context.percent ?? s.ctx
-    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, ctxColor(pct))] : []), { t: ` ${Math.round(pct)}%`, color: pct >= CTX_WARN ? 'yellow' : undefined, dim: pct < CTX_WARN }]
+    const gauge: Line = pct === null || pct === undefined ? [] : [...(hasTail ? [{ t: 'ctx ', dim: true }, ...bar(pct / 100, 8, ctxColor(pct))] : []), { ...ctxPct(pct), dim: pct < CTX_WARN }]
     const width = Math.max(24, (e.viewport?.columns ?? 100) - 3)
     // Phone: its own row under the strip. Desktop: flush right on the strip's own line (see `right` below).
     // No room on the strip's line (a long headline, a narrow pane, the phone): its own row, same look, flush right.
