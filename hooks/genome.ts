@@ -3,7 +3,7 @@
 // grows to 3 rows, then folds the oldest whole turns into a dim `+N turns`. Saved per session in the
 // plugin store (key `genome:<session id>`), so /resume brings it back. Pure: register.tsx does the I/O.
 
-import { KIND, cells, type Line, type Seg } from './line'
+import { KIND, cells, clipLine, type Line, type Seg } from './line'
 import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
@@ -13,6 +13,7 @@ export const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm
 const KIND_OF = Object.fromEntries(Object.entries(CODE).filter(([, c]) => c).map(([k, c]) => [c, k as StepKind])) as Record<string, StepKind>
 
 export const MAX_ROWS = 3
+export const TURN_CELLS = 26 // a panel's turns list: a turn and its two brackets, cut past this
 export { MAX_TURNS } from './session'
 export const MAX_SESSIONS = 40 // sessions kept in the store, oldest dropped
 export const PREFIX = 'genome:'
@@ -115,6 +116,10 @@ export function rows(turns: readonly string[], width: number, opts: Opts = {}): 
   const label = opts.label ?? ''
   return place(turns, width, opts).map((r, i) => [...(label ? [i ? { t: ' '.repeat(label.length) } : { t: label, dim: true }] : []), ...merge(r.map(p => p.seg))])
 }
+
+// One turn on one row in its brackets, for a panel's turns list: laid out whole, then cut with an
+// ellipsis past `max` cells. rows() at a tight width would fold the turn away to '+1 turn'.
+export const turnRow = (turn: string, max: number): Line => clipLine(rows([turn], turn.length + 2, { maxRows: 1 })[0] ?? [], max)
 
 // Round 20 (interview pick: one shared row): the row drawn just above the genome's newest row, naming
 // what happened there. Landmarks sit over their step's cell, glyph first; turn names (round 20d) sit at

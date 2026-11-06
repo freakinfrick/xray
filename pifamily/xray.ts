@@ -320,12 +320,11 @@ export function xray(pi: Pi, host: Host) {
     }
     const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse().slice(0, PANEL_TURNS)
     if (named.length) {
-      // A turn's cells plus its two kind brackets: one less and rows() folds the longest to '+1 turn'.
-      const w = Math.min(26, Math.max(...named.map(r => r.x.length + 2), 3))
+      const w = Math.min(genome.TURN_CELLS, Math.max(...named.map(r => r.x.length + 2), 3))
       sections.push({
         title: `turns · ${named.length}`,
         rows: named.map(r => {
-          const d = genome.rows([r.x], w, { maxRows: 1 })[0] ?? []
+          const d = genome.turnRow(r.x, w)
           return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...d, { t: ' '.repeat(Math.max(0, w - cells(d)) + 2) }, { t: r.name }]
         }),
       })

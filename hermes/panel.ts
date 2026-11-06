@@ -29,11 +29,11 @@ export function panelLines(s: State, cols: number, now: number, cwd = '', home =
   }
   const named = rec.turns.map((x, i) => ({ x, i, name: rec.names[i] ?? '' })).filter(r => r.name).reverse().slice(0, PANEL_TURNS)
   if (named.length) {
-    const w = Math.min(24, Math.max(...named.map(r => r.x.length), 1))
+    const w = Math.min(genome.TURN_CELLS, Math.max(...named.map(r => r.x.length + 2), 3))
     sections.push({
       title: `turns · ${named.length}`,
       rows: named.map(r => {
-        const d = genome.rows([r.x], w + 1, { maxRows: 1 })[0] ?? []
+        const d = genome.turnRow(r.x, w)
         return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...d, { t: ' '.repeat(Math.max(0, w - cells(d)) + 2) }, { t: r.name }]
       }),
     })

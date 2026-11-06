@@ -10,6 +10,7 @@ import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, n
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
+import { cells } from './line'
 import * as tasks from './tasks'
 import { nameOf } from './names'
 import { addTurn, emptyRec, fileTouches, loadRec, mergeFiles, shortName } from './session'
@@ -1293,6 +1294,19 @@ test('genome: a turn as letters, failed steps red whatever their kind, to-do boo
   expect(text(genome.tail(['re', 'c'], 30))).toBe('genome [▌▌][▌]') // label left of the cells, moving with them
   expect(genome.tail(['re'], 10)).toEqual([])
   expect(text(genome.tail(Array.from({ length: 20 }, () => 'rrrr'), 30))).toMatch(/^genome \+\d+ turns .*\(▌▌▌▌\)$/)
+})
+
+test('a panel turn row shows the turn whole in its brackets, cut with an ellipsis, never folded to +1 turn', async () => {
+  // Was: rows([turn], len + 1) folded any turn of 7+ cells to '+1 turn' (the brackets need len + 2).
+  for (const len of [1, 6, 7, 24]) {
+    const row = genome.turnRow('r'.repeat(len), genome.TURN_CELLS)
+    expect(text(row)).not.toMatch(/turn/)
+    expect(cells(row)).toBe(len + 2)
+  }
+  const long = genome.turnRow('r'.repeat(40), genome.TURN_CELLS)
+  expect(text(long)).not.toMatch(/turn/)
+  expect(cells(long)).toBe(genome.TURN_CELLS)
+  expect(text(long).endsWith('…')).toBe(true)
 })
 
 test('genome: each turn in its kind\'s brackets, wraps at the width, folds the oldest whole turns past 3 rows', async () => {

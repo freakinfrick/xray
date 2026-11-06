@@ -699,9 +699,9 @@ export const register: Register = (on, options) => {
     // Round 20d: each turn by name, newest first (10 at most: the pane is 32 rows).
     const named = s.rec.turns.map((x, i) => ({ x, i, name: s.rec.names[i] ?? '' })).filter(r => r.name).reverse()
     if (named.length) {
-      const w = Math.min(24, Math.max(...named.slice(0, PANEL_TURNS).map(r => r.x.length), 1))
+      const w = Math.min(genome.TURN_CELLS, Math.max(...named.slice(0, PANEL_TURNS).map(r => r.x.length + 2), 3))
       const rows: Line[] = named.slice(0, PANEL_TURNS).map(r => {
-        const dna = genome.rows([r.x], w + 1, { maxRows: 1 })[0] ?? []
+        const dna = genome.turnRow(r.x, w)
         return [{ t: `${String(r.i + 1).padStart(3)}  `, dim: true }, ...dna, { t: ' '.repeat(Math.max(0, w - cells(dna)) + 2) }, { t: r.name }]
       })
       sections.push({ title: `turns · ${named.length} · ${new Set(named.map(r => r.name.replace(/\d+/g, 'N'))).size} kinds`, rows })
