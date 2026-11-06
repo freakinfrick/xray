@@ -10,6 +10,7 @@ import { cacheLeft, cacheRows, cacheStrip, emptyCache, isToastDue, nextChange, n
 import { checkVoice, narrationOf, commitNote, isCheckCommand, isTestCommand, parseTestOutput, sayStep, shellKind, testHead } from './parse'
 import { clean, recall, record } from './memory'
 import * as genome from './genome'
+import * as title from './title'
 import { cells } from './line'
 import * as tasks from './tasks'
 import { nameOf } from './names'
@@ -1593,35 +1594,35 @@ test('a write into a Claude memory folder is its own step: a bold § in the geno
 
 test('the session title carries the coloured genome in brackets, folding old turns, and replaces its own old one', () => {
   const plain = (x: string) => x.replace(/\x1b\[[\d;]*m/g, '')
-  expect(plain(genome.titleGenome(['rr', '', 'ret', 'ah']))).toBe('(▌▌)[▌▌▌]{▌▌}')
-  expect(genome.titleGenome(['re'])).toContain('\x1b[0;34m▌\x1b[0;33m▌')
-  expect(genome.sgr({ t: 's', color: '#ff5f00' })).toBe('\x1b[0;38;2;255;95;0ms')
-  const t1 = genome.titleOf('fix tests', ['rr', 'e'])!
+  expect(plain(title.titleGenome(['rr', '', 'ret', 'ah']))).toBe('(▌▌)[▌▌▌]{▌▌}')
+  expect(title.titleGenome(['re'])).toContain('\x1b[0;34m▌\x1b[0;33m▌')
+  expect(title.sgr({ t: 's', color: '#ff5f00' })).toBe('\x1b[0;38;2;255;95;0ms')
+  const t1 = title.titleOf('fix tests', ['rr', 'e'])!
   expect(plain(t1)).toBe('fix tests · (▌▌)[▌]')
-  expect(plain(genome.titleOf(t1, ['rr', 'e', 'r'])!)).toBe('fix tests · (▌▌)[▌](▌)')
-  expect(genome.titleOf(t1, ['rr', 'e'])).toBeUndefined()
-  expect(plain(genome.titleOf('fix tests · (rr)[e]', ['rr'])!)).toBe('fix tests · (▌▌)') // the letters of ea41a1d give way
-  expect(plain(genome.titleOf('Tailscale drop ·  [0;2m( [0;34m▌ [0;2m) [0m', ['rr'])!)).toBe('Tailscale drop · (▌▌)') // ESC turned to spaces
-  expect(genome.titleOf(undefined, ['rr'])).toBeUndefined()
-  expect(genome.titleOf('fix tests', ['', ''])).toBeUndefined()
-  expect(genome.titleBase('a · b')).toBe('a · b')
-  const g = plain(genome.titleGenome(Array.from({ length: 30 }, () => 'rre')))
-  expect(g.length).toBeLessThanOrEqual(genome.TITLE_MAX)
+  expect(plain(title.titleOf(t1, ['rr', 'e', 'r'])!)).toBe('fix tests · (▌▌)[▌](▌)')
+  expect(title.titleOf(t1, ['rr', 'e'])).toBeUndefined()
+  expect(plain(title.titleOf('fix tests · (rr)[e]', ['rr'])!)).toBe('fix tests · (▌▌)') // the letters of ea41a1d give way
+  expect(plain(title.titleOf('Tailscale drop ·  [0;2m( [0;34m▌ [0;2m) [0m', ['rr'])!)).toBe('Tailscale drop · (▌▌)') // ESC turned to spaces
+  expect(title.titleOf(undefined, ['rr'])).toBeUndefined()
+  expect(title.titleOf('fix tests', ['', ''])).toBeUndefined()
+  expect(title.titleBase('a · b')).toBe('a · b')
+  const g = plain(title.titleGenome(Array.from({ length: 30 }, () => 'rre')))
+  expect(g.length).toBeLessThanOrEqual(title.TITLE_MAX)
   expect(g.startsWith('…[▌▌▌]')).toBe(true)
-  const huge = plain(genome.titleGenome(['r'.repeat(100)]))
-  expect(huge.length).toBe(genome.TITLE_MAX)
+  const huge = plain(title.titleGenome(['r'.repeat(100)]))
+  expect(huge.length).toBe(title.TITLE_MAX)
   expect(huge.startsWith('(…▌')).toBe(true)
   expect(huge.endsWith('▌)')).toBe(true)
-  expect(genome.titleBase('fix · ' + genome.titleGenome(['r'.repeat(100)]))).toBe('fix')
-  expect(JSON.parse(genome.titleLine(t1, 'abc'))).toEqual({ type: 'custom-title', customTitle: t1, sessionId: 'abc' })
+  expect(title.titleBase('fix · ' + title.titleGenome(['r'.repeat(100)]))).toBe('fix')
+  expect(JSON.parse(title.titleLine(t1, 'abc'))).toEqual({ type: 'custom-title', customTitle: t1, sessionId: 'abc' })
 })
 
 test('the title base is the newest custom title, else the newest AI title', () => {
   const ai = (x: string) => JSON.stringify({ type: 'ai-title', aiTitle: x })
   const custom = (x: string) => JSON.stringify({ type: 'custom-title', customTitle: x })
-  expect(genome.titleFromLines([ai('one'), ai('two'), ''].join('\n'))).toBe('two')
-  expect(genome.titleFromLines([custom('mine · (r)'), ai('later')].join('\n'))).toBe('mine · (r)')
-  expect(genome.titleFromLines('not json\n')).toBeUndefined()
+  expect(title.titleFromLines([ai('one'), ai('two'), ''].join('\n'))).toBe('two')
+  expect(title.titleFromLines([custom('mine · (r)'), ai('later')].join('\n'))).toBe('mine · (r)')
+  expect(title.titleFromLines('not json\n')).toBeUndefined()
 })
 
 // Round 21: xray answers the task tools so core never opens its own list.

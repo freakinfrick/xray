@@ -12,6 +12,7 @@ import { filesSection, genomeSection, panel, turnsSection } from './panel'
 import { checkVoice, narrationOf, sayStep, testHead } from './parse'
 import { clean, recall, record, storeKey, type Event } from './memory'
 import * as genome from './genome'
+import * as title from './title'
 import * as archive from './archive'
 import * as tasks from './tasks'
 import { nameOf } from './names'
@@ -191,13 +192,15 @@ async function idle($: EngineInterface, s: Live) {
 }
 
 const TAIL_BYTES = '262144'
+// This folder's bests (round 20c), one store entry per cwd.
+const recordsKey = (cwd: string) => `records:${cwd}`
 const TTL_TRIES = 4
 const TTL_WAIT_MS = 1000
 
 // The lifetime of the newest write, from the end of this session's transcript (it can run to tens of MB).
 async function readTtl($: EngineInterface, s: Live): Promise<Cache['ttl']> {
   const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${s.home}/.claude`
-  const ran = await $.process.run(['tail', '-c', TAIL_BYTES, transcriptPath(dir, s.cwd, await $.session.id())]).catch(() => null)
+  const ran = await $.process.run(['tail', '-c', TAIL_BYTES, s.transcript || transcriptPath(dir, s.cwd, await $.session.id())]).catch(() => null)
   return ran && ran.exitCode === 0 ? ttlFromTail(ran.stdout) : null
 }
 
@@ -208,9 +211,9 @@ async function writeTitle($: EngineInterface, s: Live) {
   const path = s.transcript
   if (!path || s.isEnvOff) return
   const ran = await $.process.run(['grep', '-E', '"type":"(custom|ai)-title"', path]).catch(() => null)
-  const title = genome.titleOf(ran && ran.exitCode === 0 ? genome.titleFromLines(ran.stdout) : undefined, s.rec.turns)
-  if (!title) return
-  await $.process.run(['sh', '-c', 'printf %s "$1" >> "$2"', 'sh', genome.titleLine(title, await $.session.id()), path]).catch(() => null)
+  const next = title.titleOf(ran && ran.exitCode === 0 ? title.titleFromLines(ran.stdout) : undefined, s.rec.turns)
+  if (!next) return
+  await $.process.run(['sh', '-c', 'printf %s "$1" >> "$2"', 'sh', title.titleLine(next, await $.session.id()), path]).catch(() => null)
 }
 
 // Once a second while a turn runs: fresh context figure and elapsed times.
@@ -340,7 +343,7 @@ export const register: Register = (on, options) => {
     s.isMobile = (await deviceClass($)) === 'mobile'
     const past = await $.store.get(storeKey(s.cwd))
     s.history = clean(past)
-    s.records = (await $.store.get(`records:${s.cwd}`)) as Records | undefined
+    s.records = (await $.store.get(recordsKey(s.cwd))) as Records | undefined
     const saved = s.prev ? null : await read($, keptTurn)
     if (saved) s.prev = loadTurn(saved)
     s.isCacheOff = (await $.store.get('isCacheOff')) === true
@@ -551,7 +554,7 @@ export const register: Register = (on, options) => {
       const letters = genome.code(t)
       await loadGenome($, s)
       const lm = landmarks(t, s.rec, s.ctx)
-      const keyR = `records:${s.cwd}`
+      const keyR = recordsKey(s.cwd)
       const rec20 = records(t, (await $.store.get(keyR).catch(() => undefined)) as Records | undefined, testHead, now)
       if (s.cwd) await $.store.set(keyR, rec20.records)
       s.records = rec20.records
