@@ -2,7 +2,7 @@
 // turns: the strip above the prompt, one toast before it lapses, and a per-turn table in /xray.
 // The mod's usage has no 5m/1h split; the session's transcript does, so the lifetime is read from there.
 
-import type { Line } from './cards'
+import type { Line } from './line'
 import type { XrayCache } from '../types'
 import { bar } from './glyphs'
 

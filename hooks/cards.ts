@@ -5,11 +5,10 @@ import type { LastTurn } from '../types'
 import { hotFile } from './session'
 import { DEFAULTS, customCard } from './custom'
 import { MARK, SPARK, bar, frame, spark, tile } from './glyphs'
+import { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
+export { KIND, cells, clipLine, fitParts, splitLine, type Line, type Seg }
 import { openTodos, runningAgents, type Run, type StepKind, type Todo, type Turn } from './track'
 
-// inv: drawn inverse, the glyph in the terminal's background on `color` (a solid tile on both themes).
-export type Seg = { t: string; color?: string; dim?: boolean; bold?: boolean; inv?: boolean; bg?: string; strike?: boolean }
-export type Line = Seg[]
 export type Tone = 'quiet' | 'ok' | 'fail' | 'warn' | 'live' | 'think' | 'explore'
 // spare: a row drawn only when the lines leave one free after wrapping.
 // side: a second subcolumn beside `lines` when the card is wide enough (else under them); chips: whole
@@ -120,24 +119,6 @@ export function band(head: Line, isLive: boolean): { status: string; pulse?: Seg
 // green, agents cyan, anything that failed red; the live step blinks in its kind's color at the tick.
 // To-do bookkeeping is left out. With `track`, exactly n cells on a dim ░ track (the phone's gauge,
 // aligned with ctx); without, up to n cells with the older steps folded into a dim +k.
-export const KIND: Record<StepKind, { t: string; color?: string; dim?: boolean; bold?: boolean }> = {
-  read: { t: '▌', color: 'blue' },
-  edit: { t: '▌', color: 'yellow' },
-  run: { t: '▌', color: 'magenta', dim: true }, // quieter than the rest: commands are many and mostly routine
-  script: { t: '▌', color: '#ff5f00' }, // inline code the model wrote (python3 - <<EOF, node -e)
-  orchestrate: { t: '▌', color: '#00d7af' }, // herdr, tmux, conductor: driving other sessions, agent's kin
-  network: { t: '▌', color: '#af87ff' }, // curl, gh, ssh, git push/pull
-  wait: { t: '▏', dim: true }, // sleep, until: time passing, drawn thin
-  test: { t: '▌', color: 'green' },
-  memory: { t: '§', color: '#ff69b4', bold: true }, // a memory saved: kept past this session, like a commit
-  commit: { t: '#', color: 'magenta' }, // round 20a: a commit stays in the genome as its own mark
-  agent: { t: '▌', color: 'cyan' },
-  skill: { t: '▌', color: '#ffd7af' }, // round 22: a skill loaded
-  mcp: { t: '▌', color: '#87afaf' }, // an MCP server's tool
-  ask: { t: '?', color: 'white', bold: true }, // a question put to the person (AskUserQuestion)
-  todo: { t: '▌', dim: true },
-  other: { t: '▌', dim: true },
-}
 const LAND_MS = 480
 const LAND = '▁▃▅'
 export function filmstrip(t: Turn, n: number, now: number, track = true): Line {
@@ -351,23 +332,6 @@ export function lastTurn(t: Turn, now: number): LastTurn {
   return { title: card.title, headline, tone, owed: openTodos(t).slice(0, 4).map(x => ({ t: x.text, color: x.color })) }
 }
 
-export function splitLine(line: Line, cut: number, skip: number): [Line, Line] {
-  const head: Line = []
-  const tail: Line = []
-  let at = 0
-  for (const s of line) {
-    const end = at + s.t.length
-    if (end <= cut) head.push(s)
-    else if (at >= cut + skip) tail.push(s)
-    else {
-      if (cut > at) head.push({ ...s, t: s.t.slice(0, cut - at) })
-      const rest = s.t.slice(Math.max(0, cut + skip - at))
-      if (rest) tail.push({ ...s, t: rest })
-    }
-    at = end
-  }
-  return [head, tail]
-}
 
 const GAUGE = 8
 
@@ -481,19 +445,7 @@ const lastSent = (t: Turn): number => {
   return last && sent ? last.cacheRead / sent : 0
 }
 
-export const cells = (l: Line) => l.reduce((a, s) => a + s.t.length, 0)
 
-// Whole parts, left to right, while they fit: the rightmost go first, nothing is cut mid-part.
-export function fitParts(parts: (Line | undefined)[], width: number, sep: string): Line {
-  const out: Line = []
-  for (const p of parts) {
-    if (!p) continue
-    const next: Line = out.length ? [{ t: sep }, ...p] : p
-    if (cells(out) + cells(next) > width) break
-    out.push(...next)
-  }
-  return out
-}
 
 // A line that fits `first` cells as is; else cut at the last word that fits, the rest one more row
 // (indented 2, cut with an ellipsis when it too runs past `rest`).
@@ -506,16 +458,6 @@ function wrapOnce(l: Line, first: number, rest: number): [Line, Line | undefined
   return [head, clipLine([{ t: '  ' }, ...tail], rest)]
 }
 
-// A line cut at the last word that fits, with an ellipsis; a line that fits is kept as is.
-export function clipLine(l: Line, width: number): Line {
-  if (cells(l) <= width) return l
-  const all = l.map(s => s.t).join('')
-  const space = all.lastIndexOf(' ', width - 1)
-  const cut = space > width / 3 ? space : width - 1
-  const kept = splitLine(l, cut, 0)[0]
-  // A kept text that already trails off ("running…") takes no second ellipsis.
-  return kept.map(g => g.t).join('').trimEnd().endsWith('…') ? kept : [...kept, { t: '…', dim: true }]
-}
 
 const clock = (ms: number) => {
   const s = Math.floor(ms / 1000)

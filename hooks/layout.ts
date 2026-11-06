@@ -5,7 +5,8 @@
 // to the next row, 4 glyph groups sit in subcolumns while prose gets the whole width, 5 the width
 // picks the shape, 6 one tray closes every card with that card's own figures under it.
 
-import { TONE_COLOR, band, cells, clipLine, filmstrip, fitParts, nowCard, squares, stepCounts, splitLine, taskCard, teleParts, todoCard, type Card, type Line, type Mode, type Seg, type Tile, type Tone } from './cards'
+import { TONE_COLOR, band, filmstrip, nowCard, squares, stepCounts, taskCard, teleParts, todoCard, type Card, type Mode, type Tile, type Tone } from './cards'
+import { cells, clipLine, fitParts, splitLine, type Line, type Seg } from './line'
 import * as genome from './genome'
 import { MARK, frame } from './glyphs'
 import type { Turn } from './track'

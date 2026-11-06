@@ -2,7 +2,7 @@
 // ends; the highest-ranked one takes the slot on the idle strip, the rest still land in the genome's marks
 // and the panel. Every moment is a measured fact. Pure: the register gathers the inputs.
 
-import type { Line } from './cards'
+import type { Line } from './line'
 import type { Mark } from './session'
 import type { Run, Turn } from './track'
 

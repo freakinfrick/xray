@@ -3,8 +3,9 @@
 // when it began. One key per session, so genome.stale() still sweeps it whole. Pure: the register reads
 // and writes the store.
 
-import { MAX_TURNS } from './genome'
 import type { Turn } from './track'
+
+export const MAX_TURNS = 400 // per session, oldest dropped: a few KB at most
 
 // A landmark on the genome: `turn` indexes `turns`, `at` the step within that turn's letters (round 20b).
 export type MarkKind = 'commit' | 'green' | 'red' | 'fanout' | 'ctx' | 'longest'

@@ -2,7 +2,8 @@
 // The gate: a card is custom only when a measured property shows that no template serves.
 // A small model may write the recipe; checkRecipe keeps it to the kit, and DEFAULTS stand in.
 
-import type { Card, Line, Tone } from './cards'
+import type { Card, Tone } from './cards'
+import type { Line } from './line'
 import { MARK, bar, frame, spark, tile } from './glyphs'
 import type { Cmd, Turn } from './track'
 

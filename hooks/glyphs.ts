@@ -1,7 +1,7 @@
 // Colored block glyphs shared by the cards and the panel (round 6, A · Inlay): eighth-cell bars,
 // sparklines, solid tiles. Motion steps once a second, the mod's own tick.
 
-import type { Line, Seg } from './cards'
+import type { Line, Seg } from './line'
 
 export const SPARK = '▁▂▃▄▅▆▇█'
 const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']

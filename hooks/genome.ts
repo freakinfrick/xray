@@ -3,17 +3,17 @@
 // grows to 3 rows, then folds the oldest whole turns into a dim `+N turns`. Saved per session in the
 // plugin store (key `genome:<session id>`), so /resume brings it back. Pure: register.tsx does the I/O.
 
-import { KIND, type Line, type Seg } from './cards'
+import { KIND, cells, type Line, type Seg } from './line'
 import { frame } from './glyphs'
 import type { StepKind, Turn } from './track'
 
 // One letter per step; a failed step is `x` whatever its kind (why it failed: the archive's `fails`).
 // Round 22: l skill, p MCP tool, q a question put to the person; they count as looking. To-do bookkeeping is left out, as in the filmstrip.
 export const CODE: Record<StepKind, string> = { read: 'r', edit: 'e', memory: 'm', run: 'c', script: 's', orchestrate: 'h', network: 'n', wait: 'w', test: 't', commit: 'k', agent: 'a', skill: 'l', mcp: 'p', ask: 'q', todo: '', other: 'o' }
-const KIND_OF: Record<string, StepKind> = { r: 'read', e: 'edit', m: 'memory', c: 'run', s: 'script', h: 'orchestrate', n: 'network', w: 'wait', t: 'test', k: 'commit', a: 'agent', l: 'skill', p: 'mcp', q: 'ask', o: 'other' }
+const KIND_OF = Object.fromEntries(Object.entries(CODE).filter(([, c]) => c).map(([k, c]) => [c, k as StepKind])) as Record<string, StepKind>
 
 export const MAX_ROWS = 3
-export const MAX_TURNS = 400 // per session, oldest dropped: a few KB at most
+export { MAX_TURNS } from './session'
 export const MAX_SESSIONS = 40 // sessions kept in the store, oldest dropped
 export const PREFIX = 'genome:'
 export const keyOf = (sessionId: string) => PREFIX + sessionId
@@ -140,9 +140,9 @@ export function annotate(turns: readonly string[], width: number, notes: readonl
     const c = where.get(`${n.turn}:${n.at}`)
     if (c === undefined) continue
     const tries: Seg[][] = n.glyph ? [[{ t: n.glyph, ...n.look }, { t: ` ${n.text}`, dim: true }], [{ t: n.glyph, ...n.look }]] : [[{ t: n.text, dim: true, ...n.look }]]
-    const fit = tries.find(segs => isFree(c, c + segs.reduce((a, g) => a + g.t.length, 0)))
+    const fit = tries.find(segs => isFree(c, c + cells(segs)))
     if (!fit) continue
-    const end = c + fit.reduce((a, g) => a + g.t.length, 0)
+    const end = c + cells(fit)
     taken.push([c, end])
     put.push({ col: c, segs: fit })
   }
@@ -151,7 +151,7 @@ export function annotate(turns: readonly string[], width: number, notes: readonl
   let at = 0
   for (const p of put.sort((a, b) => a.col - b.col)) {
     out.push({ t: ' '.repeat(p.col - at) }, ...p.segs)
-    at = p.col + p.segs.reduce((a, g) => a + g.t.length, 0)
+    at = p.col + cells(p.segs)
   }
   return out
 }
@@ -199,7 +199,7 @@ export function key(width: number, extra: Line[] = []): Line[] {
   let cur: Line = []
   let n = 0
   for (const tok of tokens) {
-    const w = tok.reduce((a, g) => a + g.t.length, 0)
+    const w = cells(tok)
     if (cur.length && n + 3 + w > width) {
       rows.push(cur)
       cur = []
@@ -218,7 +218,7 @@ export const EDGE_LABEL = 'genome'
 export function labelRight(rows: Line[], width: number, label = EDGE_LABEL): Line[] {
   if (!rows.length) return rows
   const first = rows[0] ?? []
-  const used = first.reduce((a, g) => a + g.t.length, 0)
+  const used = cells(first)
   return [[...first, { t: ' '.repeat(Math.max(1, width - used - label.length)) }, { t: label, dim: true }], ...rows.slice(1)]
 }
 

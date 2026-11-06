@@ -2,6 +2,7 @@
 // through the host's theme, and a host tool call → the Claude Code shape the shared core (../hooks) reads.
 // No host imports, so the tests run under `claude plugin test` like the rest of xray.
 import type { Line, Seg } from '../hooks/cards'
+import { cells } from '../hooks/line'
 import type { Call } from '../hooks/events'
 export type { Call }
 
@@ -91,7 +92,7 @@ export function seg(theme: Theme, g: Seg): string {
 }
 
 // Cells, as the core counts them (one per UTF-16 unit; its glyphs are all one cell wide).
-export const cells = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
+export { cells }
 
 // One line, cut to width cells: a widget row past the terminal's width wraps and breaks the frame.
 export function ink(theme: Theme, l: Line, width = Infinity): string {

@@ -1,6 +1,6 @@
 // The /xray panel as plain data: the detail the spinner leaves out. Every row is measured.
 
-import type { Line } from './cards'
+import type { Line } from './line'
 import { MARK, bar, tile } from './glyphs'
 import { cacheRows, type Cache } from './cache'
 import type { Entry } from './ledger'

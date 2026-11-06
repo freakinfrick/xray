@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { TONE_COLOR, compact, lastTurn, where, type Line, type Mode } from './cards'
+import { TONE_COLOR, compact, lastTurn, where, type Mode } from './cards'
+import { cells, type Line } from './line'
 import { bar } from './glyphs'
 import { cacheLeft, cacheStrip, emptyCache, isToastDue, nextChange, noteRequest, toastText, transcriptPath, ttlFromTail, type Cache } from './cache'
 import { TALL, spinnerRows, type Memo } from './layout'
@@ -603,13 +604,12 @@ export const register: Register = (on, options) => {
       const k = compact(s.turn, s.mode, said, s.ctx, now, w, (e.viewport?.rows ?? Infinity) < SHORT, where(await here($, s), s.home, true))
       const color = TONE_COLOR[k.tone]
       const dim = k.tone === 'quiet'
-      const cellsOf = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
       // An edge carrying a line: ┏━ text ━━━┓ (round 21: the phone's one card is the main card, heavy), or bare when the line is empty.
       const edge = (l: Line, left: string, right: string, key: string) => (
         <Text key={key} wrap="truncate-end">
           <Text color={color} dimColor={dim}>{l.length ? `${left}━ ` : left + '━'}</Text>
           {ink(l, key, Text)}
-          <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '━'.repeat(Math.max(1, w - (l.length ? 5 + cellsOf(l) : 3))) + right}</Text>
+          <Text color={color} dimColor={dim}>{(l.length ? ' ' : '') + '━'.repeat(Math.max(1, w - (l.length ? 5 + cells(l) : 3))) + right}</Text>
         </Text>
       )
       // The status as a band: the tone color behind dark text (round 11). It starts right after the
@@ -641,7 +641,7 @@ export const register: Register = (on, options) => {
             <Text key={`kb${r}`} wrap="truncate-end">
               <Text color={color} dimColor={dim}>{'┃ '}</Text>
               {ink(l, `kb${r}`, Text)}
-              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cellsOf(l))) + ' ┃'}</Text>
+              <Text color={color} dimColor={dim}>{' '.repeat(Math.max(0, w - 4 - cells(l))) + ' ┃'}</Text>
             </Text>
           ))}
           {edge(k.bottom, '┗', '┛', 'kz')}
@@ -780,7 +780,6 @@ export const register: Register = (on, options) => {
   })
 }
 
-const cells = (l: Line) => l.reduce((a, g) => a + g.t.length, 0)
 // The one Seg -> Text renderer: every style a Seg can carry reaches the terminal.
 function ink(l: Line, key: string, Text: ReturnType<EngineInterface['ui']['resolve']>['Text']) {
   return l.map((g, i) => (
